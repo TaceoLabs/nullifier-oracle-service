@@ -1,6 +1,5 @@
-use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
-use ark_ff::{BigInteger, Field, One, PrimeField, UniformRand, Zero};
-use poseidon2::POSEIDON2_BN254_PARAMS;
+use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ff::{Field, UniformRand, Zero};
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
@@ -74,6 +73,7 @@ impl OPrfService {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindedOPrfRequest {
     /// request id
     request_id: Uuid,
@@ -81,6 +81,7 @@ pub struct BlindedOPrfRequest {
     blinded_query: Affine,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindingFactor {
     /// the blinding factor used to blind the query
     factor: ScalarField,
@@ -98,6 +99,7 @@ impl BlindingFactor {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
     /// the blinding factor used to blind the query
     factor: ScalarField,
@@ -105,6 +107,7 @@ pub struct PreparedBlindingFactor {
     request_id: Uuid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindedOPrfResponse {
     /// request id, to track the response to the request
     request_id: Uuid,
@@ -138,7 +141,7 @@ impl OPrfClient {
         };
         let request_id = Uuid::new_v4();
 
-        let encoded_input = encode_to_curve(query);
+        let encoded_input = mappings::encode_to_curve(query);
 
         let blinded_query = (encoded_input * blinding_factor).into_affine();
         (
@@ -167,162 +170,209 @@ impl OPrfClient {
     }
 }
 
-/// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
-///
-/// As mentioned in the RFC, this encoding is non uniformly random in E, as this can only hit about half of the of the curve points.
-fn encode_to_curve(input: BaseField) -> Affine {
-    // Map the input to a point on the curve using Elligator2
-    let u = hash_to_field(input);
-    let q = map_to_curve_twisted_edwards(u);
-    q.clear_cofactor()
-}
+mod mappings {
+    use ark_ec::{AffineRepr, CurveGroup};
+    use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
+    use poseidon2::POSEIDON2_BN254_PARAMS;
 
-/// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
-///
-/// In contrast to `encode_to_curve`, this function uses a two-step mapping to ensure that the output is uniformly random over the curve.
-fn hash_to_curve(input: BaseField) -> Affine {
-    // Map the input to a point on the curve using Elligator2
-    let [u0, u1] = hash_to_field2(input);
-    let q0 = map_to_curve_twisted_edwards(u0);
-    let q1 = map_to_curve_twisted_edwards(u1);
-    let r = (q0 + q1).into_affine();
-    r.clear_cofactor()
-}
+    use crate::oprf::{Affine, BaseField};
 
-/// An implementation of `hash_to_field` based on [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
-/// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
-fn hash_to_field(input: BaseField) -> BaseField {
-    // hash the input to a field element using poseidon hash
-    let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
-    let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
-    output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
-}
+    /// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
+    ///
+    /// As mentioned in the RFC, this encoding is non uniformly random in E, as this can only hit about half of the of the curve points.
+    pub fn encode_to_curve(input: BaseField) -> Affine {
+        // Map the input to a point on the curve using Elligator2
+        let u = hash_to_field(input);
+        let q = map_to_curve_twisted_edwards(u);
+        q.clear_cofactor()
+    }
 
-/// An implementation of `hash_to_field` based on [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
-/// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
-fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
-    // hash the input to a field element using poseidon hash
-    let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
-    let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
+    /// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
+    ///
+    /// In contrast to `encode_to_curve`, this function uses a two-step mapping to ensure that the output is uniformly random over the curve.
+    pub fn hash_to_curve(input: BaseField) -> Affine {
+        // Map the input to a point on the curve using Elligator2
+        let [u0, u1] = hash_to_field2(input);
+        let q0 = map_to_curve_twisted_edwards(u0);
+        let q1 = map_to_curve_twisted_edwards(u1);
+        let r = (q0 + q1).into_affine();
+        r.clear_cofactor()
+    }
 
-    [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
-}
+    /// An implementation of `hash_to_field` based on [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
+    /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
+    fn hash_to_field(input: BaseField) -> BaseField {
+        // hash the input to a field element using poseidon hash
+        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+        let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
+        output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
+    }
 
-/// Maps the input to a point on the curve, without anyone knowing the DLOG of the curve point.
-///
-/// This is based on `map_to_curve` from [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
-/// We use section 6.8 ("Mappings for Twisted Edwards Curves") to map the input to a point on the curve.
-/// This internally uses a birationally equivalent Montgomery curve to perform the mapping, then uses a rational map to convert the point to the Edwards curve.
-fn map_to_curve_twisted_edwards(input: BaseField) -> Affine {
-    let (s, t) = map_to_curve_elligator2(input);
-    let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
-    Affine { x: v, y: w }
-}
+    /// An implementation of `hash_to_field` based on [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
+    /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
+    fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
+        // hash the input to a field element using poseidon hash
+        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+        let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
 
-/// Maps the input to a point on the Montgomery curve, without anyone knowing the DLOG of the curve point.
-///
-/// Returns the s and t coordinates of the point on the Montgomery curve.
-///
-/// let the Montgomery curve be defined by the equation $K*t^2 = s^3 + J*s^2 + s$.
-/// We follow the Elligator2 mapping as described in [RFC9380, Section 6.7.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-elligator-2-method).
-fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
-    // constant c1 = J/K;
-    let j = BaseField::from(168698);
-    let k = BaseField::from(168700);
-    let c1 = j / k;
-    // constant c2 = 1/ K^2
-    let c2 = (k * k).inverse().unwrap();
-    // constant Z = 5, based on RFC9380, Appendix H.3.
-    // ```sage
-    // # Argument:
-    // # - F, a field object, e.g., F = GF(2^255 - 19)
-    // def find_z_ell2(F):
-    //     ctr = F.gen()
-    //     while True:
-    //         for Z_cand in (F(ctr), F(-ctr)):
-    //             # Z must be a non-square in F.
-    //             if is_square(Z_cand):
-    //                 continue
-    //             return Z_cand
-    //         ctr += 1
-    // # BaseField of Baby JubJub curve:
-    // F = GF(21888242871839275222246405745257275088548364400416034343698204186575808495617)
-    // find_z_ell2(F) # 5
-    // ```
-    let z = BaseField::from(5);
-    let tv1 = input * input;
-    let tv1 = z * tv1;
-    // TODO: constant-time
-    let e = (tv1 + BaseField::one()).is_zero();
-    let tv1 = if e { BaseField::zero() } else { tv1 };
-    let x1 = tv1 + BaseField::one();
-    let x1 = inv0(x1);
-    let x1 = -c1 * x1;
-    let gx1 = x1 + c1;
-    let gx1 = gx1 * x1;
-    let gx1 = gx1 + c2;
-    let gx1 = gx1 * x1;
-    let x2 = -x1 - c1;
-    let gx2 = tv1 * gx1;
-    // TODO: constant time
-    let e2 = gx1.sqrt().is_some();
-    let (x, y2) = if e2 { (x1, gx1) } else { (x2, gx2) };
-    let y = y2
-        .sqrt()
-        .expect("y2 should be a square based on our conditional selection above");
-    let e3 = sgn0(y);
-    // TODO: constant-time
-    if e2 ^ e3 {
-        -y
-    } else {
-        y
-    };
-    let s = x * k;
-    let t = y * k;
-    (s, t)
-}
+        [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
+    }
 
-/// Converts a point from Montgomery to Twisted Edwards using the rational map.
-///
-/// This is based on appendix D1 of [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
-///
-/// Let the twisted Edwards curve be defined by the equation $a*v^2 + w^2 = 1 + d*v^2*w^2$.
-/// let the Montgomery curve be defined by the equation $K*t^2 = s^3 + J*s^2 + s$, with
-/// $J = 2 * (a + d) / (a - d)$ and $K = 4 / (a - d)$.
-///
-/// For the concrete case of Baby JubJub, we have:
-/// - $K = 168700$
-/// - $J = 168698$
-/// - $a = 1$
-/// - $d = 9706598848417545097372247223557719406784115219466060233080913168975159366771$
-///
-/// Input: (s, t), a point on the curve $K * t^2 = s^3 + J * s^2 + s$.
-/// Output: (v, w), a point on the equivalent twisted Edwards curve.
-/// (This function also handles exceptional cases where the point is at infinity correctly.)
-fn rational_map_mont_to_twisted_edwards(s: BaseField, t: BaseField) -> (BaseField, BaseField) {
-    // Convert the point from Montgomery to Twisted Edwards using the rational map
-    let tv1 = s + BaseField::one();
-    let tv2 = tv1 * t;
-    let tv2 = inv0(tv2);
-    let v = tv1 * tv2;
-    let v = v * s;
-    let w = tv2 * t;
-    let tv1 = s - BaseField::one();
-    let w = w * tv1;
-    // TODO: make constant-time
-    let e = tv2.is_zero();
-    let w = if e { BaseField::one() } else { w };
-    (v, w)
-}
+    /// Maps the input to a point on the curve, without anyone knowing the DLOG of the curve point.
+    ///
+    /// This is based on `map_to_curve` from [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
+    /// We use section 6.8 ("Mappings for Twisted Edwards Curves") to map the input to a point on the curve.
+    /// This internally uses a birationally equivalent Montgomery curve to perform the mapping, then uses a rational map to convert the point to the Edwards curve.
+    fn map_to_curve_twisted_edwards(input: BaseField) -> Affine {
+        let (s, t) = map_to_curve_elligator2(input);
+        let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
+        Affine { x: v, y: w }
+    }
 
-/// Computes the inverse of a field element, returning zero if the element is zero.
-fn inv0<F: PrimeField>(x: F) -> F {
-    x.inverse().unwrap_or(F::zero())
-}
+    /// Maps the input to a point on the Montgomery curve, without anyone knowing the DLOG of the curve point.
+    ///
+    /// Returns the s and t coordinates of the point on the Montgomery curve.
+    ///
+    /// let the Montgomery curve be defined by the equation $K*t^2 = s^3 + J*s^2 + s$.
+    /// We follow the Elligator2 mapping as described in [RFC9380, Section 6.7.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-elligator-2-method).
+    fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
+        // constant c1 = J/K;
+        let j = BaseField::from(168698);
+        let k = BaseField::from(168700);
+        let c1 = j / k;
+        // constant c2 = 1/ K^2
+        let c2 = (k * k).inverse().unwrap();
+        // constant Z = 5, based on RFC9380, Appendix H.3.
+        // ```sage
+        // # Argument:
+        // # - F, a field object, e.g., F = GF(2^255 - 19)
+        // def find_z_ell2(F):
+        //     ctr = F.gen()
+        //     while True:
+        //         for Z_cand in (F(ctr), F(-ctr)):
+        //             # Z must be a non-square in F.
+        //             if is_square(Z_cand):
+        //                 continue
+        //             return Z_cand
+        //         ctr += 1
+        // # BaseField of Baby JubJub curve:
+        // F = GF(21888242871839275222246405745257275088548364400416034343698204186575808495617)
+        // find_z_ell2(F) # 5
+        // ```
+        let z = BaseField::from(5);
+        let tv1 = input * input;
+        let tv1 = z * tv1;
+        // TODO: constant-time
+        let e = (tv1 + BaseField::one()).is_zero();
+        let tv1 = if e { BaseField::zero() } else { tv1 };
+        let x1 = tv1 + BaseField::one();
+        let x1 = inv0(x1);
+        let x1 = -c1 * x1;
+        let gx1 = x1 + c1;
+        let gx1 = gx1 * x1;
+        let gx1 = gx1 + c2;
+        let gx1 = gx1 * x1;
+        let x2 = -x1 - c1;
+        let gx2 = tv1 * gx1;
+        // TODO: constant time
+        let e2 = gx1.sqrt().is_some();
+        let (x, y2) = if e2 { (x1, gx1) } else { (x2, gx2) };
+        let y = y2
+            .sqrt()
+            .expect("y2 should be a square based on our conditional selection above");
+        let e3 = sgn0(y);
+        // TODO: constant-time
+        if e2 ^ e3 {
+            -y
+        } else {
+            y
+        };
+        let s = x * k;
+        let t = y * k;
+        (s, t)
+    }
 
-/// Computes the `sgn0` function for a field element, based on the definition in [RFC9380, Section 4.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-the-sgn0-function).
-fn sgn0<F: PrimeField>(x: F) -> bool {
-    x.into_bigint().is_odd()
+    /// Converts a point from Montgomery to Twisted Edwards using the rational map.
+    ///
+    /// This is based on appendix D1 of [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
+    ///
+    /// Let the twisted Edwards curve be defined by the equation $a*v^2 + w^2 = 1 + d*v^2*w^2$.
+    /// let the Montgomery curve be defined by the equation $K*t^2 = s^3 + J*s^2 + s$, with
+    /// $J = 2 * (a + d) / (a - d)$ and $K = 4 / (a - d)$.
+    ///
+    /// For the concrete case of Baby JubJub, we have:
+    /// - $K = 168700$
+    /// - $J = 168698$
+    /// - $a = 1$
+    /// - $d = 9706598848417545097372247223557719406784115219466060233080913168975159366771$
+    ///
+    /// Input: (s, t), a point on the curve $K * t^2 = s^3 + J * s^2 + s$.
+    /// Output: (v, w), a point on the equivalent twisted Edwards curve.
+    /// (This function also handles exceptional cases where the point is at infinity correctly.)
+    fn rational_map_mont_to_twisted_edwards(s: BaseField, t: BaseField) -> (BaseField, BaseField) {
+        // Convert the point from Montgomery to Twisted Edwards using the rational map
+        let tv1 = s + BaseField::one();
+        let tv2 = tv1 * t;
+        let tv2 = inv0(tv2);
+        let v = tv1 * tv2;
+        let v = v * s;
+        let w = tv2 * t;
+        let tv1 = s - BaseField::one();
+        let w = w * tv1;
+        // TODO: make constant-time
+        let e = tv2.is_zero();
+        let w = if e { BaseField::one() } else { w };
+        (v, w)
+    }
+
+    /// Computes the inverse of a field element, returning zero if the element is zero.
+    fn inv0<F: PrimeField>(x: F) -> F {
+        x.inverse().unwrap_or(F::zero())
+    }
+
+    /// Computes the `sgn0` function for a field element, based on the definition in [RFC9380, Section 4.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-the-sgn0-function).
+    fn sgn0<F: PrimeField>(x: F) -> bool {
+        x.into_bigint().is_odd()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use ark_ff::UniformRand;
+
+        #[test]
+        fn test_map_to_curve_twisted_edwards() {
+            let input = BaseField::from(42);
+            let (s, t) = map_to_curve_elligator2(input);
+            let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
+            let point = Affine { x: v, y: w };
+            assert!(point.is_on_curve());
+        }
+        #[test]
+        fn test_map_to_curve_twisted_edwards_rand() {
+            for _ in 0..100 {
+                // Test with random inputs
+                let input = BaseField::rand(&mut rand::thread_rng());
+                let (s, t) = map_to_curve_elligator2(input);
+                let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
+                let point = Affine { x: v, y: w };
+                assert!(point.is_on_curve(), "Failed for input: {:?}", input);
+            }
+        }
+
+        #[test]
+        fn test_encode_to_curve() {
+            let input = BaseField::from(42);
+            let point = encode_to_curve(input);
+            assert!(point.is_on_curve());
+        }
+        #[test]
+        fn test_hash_to_curve() {
+            let input = BaseField::from(42);
+            let point = hash_to_curve(input);
+            assert!(point.is_on_curve());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -330,35 +380,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_map_to_curve_twisted_edwards() {
-        let input = BaseField::from(42);
-        let (s, t) = map_to_curve_elligator2(input);
-        let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
-        let point = Affine { x: v, y: w };
-        assert!(point.is_on_curve());
-    }
-    #[test]
-    fn test_map_to_curve_twisted_edwards_rand() {
-        for _ in 0..100 {
-            // Test with random inputs
-            let input = BaseField::rand(&mut rand::thread_rng());
-            let (s, t) = map_to_curve_elligator2(input);
-            let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
-            let point = Affine { x: v, y: w };
-            assert!(point.is_on_curve(), "Failed for input: {:?}", input);
-        }
-    }
 
-    #[test]
-    fn test_encode_to_curve() {
-        let input = BaseField::from(42);
-        let point = encode_to_curve(input);
-        assert!(point.is_on_curve());
-    }
-    #[test]
-    fn test_hash_to_curve() {
-        let input = BaseField::from(42);
-        let point = hash_to_curve(input);
-        assert!(point.is_on_curve());
+    fn test_oprf_determinism() {
+        let mut rng = rand::thread_rng();
+        let key = OPrfKey::random(&mut rng);
+        let service = OPrfService::new(key);
+        let client = OPrfClient::new(*service.public_key());
+
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = client.blind_query(query, &mut rng);
+        let (blinded_request2, blinding_factor2) = client.blind_query(query, &mut rng);
+        assert_ne!(blinded_request, blinded_request2);
+        assert_ne!(
+            blinded_request.blinded_query,
+            blinded_request2.blinded_query
+        );
+        let response = service.answer_query(blinded_request);
+
+        let unblinded_response = client
+            .unblind_response(response, blinding_factor.prepare())
+            .unwrap();
+        let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
+
+        assert_eq!(unblinded_response, expected_response);
+        let response2 = service.answer_query(blinded_request2);
+
+        let unblinded_response2 = client
+            .unblind_response(response2, blinding_factor2.prepare())
+            .unwrap();
+        assert_eq!(unblinded_response, unblinded_response2);
     }
 }
