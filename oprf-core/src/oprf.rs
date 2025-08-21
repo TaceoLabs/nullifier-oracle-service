@@ -223,9 +223,11 @@ fn map_to_curve_twisted_edwards(input: BaseField) -> Affine {
 /// We follow the Elligator2 mapping as described in [RFC9380, Section 6.7.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-elligator-2-method).
 fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
     // constant c1 = J/K;
-    let c1 = BaseField::from(168698);
-    // constant c2 = 1/ K^2 = 1, so we skip it;
-    let c2 = BaseField::one();
+    let j = BaseField::from(168698);
+    let k = BaseField::from(168700);
+    let c1 = j / k;
+    // constant c2 = 1/ K^2
+    let c2 = (k * k).inverse().unwrap();
     // constant Z = 5, based on RFC9380, Appendix H.3.
     // ```sage
     // # Argument:
@@ -253,7 +255,6 @@ fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
     let x1 = inv0(x1);
     let x1 = -c1 * x1;
     let gx1 = x1 + c1;
-    // TODO: optimize since c2 = 1
     let gx1 = gx1 * x1;
     let gx1 = gx1 + c2;
     let gx1 = gx1 * x1;
@@ -272,10 +273,9 @@ fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
     } else {
         y
     };
-    // skipping because K == 1
-    // s = x * K
-    // t = y * K
-    (x, y)
+    let s = x * k;
+    let t = y * k;
+    (s, t)
 }
 
 /// Converts a point from Montgomery to Twisted Edwards using the rational map.
@@ -287,10 +287,10 @@ fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
 /// $J = 2 * (a + d) / (a - d)$ and $K = 4 / (a - d)$.
 ///
 /// For the concrete case of Baby JubJub, we have:
-/// - $K = 1$
+/// - $K = 168700$
 /// - $J = 168698$
 /// - $a = 1$
-/// - $d = 970659884841754509737224722355771940678$
+/// - $d = 9706598848417545097372247223557719406784115219466060233080913168975159366771$
 ///
 /// Input: (s, t), a point on the curve $K * t^2 = s^3 + J * s^2 + s$.
 /// Output: (v, w), a point on the equivalent twisted Edwards curve.
@@ -319,4 +319,42 @@ fn inv0<F: PrimeField>(x: F) -> F {
 /// Computes the `sgn0` function for a field element, based on the definition in [RFC9380, Section 4.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-the-sgn0-function).
 fn sgn0<F: PrimeField>(x: F) -> bool {
     x.into_bigint().is_odd()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_to_curve_twisted_edwards() {
+        let input = BaseField::from(42);
+        let (s, t) = map_to_curve_elligator2(input);
+        let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
+        let point = Affine { x: v, y: w };
+        assert!(point.is_on_curve());
+    }
+    #[test]
+    fn test_map_to_curve_twisted_edwards_rand() {
+        for _ in 0..100 {
+            // Test with random inputs
+            let input = BaseField::rand(&mut rand::thread_rng());
+            let (s, t) = map_to_curve_elligator2(input);
+            let (v, w) = rational_map_mont_to_twisted_edwards(s, t);
+            let point = Affine { x: v, y: w };
+            assert!(point.is_on_curve(), "Failed for input: {:?}", input);
+        }
+    }
+
+    #[test]
+    fn test_encode_to_curve() {
+        let input = BaseField::from(42);
+        let point = encode_to_curve(input);
+        assert!(point.is_on_curve());
+    }
+    #[test]
+    fn test_hash_to_curve() {
+        let input = BaseField::from(42);
+        let point = hash_to_curve(input);
+        assert!(point.is_on_curve());
+    }
 }
