@@ -1,5 +1,5 @@
 [workspace]
-members = ["oprf-core"]
+members = ["oprf-core", "poseidon2"]
 resolver = "3"
 
 [workspace.package]

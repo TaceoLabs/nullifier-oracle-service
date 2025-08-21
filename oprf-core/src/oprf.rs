@@ -1,5 +1,6 @@
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, Field, One, PrimeField, UniformRand, Zero};
+use poseidon2::POSEIDON2_BN254_PARAMS;
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
@@ -192,16 +193,19 @@ fn hash_to_curve(input: BaseField) -> Affine {
 /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
 fn hash_to_field(input: BaseField) -> BaseField {
     // hash the input to a field element using poseidon hash
-
-    BaseField::from(42) // Placeholder, replace with actual poseidon hash implementation
+    let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+    let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
+    output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
 }
 
 /// An implementation of `hash_to_field` based on [RFC9380](https://www.rfc-editor.org/rfc/rfc9380.html).
 /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
 fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
     // hash the input to a field element using poseidon hash
+    let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+    let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
 
-    [BaseField::from(43), BaseField::from(44)] // Placeholder, replace with actual poseidon hash implementation
+    [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
 }
 
 /// Maps the input to a point on the curve, without anyone knowing the DLOG of the curve point.

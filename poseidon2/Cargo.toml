@@ -1,5 +1,5 @@
 [package]
-name = "oprf-core"
+name = "poseidon2"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,9 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-ec = "0.5.0"
-ark-ed-on-bn254 = "0.5.0"
+ark-bn254 = "0.5.0"
 ark-ff = "0.5.0"
-rand = "0.8"
-uuid = { version = "1.18.0", features = ["v4"] }
-poseidon2 = { path = "../poseidon2" }
+ark-std = { version = "0.5.0", features = ["std"] }
+hex = "0.4.3"
