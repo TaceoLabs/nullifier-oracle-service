@@ -85,6 +85,8 @@ pub struct BlindedOPrfRequest {
 pub struct BlindingFactor {
     /// the blinding factor used to blind the query
     factor: ScalarField,
+    /// original query
+    query: BaseField,
     // request id, to track the response to the request
     request_id: Uuid,
 }
@@ -96,6 +98,7 @@ impl BlindingFactor {
                 .inverse()
                 .expect("Blinding factor should not be zero"),
             request_id: self.request_id,
+            query: self.query,
         }
     }
 }
@@ -103,6 +106,8 @@ impl BlindingFactor {
 pub struct PreparedBlindingFactor {
     /// the blinding factor used to blind the query
     factor: ScalarField,
+    /// original query
+    query: BaseField,
     // request id, to track the response to the request
     request_id: Uuid,
 }
@@ -151,29 +156,44 @@ impl OPrfClient {
             },
             BlindingFactor {
                 factor: blinding_factor,
+                query,
                 request_id,
             },
         )
     }
 
-    pub fn unblind_response(
+    pub fn finalize_query(
         &self,
         response: BlindedOPrfResponse,
         blinding_factor: PreparedBlindingFactor,
-    ) -> Result<Affine, RequestIdMismatchError> {
+    ) -> Result<BaseField, RequestIdMismatchError> {
         // Unblind the response using the blinding factor
         if response.request_id != blinding_factor.request_id {
             return Err(RequestIdMismatchError);
         }
         let unblinded_response = response.blinded_response * blinding_factor.factor;
-        Ok(unblinded_response.into_affine())
+        let unblinded_point = unblinded_response.into_affine();
+
+        // compute the second hash in the 2Hash-DH construction
+        // out = H(query, unblinded_point)
+        let hash_input = [
+            BaseField::zero(), // capacity of the sponge
+            blinding_factor.query,
+            unblinded_point.x,
+            unblinded_point.y,
+        ];
+
+        // TODO: this should be a size 4 permutation
+        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let output = poseidon.permutation(&hash_input);
+        Ok(output[1]) // Return the first element of the state as the field element,
     }
 }
 
 mod mappings {
     use ark_ec::{AffineRepr, CurveGroup};
     use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
-    use poseidon2::POSEIDON2_BN254_PARAMS;
+    use poseidon2::POSEIDON2_BN254_PARAMS_3;
 
     use crate::oprf::{Affine, BaseField};
 
@@ -203,7 +223,7 @@ mod mappings {
     /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
     fn hash_to_field(input: BaseField) -> BaseField {
         // hash the input to a field element using poseidon hash
-        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
         let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
         output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
     }
@@ -212,7 +232,7 @@ mod mappings {
     /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
     fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
         // hash the input to a field element using poseidon hash
-        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
         let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
 
         [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
@@ -397,17 +417,26 @@ mod tests {
         );
         let response = service.answer_query(blinded_request);
 
-        let unblinded_response = client
-            .unblind_response(response, blinding_factor.prepare())
+        let response = client
+            .finalize_query(response, blinding_factor.prepare())
             .unwrap();
-        let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
 
-        assert_eq!(unblinded_response, expected_response);
+        let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
+        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let out = poseidon.permutation(&[
+            BaseField::zero(),
+            query,
+            expected_response.x,
+            expected_response.y,
+        ]);
+        let expected_output = out[1];
+
+        assert_eq!(response, expected_output);
         let response2 = service.answer_query(blinded_request2);
 
         let unblinded_response2 = client
-            .unblind_response(response2, blinding_factor2.prepare())
+            .finalize_query(response2, blinding_factor2.prepare())
             .unwrap();
-        assert_eq!(unblinded_response, unblinded_response2);
+        assert_eq!(response, unblinded_response2);
     }
 }
