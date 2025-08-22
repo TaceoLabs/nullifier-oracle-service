@@ -1,0 +1,31 @@
+[package]
+name = "ark-babyjubjub"
+version = "0.5.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+description = "A Twisted Edwards curve defined over the scalar field of the BN254 curve, compatible with the Baby Jubjub impl in Circom."
+
+[dependencies]
+ark-ff = { workspace = true }
+ark-ec = { workspace = true }
+ark-std = { workspace = true }
+ark-r1cs-std = { workspace = true, optional = true }
+ark-bn254 = { workspace = true, features = ["scalar_field"] }
+
+[dev-dependencies]
+ark-relations = { version = "0.5" }
+ark-serialize = { version = "0.5" }
+ark-algebra-test-templates = { version = "0.5" }
+ark-curve-constraint-tests = { version = "0.5" }
+
+[features]
+default = []
+std = ["ark-std/std", "ark-ff/std", "ark-ec/std", "ark-bn254/std"]
+r1cs = ["ark-r1cs-std"]
+asm = ["ark-ff/asm"]
