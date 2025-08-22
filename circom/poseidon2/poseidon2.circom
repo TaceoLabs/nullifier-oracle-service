@@ -202,7 +202,7 @@ template PartialRound(t, RC) {
 }
 
 template Poseidon2(t) {  
-    // sanity check that we only have valid state size
+    // sanity check that we only have valid state sizes
     assert(t == 2 || t == 3 || t == 4 || t == 8 || t == 12 || t == 16);
 
     signal input in[t];  
