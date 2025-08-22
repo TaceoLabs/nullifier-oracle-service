@@ -225,7 +225,9 @@ mod poseidon2_tests_bn256 {
     use ark_ff::UniformRand;
 
     use super::*;
-    use crate::{params::bn254::POSEIDON2_BN254_PARAMS, utils::from_hex};
+    use crate::{
+        POSEIDON2_BN254_PARAMS_4, params::bn254::POSEIDON2_BN254_PARAMS_3, utils::from_hex,
+    };
     use std::convert::TryFrom;
 
     type Scalar = ark_bn254::Fr;
@@ -234,7 +236,7 @@ mod poseidon2_tests_bn256 {
 
     #[test]
     fn consistent_perm() {
-        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
         let t = poseidon2.params.t;
         let mut rng = ark_std::rand::thread_rng();
         for _ in 0..TESTRUNS {
@@ -256,8 +258,8 @@ mod poseidon2_tests_bn256 {
     }
 
     #[test]
-    fn kats() {
-        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS);
+    fn kats_3() {
+        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
         let mut input: Vec<Scalar> = vec![];
         for i in 0..poseidon2.params.t {
             input.push(Scalar::from(i as u64));
@@ -275,5 +277,27 @@ mod poseidon2_tests_bn256 {
             perm[2],
             from_hex("0x1ed25194542b12eef8617361c3ba7c52e660b145994427cc86296242cf766ec8")
         );
+    }
+
+    #[test]
+    fn kats_4() {
+        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS_4);
+        let mut input: Vec<Scalar> = vec![];
+        for i in 0..poseidon2.params.t {
+            input.push(Scalar::from(i as u64));
+        }
+        let perm = poseidon2.permutation(&input);
+
+        for (i, p) in [
+            from_hex("0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737"),
+            from_hex("0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662"),
+            from_hex("0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb"),
+            from_hex("0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert_eq!(perm[i], *p);
+        }
     }
 }

@@ -2,7 +2,7 @@ mod params;
 mod poseidon2;
 
 pub use params::Poseidon2Params;
-pub use params::bn254::POSEIDON2_BN254_PARAMS;
+pub use params::bn254::{POSEIDON2_BN254_PARAMS_3, POSEIDON2_BN254_PARAMS_4};
 pub use poseidon2::Poseidon2;
 
 mod utils {
