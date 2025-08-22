@@ -1,0 +1,6 @@
+[package]
+name = "encode_to_curve"
+type = "lib"
+authors = [""]
+
+[dependencies]
