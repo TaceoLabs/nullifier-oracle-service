@@ -13,19 +13,6 @@ template Acc(t) {
     out <== sums[t-1];
 }
 
-template Double {
-    signal input a;
-    signal output b <== 2 * a;
-}
-
-template Quadruple {
-    signal input a;
-    signal output b;
-
-    signal double <== Double()(a);
-    b <== Double()(double);
-}
-
 template ExternalMatMul2 {
     signal input in[2];
     signal output out[2];
@@ -47,14 +34,14 @@ template ExternalMatMul4 {
     signal input in[4];
     signal output out[4];
 
-    signal double_in1 <== Double()(in[1]);
-    signal double_in3 <== Double()(in[3]);
+    signal double_in1 <== 2 * in[1];
+    signal double_in3 <== 2 * in[3];
 
     signal t_0 <== in[0] + in[1];
     signal t_1 <== in[2] + in[3];
 
-    signal quad_t_0 <== Quadruple()(t_0);
-    signal quad_t_1 <== Quadruple()(t_1);
+    signal quad_t_0 <== 4 * t_0;
+    signal quad_t_1 <== 4 * t_1;
 
     signal t_2 <== double_in1 + t_1;
     signal t_3 <== double_in3 + t_0;
