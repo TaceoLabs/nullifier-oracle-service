@@ -3,7 +3,7 @@ use ark_ff::{Field, UniformRand, Zero};
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
-type Curve = ark_ed_on_bn254::EdwardsProjective;
+type Curve = ark_babyjubjub::EdwardsProjective;
 type ScalarField = <Curve as PrimeGroup>::ScalarField;
 type BaseField = <Curve as CurveGroup>::BaseField;
 type Affine = <Curve as CurveGroup>::Affine;
@@ -258,7 +258,7 @@ mod mappings {
     fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
         // constant c1 = J/K;
         let j = BaseField::from(168698);
-        let k = BaseField::from(168700);
+        let k = BaseField::from(1);
         let c1 = j / k;
         // constant c2 = 1/ K^2
         let c2 = (k * k).inverse().unwrap();
@@ -321,10 +321,10 @@ mod mappings {
     /// $J = 2 * (a + d) / (a - d)$ and $K = 4 / (a - d)$.
     ///
     /// For the concrete case of Baby JubJub, we have:
-    /// - $K = 168700$
+    /// - $K = 1$
     /// - $J = 168698$
-    /// - $a = 1$
-    /// - $d = 9706598848417545097372247223557719406784115219466060233080913168975159366771$
+    /// - $a = 168700$
+    /// - $d = 168696$
     ///
     /// Input: (s, t), a point on the curve $K * t^2 = s^3 + J * s^2 + s$.
     /// Output: (v, w), a point on the equivalent twisted Edwards curve.

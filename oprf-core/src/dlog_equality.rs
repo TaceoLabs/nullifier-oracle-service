@@ -7,10 +7,10 @@ pub struct DLogEqualityProof {
     s: ScalarField,
 }
 
-type ScalarField = ark_ed_on_bn254::Fr;
-type BaseField = ark_ed_on_bn254::Fq;
-type Affine = ark_ed_on_bn254::EdwardsAffine;
-type Projective = ark_ed_on_bn254::EdwardsProjective;
+type ScalarField = ark_babyjubjub::Fr;
+type BaseField = ark_babyjubjub::Fq;
+type Affine = ark_babyjubjub::EdwardsAffine;
+type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualityProof {
     pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
