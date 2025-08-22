@@ -134,7 +134,13 @@ template InternalMatMulT(t) {
     } else if (t == 3) {
         out <== InternalMatMul3()(in);
     } else {
-        // load the diagonal for the inner matrix multiplication
+        // Load the diagonal for the inner matrix multiplication.
+        // It is the same for every round, so we could theoretically
+        // load it once and pass it as a template parameter.
+        // However, for widths t = 2 and t = 3 there is no diagonal,
+        // so we opted to call this function each round. This may add some
+        // overhead with our standard witness extension, but the graph
+        // compiler hopefully eliminates this call completely.
         var diag[t] = load_diag(t);
         signal acc <== Acc(t)(in);
         for (var i = 0;i<t;i++) {
@@ -196,8 +202,9 @@ template PartialRound(t, RC) {
 }
 
 template Poseidon2(t) {  
+    // sanity check that we only have valid state size
+    assert(t == 2 || t == 3 || t == 4 || t == 8 || t == 12 || t == 16);
 
-    assert(t == 2 || t == 3 || (t % 4 == 0 && t <= 16));
     signal input in[t];  
     signal output out[t];  
 
