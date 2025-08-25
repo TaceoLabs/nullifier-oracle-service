@@ -198,7 +198,6 @@ impl OPrfClient {
             unblinded_point.y,
         ];
 
-        // TODO: this should be a size 4 permutation
         let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
         let output = poseidon.permutation(&hash_input);
         Ok(output[1]) // Return the first element of the state as the field element,
