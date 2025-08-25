@@ -2,6 +2,7 @@ use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use rand::{CryptoRng, Rng};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DLogEqualityProof {
     e: ScalarField,
     s: ScalarField,

@@ -3,23 +3,21 @@ use ark_ff::{Field, UniformRand, Zero};
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
+use crate::dlog_equality::DLogEqualityProof;
+
 type Curve = ark_babyjubjub::EdwardsProjective;
 type ScalarField = <Curve as PrimeGroup>::ScalarField;
 type BaseField = <Curve as CurveGroup>::BaseField;
 type Affine = <Curve as CurveGroup>::Affine;
 
-impl std::error::Error for RequestIdMismatchError {}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RequestIdMismatchError;
-
-impl std::fmt::Display for RequestIdMismatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Request ID mismatch: The provided blinding factor does not match the request ID in the response."
-        )
-    }
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum OPrfError {
+    #[error(
+        "Request ID mismatch: The provided blinding factor does not match the request ID in the response."
+    )]
+    RequestIdMismatch,
+    #[error("Invalid proof: The provided DLOG equality proof is invalid.")]
+    InvalidProof,
 }
 
 pub struct OPrfKey {
@@ -71,6 +69,23 @@ impl OPrfService {
             blinded_response,
         }
     }
+    pub fn answer_query_with_proof(
+        &self,
+        query: BlindedOPrfRequest,
+    ) -> (BlindedOPrfResponse, DLogEqualityProof) {
+        // Compute the blinded response
+        let blinded_response = (query.blinded_query * self.key.key).into_affine();
+
+        let proof =
+            DLogEqualityProof::proof(query.blinded_query, self.key.key, &mut rand::thread_rng());
+        (
+            BlindedOPrfResponse {
+                request_id: query.request_id,
+                blinded_response,
+            },
+            proof,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +119,7 @@ impl BlindingFactor {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
-    /// the blinding factor used to blind the query
+    /// the inverse of the blinding factor used to blind the query
     factor: ScalarField,
     /// original query
     query: BaseField,
@@ -166,10 +181,10 @@ impl OPrfClient {
         &self,
         response: BlindedOPrfResponse,
         blinding_factor: PreparedBlindingFactor,
-    ) -> Result<BaseField, RequestIdMismatchError> {
+    ) -> Result<BaseField, OPrfError> {
         // Unblind the response using the blinding factor
         if response.request_id != blinding_factor.request_id {
-            return Err(RequestIdMismatchError);
+            return Err(OPrfError::RequestIdMismatch);
         }
         let unblinded_response = response.blinded_response * blinding_factor.factor;
         let unblinded_point = unblinded_response.into_affine();
@@ -187,6 +202,28 @@ impl OPrfClient {
         let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
         let output = poseidon.permutation(&hash_input);
         Ok(output[1]) // Return the first element of the state as the field element,
+    }
+
+    pub fn finalize_query_and_verify_proof(
+        &self,
+        response: BlindedOPrfResponse,
+        proof: DLogEqualityProof,
+        blinding_factor: PreparedBlindingFactor,
+    ) -> Result<BaseField, OPrfError> {
+        // Verify the proof
+        let d = Curve::generator().into_affine();
+        let a = self.public_key;
+        //TODO: save this element to avoid recomputing it?
+        let b = (mappings::encode_to_curve(blinding_factor.query)
+            * blinding_factor.factor.inverse().unwrap())
+        .into_affine();
+        let c = response.blinded_response;
+
+        if !proof.verify(a, b, c, d) {
+            return Err(OPrfError::InvalidProof);
+        }
+        // Call finalize_query to unblind the response
+        self.finalize_query(response, blinding_factor)
     }
 }
 
@@ -400,7 +437,6 @@ mod tests {
     use super::*;
 
     #[test]
-
     fn test_oprf_determinism() {
         let mut rng = rand::thread_rng();
         let key = OPrfKey::random(&mut rng);
@@ -438,5 +474,54 @@ mod tests {
             .finalize_query(response2, blinding_factor2.prepare())
             .unwrap();
         assert_eq!(response, unblinded_response2);
+    }
+
+    #[test]
+    fn test_oprf_with_proof() {
+        let mut rng = rand::thread_rng();
+        let key = OPrfKey::random(&mut rng);
+        let service = OPrfService::new(key);
+        let client = OPrfClient::new(*service.public_key());
+
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = client.blind_query(query, &mut rng);
+        let (blinded_request2, blinding_factor2) = client.blind_query(query, &mut rng);
+        assert_ne!(blinded_request, blinded_request2);
+        assert_ne!(
+            blinded_request.blinded_query,
+            blinded_request2.blinded_query
+        );
+        let (response, proof) = service.answer_query_with_proof(blinded_request);
+
+        let unblinded_response = client
+            .finalize_query_and_verify_proof(
+                response.clone(),
+                proof,
+                blinding_factor.clone().prepare(),
+            )
+            .unwrap();
+
+        let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
+        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let out = poseidon.permutation(&[
+            BaseField::zero(),
+            query,
+            expected_response.x,
+            expected_response.y,
+        ]);
+        let expected_output = out[1];
+
+        assert_eq!(unblinded_response, expected_output);
+
+        let (response2, proof2) = service.answer_query_with_proof(blinded_request2);
+        let unblinded_response2 = client
+            .finalize_query_and_verify_proof(response2, proof2.clone(), blinding_factor2.prepare())
+            .unwrap();
+        assert_eq!(unblinded_response, unblinded_response2);
+
+        assert_eq!(
+            client.finalize_query_and_verify_proof(response, proof2, blinding_factor.prepare()),
+            Err(OPrfError::InvalidProof)
+        );
     }
 }
