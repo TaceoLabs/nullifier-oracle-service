@@ -6,7 +6,11 @@ include "comparators.circom";
 // - -1 if n is a non-quadratic residue
 // -  0 if n == 0
 function legendre(n) {
-    return n ** ((-1) >> 1);
+    if (n == 0) {
+        return 0;
+    } else {
+        return n ** ((-1) >> 1);
+    }
 }
 
 // Returns 1 if the input is either 0 or 1; otherwise returns 0.
