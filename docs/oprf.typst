@@ -217,7 +217,29 @@
 = Baseline:  <design>
 
 
+
 = Conclusion
 
 
 #bibliography("references.bib")
+
+#appendices(
+  [
+    = Random sampling
+
+    Let
+    $ p = 21888242871839275222246405745257275088548364400416034343698204186575808495617 $
+    be the order of the BN254 curve.
+    Let
+    $ q = 2736030358979909402780800718157159386076813972158567259200215660948447373041 $
+    be the order of the prime-order subgroup of the BabyJubJub curve.
+
+    #theorem(
+      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x <- bb(F)_q$ are statistically indistinguishable.
+        #proof(
+          [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x <- bb(Z)_p$ and $y <- bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x <- bb(Z)_q; "return" x$ and $y <- bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
+        )
+      ],
+    )
+  ],
+)
