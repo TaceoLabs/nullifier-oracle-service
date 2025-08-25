@@ -104,16 +104,14 @@ template RationalMapMontToTwistedEdwards() {
     signal t <== in[1];
 
     signal tv1 <== s + 1;
-    signal tv1_times_t <== tv1 * t; 
-    signal tv2 <== InverseOrZero()(tv1_times_t);
+    signal tv2 <== InverseOrZero()(tv1 * t);
     signal v <== tv1 * tv2;
     signal w <== tv2 * t;
 
     signal tv11 <== s - 1;
-    signal w1 <== w * tv11;
     signal e <== IsZero()(tv2);
     out[0] <== s * v;
-    out[1] <== Mux1()([w1, 1], e);
+    out[1] <== Mux1()([w * tv11, 1], e);
 }
 
 
