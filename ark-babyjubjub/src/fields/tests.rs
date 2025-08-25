@@ -28,7 +28,7 @@ fn test_fq_add() {
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
     assert!(!f3.is_zero());
-    assert_eq!(f1 + &f2, f3);
+    assert_eq!(f1 + f2, f3);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn test_fq_add_one() {
     .unwrap();
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
-    assert_eq!(f1 + &Fq::one(), f2);
+    assert_eq!(f1 + Fq::one(), f2);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn test_fq_mul() {
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
     assert!(!f3.is_zero());
-    assert_eq!(f1 * &f2, f3);
+    assert_eq!(f1 * f2, f3);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn test_fq_triple_mul() {
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
     assert!(!f3.is_zero());
-    assert_eq!(f1 * &f2 * &f3, f4);
+    assert_eq!(f1 * f2 * f3, f4);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn test_fq_div() {
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
     assert!(!f3.is_zero());
-    assert_eq!(f1 / &f2, f3);
+    assert_eq!(f1 / f2, f3);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn test_fq_sub() {
     assert!(!f1.is_zero());
     assert!(!f2.is_zero());
     assert!(!f3.is_zero());
-    assert_eq!(f1 - &f2, f3);
+    assert_eq!(f1 - f2, f3);
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn test_fq_generate_random_ed_on_bn254_point() {
     .unwrap();
     assert_eq!(y2, computed_y2);
 
-    let computed_dy2 = d * &computed_y2;
+    let computed_dy2 = d * computed_y2;
     let dy2 =
         Fq::from_str("345576003677591687256955722467813448317229128849323754147891993737799010947")
             .unwrap();
@@ -181,7 +181,7 @@ fn test_fq_generate_random_ed_on_bn254_point() {
             .unwrap();
     assert_eq!(divisor, computed_divisor);
 
-    let computed_x2 = (computed_y2 - &Fq::one()) / &computed_divisor;
+    let computed_x2 = (computed_y2 - Fq::one()) / computed_divisor;
     assert_eq!(x2, computed_x2);
 
     let x = Fq::from_str(
@@ -192,21 +192,21 @@ fn test_fq_generate_random_ed_on_bn254_point() {
     assert_eq!(computed_x.square(), x2);
     assert_eq!(x, computed_x);
 
-    fn add<'a>(curr: (Fq, Fq), other: &'a (Fq, Fq)) -> (Fq, Fq) {
-        let y1y2 = curr.1 * &other.1;
-        let x1x2 = curr.0 * &other.0;
+    fn add(curr: (Fq, Fq), other: &(Fq, Fq)) -> (Fq, Fq) {
+        let y1y2 = curr.1 * other.1;
+        let x1x2 = curr.0 * other.0;
         let a = Fq::from_str("168700").unwrap();
         let d = Fq::from_str("168696").unwrap();
-        let dx1x2y1y2 = d * &y1y2 * &x1x2;
+        let dx1x2y1y2 = d * y1y2 * x1x2;
 
-        let d1 = Fq::one() + &dx1x2y1y2;
-        let d2 = Fq::one() - &dx1x2y1y2;
+        let d1 = Fq::one() + dx1x2y1y2;
+        let d2 = Fq::one() - dx1x2y1y2;
 
-        let x1y2 = curr.0 * &other.1;
-        let y1x2 = curr.1 * &other.0;
+        let x1y2 = curr.0 * other.1;
+        let y1x2 = curr.1 * other.0;
 
-        let x = (x1y2 + &y1x2) / &d1;
-        let y = (y1y2 - a * &x1x2) / &d2;
+        let x = (x1y2 + y1x2) / d1;
+        let y = (y1y2 - a * x1x2) / d2;
 
         (x, y)
     }
@@ -308,7 +308,7 @@ fn test_fr_add() {
         0x4d596ec9aecf1fd3,
         0xcd0b95f15cd82f,
     ]));
-    assert_eq!(f1 + &f2, f3);
+    assert_eq!(f1 + f2, f3);
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn test_fr_mul() {
         0x835582d896b4d13f,
         0x4808736e213036e,
     ]));
-    assert_eq!(f1 * &f2, f3);
+    assert_eq!(f1 * f2, f3);
 }
 
 #[test]
