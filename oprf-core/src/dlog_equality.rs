@@ -1,11 +1,12 @@
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
+use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DLogEqualityProof {
-    e: ScalarField,
-    s: ScalarField,
+    e: BaseField,
+    s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
 }
 
 type ScalarField = ark_babyjubjub::Fr;
@@ -22,25 +23,43 @@ impl DLogEqualityProof {
         let c = (b * x).into_affine();
         let d = Projective::generator().into_affine();
         let e = challenge_hash(a, b, c, d, r1, r2);
-        let e = convert_base_to_scalar(e);
-        let s = k + e * x;
+
+        // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
+        let e_ = convert_base_to_scalar(e);
+        let s = k + e_ * x;
         DLogEqualityProof { e, s }
     }
 
     pub fn verify(&self, a: Affine, b: Affine, c: Affine, d: Affine) -> bool {
+        // All points need to be valid curve elements.
+        if [a, b, c, d]
+            .iter()
+            .any(|p| !p.is_on_curve() || !p.is_in_correct_subgroup_assuming_on_curve())
+        {
+            return false;
+        }
         if [a, b, c, d].iter().any(|p| p.is_zero()) {
             return false;
         }
-        let r_1 = Projective::generator() * self.s - a * self.e;
+
+        // The following check is required to prevent malleability of the proofs by using different s, such as s + p.
+        let s_biguint: BigUint = self.s.into();
+        if s_biguint >= BaseField::MODULUS.into() {
+            return false;
+        }
+
+        // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
+        let e = convert_base_to_scalar(self.e);
+
+        let r_1 = Projective::generator() * self.s - a * e;
         if r_1.is_zero() {
             return false;
         }
-        let r_2 = b * self.s - c * self.e;
+        let r_2 = b * self.s - c * e;
         if r_2.is_zero() {
             return false;
         }
         let e = challenge_hash(a, b, c, d, r_1.into_affine(), r_2.into_affine());
-        let e = convert_base_to_scalar(e);
         e == self.e
     }
 }
@@ -71,6 +90,7 @@ fn challenge_hash(a: Affine, b: Affine, c: Affine, d: Affine, r1: Affine, r2: Af
     state[1] // output first state element as hash output
 }
 
+// This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
 fn convert_base_to_scalar(f: BaseField) -> ScalarField {
     let bytes = f.into_bigint().to_bytes_le();
     ScalarField::from_le_bytes_mod_order(&bytes)

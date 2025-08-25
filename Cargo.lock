@@ -467,6 +467,7 @@ dependencies = [
  "ark-babyjubjub",
  "ark-ec",
  "ark-ff",
+ "num-bigint",
  "poseidon2",
  "rand",
  "thiserror",
