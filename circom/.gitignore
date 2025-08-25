@@ -1,4 +1,4 @@
-poseidon2_test_js/
 **_test_js/
+**_bench_js/
 **.r1cs
 input.json
