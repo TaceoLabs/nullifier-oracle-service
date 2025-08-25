@@ -29,7 +29,7 @@ template CheckZeroOneOrMinusOne() {
 // This function returns sqrt(n) using Tonelli–Shanks parameters for BN254.
 // It does NOT check whether n is a quadratic residue in the BN254 scalar field.
 // Calling this function without checking the Legendre symbol results in undefined behavior.
-function unchecked_sqrt(n) {
+function sqrt_unchecked(n) {
     if (n == 0) {
         return 0;
     }
@@ -61,9 +61,6 @@ function unchecked_sqrt(n) {
         r = r*b;
     }
 
-    if (r < 0 ) {
-        r = -r;
-    }
 
     return r;
 }
@@ -105,7 +102,7 @@ template IsQuadraticResidueOrZero() {
         sqrt_input = na;
     }
     // We don't use the terniary operator because circom evaluates both branches which results in endless loops.
-    signal b <-- unchecked_sqrt(sqrt_input);
+    signal b <-- sqrt_unchecked(sqrt_input);
 
     // Compute the selectors
     signal s_na <== l * (l - 1); // 0 when l ∈ {0,1}, 2 when l = -1
