@@ -46,7 +46,7 @@ impl DLogEqualityProof {
 
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p.
         let s_biguint: BigUint = self.s.into();
-        if s_biguint >= BaseField::MODULUS.into() {
+        if s_biguint >= ScalarField::MODULUS.into() {
             return false;
         }
 
