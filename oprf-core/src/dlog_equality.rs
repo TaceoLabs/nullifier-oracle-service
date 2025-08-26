@@ -15,6 +15,7 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualityProof {
+    /// Creates a proof which shows that C=x*B and A=x*D share the same dlog x. This proof can be verified using B, C, and A=x*D. D is currently hard coded as the generator of the group.
     pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
         let k = ScalarField::rand(rng);
         let r1 = (Projective::generator() * k).into_affine();
@@ -30,6 +31,7 @@ impl DLogEqualityProof {
         DLogEqualityProof { e, s }
     }
 
+    /// Takes the proof e,s and verifies that A=x*D and C=x*B have the same dlog x, given A,B,C,D.
     pub fn verify(&self, a: Affine, b: Affine, c: Affine, d: Affine) -> bool {
         // All points need to be valid curve elements.
         if [a, b, c, d]
