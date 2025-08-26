@@ -230,7 +230,6 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
     ],
     [],
     [],
-
     [$a <- H(x)^beta$], math.attach($arrow.r$, t: $a$), [$b <- a^k$],
     [], math.attach($arrow.l$, t: $b$), [],
     [Output $H'(x, b^(beta^(-1)))$],
@@ -250,7 +249,65 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
 == ZK Proofs: Circom
 
 
+In @tab:circom_constraints, we give the R1CS constraint count for various building blocks of the ZK proof.
 
+#figure(
+  table(
+    columns: 3,
+    align: (left, right, left),
+    stroke: none,
+    table.header([Function], [Constraint Cost], [Comment]),
+    table.hline(stroke: 0.05em),
+    [BabyJubJubScalarMulAny], [2310], [$P s$ for arbitrary $P$, 254 bit $s$.],
+    [BabyJubJubScalarMulFix], [512], [$P s$, for fixed, public $P$, 254 bit $s$.],
+    [Poseidon2 (t=3)], [240], [Poseidon2 with statesize 3.],
+    [Poseidon2 (t=4)], [264], [Poseidon2 with statesize 4.],
+    [BabyJubJubPoseidonEdDSAVerify], [4217], [EdDSA Verification on BabyJubJub, using Poseidon as a Hash.],
+    [encode_to_curve], [808], [Encoding an arbitrary field element into a random BabyJubJub Curve point.],
+    [DLogEqVerify], [10296], [Verification of a discrete logarithm equality proof over BabyJubJub.],
+    [BinaryMerkleTree (d=32)], [7875], [Binary Merkle Tree using Poseidon with state size 2, depth 32.],
+    [Semaphore (d=32)], [9383], [Sempahore proof with MT depth 32.],
+  ),
+  caption: [Constraint cost for various Circom ZK building blocks.],
+) <tab:circom_constraints>
+
+=== OPRF client query validity proof
+
+#let sk = $italic("sk")$;
+#let pk = $italic("pk")$;
+#let nonce = $italic("nonce")$;
+#let uid = $italic("id")_italic("u")$;
+#let rpid = $italic("id")_italic("rp")$;
+#let rpuid = $italic("id")_italic("rp,u")$;
+#let action = $italic("action")$
+#let epoch = $italic("epoch")$
+
+For the OPRF protocol, the client needs to proof the validity of the following statements:
+1. I know a secret key $sk$ for a given public key $pk$.
+  - This statement is proven by providing a signature of a nonce under the given secret key $sk$. This signature is then verified in the ZK proof.
+  - $serif("Verify")(pk, sigma, nonce) == 1$
+2. The public key $pk$ is at the leaf with index $uid$ in the Merkle tree corresponding to the root hash $h$.
+  - This statement is proven by providing $uid$, the Merkle tree path neighbors $h_i$ and recomputing the path up to the root.
+  - $serif("MTPathVerify")(pk, h_i, h)$
+3. The OPrf query $q$ is derived as specified from $uid$ as $H(uid)^beta$, for a random, but known $beta$.
+  - This statement is proven by recalculating the hash function $H$ which hashes a field element to the BabyJubJub curve, followed by a scalar multiplication with $beta$.
+  - $serif("ECScalarMul")(serif("encode_to_curve")(uid), beta) = q$
+
+The approximate circuit size for these statements is: $4217 + 7875 + 808 + 2310 = 15210 < 2^14$.
+
+=== Nullifier Validity Proof
+
+After the OPRF protocol has been executed, the client computes the nullifier $ell = H(rpuid, action, epoch, rpid)$. It then proofs the validity of the whole derivation of the nullifier. This includes the steps 1-3 from above, as well as:
+4. The OPRF result returned from the servers is correct w.r.t. their OPRF public key.
+  - This is handled using a discrete logarithm equality proof to show that $log_g (g^k) = log_q (q^k)$
+  - $serif("DLogEqVerify")(g,g^k, q, z = q^k, s, e) == 1$
+5. The OPRF result is unblinded and hashed to get the OPRF output $rpuid = H'(uid, z^(beta^(-1)))$.
+  - This would normally require inverting $beta$, which is expensive since it is not native to the proof system scalar field. However, we can utilize a common trick in ZKPs and inject the result $y = z^beta^(-1)$ and show that $y^beta = z$ instead, which saves the calculation of the inverse.
+  - $serif("Hash2")(uid, y) == rpuid$ and $serif("ECScalarMul")(y, beta) == z$
+6. The Nullifier is calculated correctly:
+  - $serif("Nullifier")(rpuid, action,epoch, rpid)$
+
+The approximate circuit size for these statements is: $15210 + 10296 + 240 + 2310 + 264 = 28320 < 2^15.$
 
 
 = Conclusion
