@@ -24,10 +24,8 @@ template ComputeChallengeHash() {
 
     perms[1] <== Poseidon2(4)(ins[1]);
     ins[2][0] <== perms[1][0];
-<<<<<<< HEAD
+
     // We add the generator point to the sponge after adding A,B and C.
-=======
->>>>>>> e4e1f97 (feat: added circom dlog_verifier)
     ins[2][1] <== perms[1][1] + 5299619240641551281634865583518297030282874472190772894086521144482721001553;
     ins[2][2] <== perms[1][2] + 16950150798460657717958625567821834550301663161624707787222815936182638968203;
     ins[2][3] <== perms[1][3] + r1.x;
