@@ -1,4 +1,5 @@
 #import "preamble.typst": *
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
 #show: thmrules.with(qed-symbol: $square$)
 
 /// Author creation function
@@ -196,10 +197,15 @@
   }
 ])
 
+//custom commands
+#let getsr = math.attach($arrow.l$, t: $\$$)
+
+
 // Main body.
 
 //// PAR CONFIG MAIN
 #set par(justify: true, first-line-indent: PAR_INDENT)
+
 
 #outline()
 
@@ -209,12 +215,41 @@
 
 = Background
 
+== TwoHashDH
+
+The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is given in @fig:twohashdh.
+
+#figure(
+  table(
+    columns: (2fr, 1fr, 2fr),
+    stroke: none,
+    table.header([Client($x$)], [], [Server($k$)]),
+    table.hline(stroke: 0.05em),
+    [
+      $beta getsr bb(Z)_q$
+    ],
+    [],
+    [],
+
+    [$a <- H(x)^beta$], math.attach($arrow.r$, t: $a$), [$b <- a^k$],
+    [], math.attach($arrow.l$, t: $b$), [],
+    [Output $H'(x, b^(beta^(-1)))$],
+  ),
+  caption: [The TwoHashDH OPRF construction from @JareckiL10.],
+  kind: "scheme",
+  supplement: [Scheme],
+)
+<fig:twohashdh>
 
 = Related Work
 
 
 
-= Baseline:  <design>
+= Evaluation
+
+== ZK Proofs: Circom
+
+
 
 
 
@@ -223,7 +258,6 @@
 
 #bibliography("references.bib")
 
-#let getsr = math.attach($arrow.l$, t: $\$$)
 
 #appendices(
   [
