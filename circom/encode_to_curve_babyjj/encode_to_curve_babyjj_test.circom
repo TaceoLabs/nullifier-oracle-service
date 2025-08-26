@@ -36,12 +36,12 @@ template Tester() {
 
 
     
-    signal rational_map_mont_to_twisted_edwards_kat0[2] <== RationalMapMontToTwistedEdwards()([175237875522834448155549773453859181418677905226545111199128371026771239667,794533486396999852797929440893762925440898645703216930553108654213575115931]);
-    signal rational_map_mont_to_twisted_edwards_kat1[2] <== RationalMapMontToTwistedEdwards()([0,0]);
-    signal rational_map_mont_to_twisted_edwards_kat2[2] <== RationalMapMontToTwistedEdwards()([1,1]);
-    signal rational_map_mont_to_twisted_edwards_kat3[2] <== RationalMapMontToTwistedEdwards()([-1,-1]);
-    signal rational_map_mont_to_twisted_edwards_kat4[2] <== RationalMapMontToTwistedEdwards()([10648445053055756208483835589904638676661988556514516239690237683734442125505,4802517896840021410932810118091198914414923462543984062792492592398104141457]);
-    signal rational_map_mont_to_twisted_edwards_kat5[2] <== RationalMapMontToTwistedEdwards()([13928434676296924924765127352011880387425691095468639662724784187564067377072,18211632101538598908289863877574746871320438727566408308565268994294879318468]);
+    signal rational_map_mont_to_twisted_edwards_kat0[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([175237875522834448155549773453859181418677905226545111199128371026771239667,794533486396999852797929440893762925440898645703216930553108654213575115931]);
+    signal rational_map_mont_to_twisted_edwards_kat1[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([0,0]);
+    signal rational_map_mont_to_twisted_edwards_kat2[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([1,1]);
+    signal rational_map_mont_to_twisted_edwards_kat3[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([-1,-1]);
+    signal rational_map_mont_to_twisted_edwards_kat4[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([10648445053055756208483835589904638676661988556514516239690237683734442125505,4802517896840021410932810118091198914414923462543984062792492592398104141457]);
+    signal rational_map_mont_to_twisted_edwards_kat5[2] <== RationalMapMontToTwistedEdwardsBabyJubJub()([13928434676296924924765127352011880387425691095468639662724784187564067377072,18211632101538598908289863877574746871320438727566408308565268994294879318468]);
 
     rational_map_mont_to_twisted_edwards_kat0 === [19749237763777877504811025958859187282736077178612498967835952987338546424382, 9825651499528233657748386613879383508828535951494059213535798845190111515722];
     rational_map_mont_to_twisted_edwards_kat1 === [0,1];

@@ -78,7 +78,7 @@ template MapToCurveElligator2() {
 }
 
 
-// Converts a point from Montgomery to Twisted Edwards using the rational map.
+// Converts a point from BabyJubJub in Montgomery form to Twisted Edwards form using the rational map.
 //
 // This is based on appendix D1 of https://www.rfc-editor.org/rfc/rfc9380.html.
 //
@@ -86,7 +86,7 @@ template MapToCurveElligator2() {
 // let the Montgomery curve be defined by the equation K*t^2 = s^3 + J*s^2 + s, with
 // J = 2 * (a + d) / (a - d)$ and $K = 4 / (a - d).
 //
-// For the concrete case of Baby JubJub, we have:
+// For the concrete case of BabyJubJub, we have:
 // - K = 1
 // - J = 168698
 // - a = 168700
@@ -95,8 +95,7 @@ template MapToCurveElligator2() {
 // Input: (s, t), a point on the curve K * t^2 = s^3 + J * s^2 + s.
 // Output: (v, w), a point on the equivalent twisted Edwards curve.
 // (This function also handles exceptional cases where the point is at infinity correctly.)
-template RationalMapMontToTwistedEdwards() {
-    // input is a babyjubjub point
+template RationalMapMontToTwistedEdwardsBabyJubJub() {
     signal input in[2];
     signal output out[2];
 
@@ -125,7 +124,7 @@ template MapToCurveTwistedEdwards() {
     signal output out[2];
 
     signal ell2[2] <== MapToCurveElligator2()(in);
-    out <== RationalMapMontToTwistedEdwards()(ell2);
+    out <== RationalMapMontToTwistedEdwardsBabyJubJub()(ell2);
 }
 
 
@@ -136,8 +135,8 @@ template ClearCoFactorBabyJubJub() {
     signal output out[2];
 
     signal (double_x, double_y) <== BabyDbl()(in[0], in[1]);
-    signal (quadruble_x, quadruble_y) <== BabyDbl()(double_x, double_y);
-    signal (eight_x, eight_y) <==  BabyDbl()(quadruble_x, quadruble_y);
+    signal (quadruple_x, quadruple_y) <== BabyDbl()(double_x, double_y);
+    signal (eight_x, eight_y) <==  BabyDbl()(quadruple_x, quadruple_y);
     out[0] <== eight_x;
     out[1] <== eight_y;
 }
