@@ -383,7 +383,9 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
       },
     )  <alg:add_prover>
 
-    @alg:add_prover has two communication rounds between each server and the accumulator, but the servers do not need to communicate with any other server. Thereby, each random share of the server is protercted by the discrete logarithm hardness assumption, preventing the accumulator from learning anything about the secrets $x, k$ and their shares.
+    @alg:add_prover has two communication rounds between each server and the accumulator, but the servers do not need to communicate with any other server. Thereby, each random share of the server is protected by the discrete logarithm hardness assumption, preventing the accumulator from learning anything about the secrets $x, k$ and their shares.
+
+    In essence, @alg:add_prover rewrite the non-interactive prove back to its interactive version. Thus, the accumulator would not need to sample the random value $e$ via the Fiat-Shamir random oracle. However, keeping the same verifier as in the non-distributed version requires the usage of the random oracle. Since the prover now does not chose the challenge via Fiat-Shamir itself, each server now should only respond once to a challenge for an existing random share $k_i$.
 
     = Shamir Shared Discrete Logarithm Equality Proof
 
