@@ -24,7 +24,6 @@ template ComputeChallengeHash() {
 
     perms[1] <== Poseidon2(4)(ins[1]);
     ins[2][0] <== perms[1][0];
-
     // We add the generator point to the sponge after adding A,B and C.
     ins[2][1] <== perms[1][1] + 5299619240641551281634865583518297030282874472190772894086521144482721001553;
     ins[2][2] <== perms[1][2] + 16950150798460657717958625567821834550301663161624707787222815936182638968203;

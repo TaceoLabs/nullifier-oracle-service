@@ -165,7 +165,8 @@ template BabyJubJubCheckNotIdentity() {
     input BabyJubJubPoint() { twisted_edwards } p;
     signal x_check <== IsZero()(p.x);
     signal y_check <== IsZero()(1 - p.y);
-    x_check === 0;
-    y_check === 0;
+
+    // At least one of the is zero check must be 0. If both are one, it is the identity element which fails the constraint.
+    x_check * y_check === 0;
 }
 
