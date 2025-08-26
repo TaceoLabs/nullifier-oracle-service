@@ -271,11 +271,178 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
     be the order of the prime-order subgroup of the BabyJubJub curve.
 
     #theorem(
-      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x <- bb(F)_q$ are statistically indistinguishable.
+      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x getsr bb(F)_q$ are statistically indistinguishable.
         #proof(
           [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x getsr bb(Z)_p$ and $y getsr bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x getsr bb(Z)_q; "return" x$ and $y getsr bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
         )
       ],
     )
+
+    = Discrete Logarithm Equality Proof
+
+    In the following we describe how we proof that two group elements $A$ and $C$ share the same discrete logarithm $x$ for their respective bases $D$ and $B$. In other words, given $A, B, C, D in bb(G)$, we show that $A=x dot D$ and $C = x dot B$ for the same $x in bb(F)_p$. The following algorithm specifies $D$ as an arbitrary group element, in practice $D$ can simply be chosen as the generator of $bb(G)$.
+
+    #show: style-algorithm
+    #algorithm-figure(
+      "Prove",
+      stroke: black,
+      {
+        import algorithmic: *
+        Function(
+          "Prove",
+          $x, B, D$,
+          {
+            ($k getsr bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random " + $k$,)
+            Assign[$R_1$][$k dot D$]
+            Assign[$R_2$][$k dot B$]
+            Assign[$e$][$H(x dot D,B, x dot B,D,R_1, R_2) in bb(F)_p$]
+            Assign[$s$][$k + e dot x$]
+            Return[$e,s$]
+          },
+        )
+      },
+    )  <alg:prover>
+
+    #show: style-algorithm
+    #algorithm-figure(
+      "Verify",
+      stroke: black,
+      {
+        import algorithmic: *
+        Function(
+          "Verify",
+          $A, B, C, D, e, s$,
+          {
+            If("not " + `validPoints` + $(A, B, C, D)$, { Return[$bot$] })
+            If("not " + `nonZeroPoints` + $(A,B,C,D)$, { Return[$bot$] })
+            Assign[$R_1$][$s dot D -e dot A$]
+            Assign[$R_2$][$s dot H -e dot C$]
+            If("not " + `nonZeroPoints` + $(R_1, R_2)$, { Return[$bot$] })
+            Assign[$e'$][$H(A,B, C,D,R_1, R_2) in bb(F)_p$]
+            Return[$e=e'$]
+          },
+        )
+      },
+    )
+
+    = Additively Shared Discrete Logarithm Equality Proof
+
+    In this section we describe how to Distribute @alg:prover to multiple provers, which each have an additive secret share of the value $x$. To reduce communication complexity, we introduce an accumulator party which reconstructs public values and computes challenges. Thus, each prover only has to communicate with the accumulating party, which in practice can be the verifier.
+
+    #show: style-algorithm
+    #algorithm-figure(
+      "Additively Shared Prove",
+      stroke: black,
+      {
+        import algorithmic: *
+        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Function(
+          "partial_commitments",
+          $x_i, A, B, D$,
+          {
+            ($k_i getsr bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random share " + $k_i$,)
+            Assign[$R_(i,1)$][$k_i dot D$]
+            Assign[$R_(i,2)$][$k_i dot B$]
+            Assign[$C_i$][$x_i dot B$]
+            Return[$k_i, C_i, R_(i,1), R_(i,2)$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " The accumulator with input from all " + $n$ + " servers:",)
+        Function(
+          "create_challenge",
+          $A, B, D, (C_1, R_{1,1}, R_{1,2}), dots, (C_n, R_{n,1}, R_{n,2})$,
+          {
+            Assign[$R_1$][$R_(1,1) + dots + R_(n, 1)$]
+            Assign[$R_2$][$R_(1,2) + dots + R_(n, 2)$]
+            Assign[$C$][$C_1 + dots + C_n$]
+            Assign[$e$][$H(A,B, C,D,R_1, R_2) in bb(F)_p$]
+            Return[$e$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Function(
+          "challenge",
+          $x_i, k_i, e$,
+          {
+            Assign[$s_i$][$k_i + e dot x_i$]
+            Return[$s_i$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " The accumulator with input from all " + $n$ + " servers:",)
+        Function(
+          "combine_proofs",
+          $e, s_1, ..., s_n$,
+          {
+            Assign[$s$][$s_1 + dots + s_n$]
+            Return[$e, s$]
+          },
+        )
+      },
+    )  <alg:add_prover>
+
+    @alg:add_prover has two communication rounds between each server and the accumulator, but the servers do not need to communicate with any other server. Thereby, each random share of the server is protercted by the discrete logarithm hardness assumption, preventing the accumulator from learning anything about the secrets $x, k$ and their shares.
+
+    = Shamir Shared Discrete Logarithm Equality Proof
+
+    In order to rewrite @alg:add_prover from additive to Shamir secret sharing, we have to make the following changes. First, the share $x_i$ needs to be a valid Shamir share. Second, the random share $k_i$ also needs to be sampled as a valid Shamir shares, which introduces an additional communication round. Finally, the accumulator reconstructs the commitments $C, R_1, R_2$ and the proof $s$ using lagrange interpolation from a set of $d+1$ servers, where $d$ is the chosen degree of the underlying sharing polynomial.
+
+    #show: style-algorithm
+    #algorithm-figure(
+      "Shamir Shared Prove",
+      stroke: black,
+      {
+        import algorithmic: *
+        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Function(
+          "partial_commitments",
+          $x_i, A, B, D$,
+          {
+            ($k_i arrow.l$ + `Shamir.Rand()` + "  " + sym.triangle.stroked.r + " Sample random Shamir share " + $k_i$,)
+            Assign[$R_(i,1)$][$k_i dot D$]
+            Assign[$R_(i,2)$][$k_i dot B$]
+            Assign[$C_i$][$x_i dot B$]
+            Return[$k_i, C_i, R_(i,1), R_(i,2)$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " The accumulator with input from " + $t = d+1$ + " out of  " + $n$ + " servers:",)
+        Function(
+          "create_challenge",
+          $A, B, D, (C_1, R_{1,1}, R_{1,2}), dots, (C_t, R_{t,1}, R_{t,2})$,
+          {
+            Assign[$R_1$][$lambda_1 dot R_(1,1) + dots + lambda_t dot R_(t, 1)$]
+            Assign[$R_2$][$lambda_1 dot R_(1,2) + dots + lambda_t dot R_(t, 2)$]
+            Assign[$C$][$lambda_1 dot C_1 + dots + lambda_t dot C_t$]
+            Assign[$e$][$H(A,B, C,D,R_1, R_2) in bb(F)_p$]
+            Return[$e$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Function(
+          "challenge",
+          $x_i, k_i, e$,
+          {
+            Assign[$s_i$][$k_i + e dot x_i$]
+            Return[$s_i$]
+          },
+        )
+        (strong(""),)
+        (sym.triangle.stroked.r + " The accumulator with input from " + $t = d+1$ + " out of  " + $n$ + " servers:",)
+        Function(
+          "combine_proofs",
+          $e, s_1, ..., s_t$,
+          {
+            Assign[$s$][$lambda_1 dot s_1 + dots + lambda_t dot s_t$]
+            Return[$e, s$]
+          },
+        )
+      },
+    )  <alg:shamir_prover>
+
+    The presence of $k_i arrow.l$ + `Shamir.Rand()` in @alg:shamir_prover has the implication, that the servers now need to be able to communicate with each other in order to be able to create valid Shamir shares. In practices one can think of either generating this random share directly on request, or precomputing random values $k$ in an offline phase and consuming them in the online phase. Another solution can be to let the accumulator chose the $d+1$ servers in the beginning of the protocol and only use their shares in the whole computation. In this setting, the chosen parties can simply sample their shares at random without communication, since the requirement that all $n$ shares need to be on the same polynomial is not there anymore.
   ],
 )
