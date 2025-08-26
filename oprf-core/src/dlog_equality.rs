@@ -5,8 +5,8 @@ use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DLogEqualityProof {
-    e: BaseField,
-    s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
+    pub(crate) e: BaseField,
+    pub(crate) s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
 }
 
 type ScalarField = ark_babyjubjub::Fr;
@@ -66,7 +66,14 @@ impl DLogEqualityProof {
     }
 }
 
-fn challenge_hash(a: Affine, b: Affine, c: Affine, d: Affine, r1: Affine, r2: Affine) -> BaseField {
+pub(crate) fn challenge_hash(
+    a: Affine,
+    b: Affine,
+    c: Affine,
+    d: Affine,
+    r1: Affine,
+    r2: Affine,
+) -> BaseField {
     // TODO: Poseidon with statesize of at least 6*2?
     let hash_input = [
         BaseField::zero(),
@@ -93,7 +100,7 @@ fn challenge_hash(a: Affine, b: Affine, c: Affine, d: Affine, r1: Affine, r2: Af
 }
 
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
-fn convert_base_to_scalar(f: BaseField) -> ScalarField {
+pub(crate) fn convert_base_to_scalar(f: BaseField) -> ScalarField {
     let bytes = f.into_bigint().to_bytes_le();
     ScalarField::from_le_bytes_mod_order(&bytes)
 }
