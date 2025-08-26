@@ -74,7 +74,7 @@ template MapToCurveElligator2() {
     signal y_1 <== y * multiplication;
     
     out[0] <== x * k;
-    out[1] <== y * k;
+    out[1] <== y_1 * k;
 }
 
 
