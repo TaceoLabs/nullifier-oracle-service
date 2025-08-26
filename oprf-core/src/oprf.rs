@@ -338,11 +338,7 @@ mod mappings {
             .expect("y2 should be a square based on our conditional selection above");
         let e3 = sgn0(y);
         // TODO: constant-time
-        if e2 ^ e3 {
-            -y
-        } else {
-            y
-        };
+        let y = if e2 ^ e3 { -y } else { y };
         let s = x * k;
         let t = y * k;
         (s, t)
