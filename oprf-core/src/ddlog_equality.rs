@@ -6,25 +6,25 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct PartialDLogEqualityCommitments {
-    request_id: Uuid,
-    c: Affine, // The share of the actual result C=B*x
-    r1: Affine,
-    r2: Affine,
+    pub(crate) request_id: Uuid,
+    pub(crate) c: Affine, // The share of the actual result C=B*x
+    pub(crate) r1: Affine,
+    pub(crate) r2: Affine,
 }
 
 #[derive(Debug, Clone)]
 
 pub struct DLogEqualityChallenge {
-    request_id: Uuid,
-    e: BaseField, // The challenge hash
+    pub(crate) request_id: Uuid,
+    pub(crate) e: BaseField, // The challenge hash
 }
 
 #[derive(Debug, Clone)]
 
 pub struct DLogEqualityProofShare {
     /// request id
-    request_id: Uuid,
-    s: ScalarField, // The share of the response s
+    pub(crate) request_id: Uuid,
+    pub(crate) s: ScalarField, // The share of the response s
 }
 
 #[derive(Debug, Clone)]
