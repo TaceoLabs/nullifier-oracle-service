@@ -76,13 +76,13 @@ function sqrt_unchecked(n) {
 // - a is a quadratic residue if there exists b such that b^2 ≡ a (mod p).
 // - a is a non-quadratic residue if there exists a non-residue n and b such that b^2 ≡ a*n (mod p).
 //
-// Constraint strategy:
+// Constraint strategy, from (<https://eprint.iacr.org/2021/984.pdf>, page 4):
 // Let l = Legendre(a) ∈ { -1, 0, 1 }.
 // Introduce a witness b intended to be a square root:
 // Enforce: l(l-1)(b^2 - n*a) + (l+1)(b^2 - a) == 0
 // For l =  1: (l(l-1)) = 0 and (l+1) = 2 => b^2 = a
 // For l = -1: (l(l-1)) = 2 and (l+1) = 0 => b^2 = n*a
-// For l =  0: (l(l-1)) = 0 and (l+1) = 1 => b^2 = a (which forces a = 0)
+// For l =  0: (l(l-1)) = 0 and (l+1) = 1 => b^2 = a (which forces a to be 0 or a quadratic residue)
 template IsQuadraticResidueOrZero() {
     signal input a;
     signal output out;
@@ -105,7 +105,7 @@ template IsQuadraticResidueOrZero() {
     } else {
         sqrt_input = na;
     }
-    // We don't use the terniary operator because circom evaluates both branches which results in endless loops.
+    // We don't use the ternary operator because Circom evaluates both branches which results in endless loops.
     signal b <-- sqrt_unchecked(sqrt_input);
 
     // Compute the selectors
@@ -120,7 +120,7 @@ template IsQuadraticResidueOrZero() {
     // Enforce the constraint
     signal lhs <== s_na * c_na; 
     signal rhs <== s_a * c_a; 
-    lhs * rhs === 0;
+    lhs + rhs === 0;
 
     // Output 1 iff l ∈ {0, 1} (i.e., a is a quadratic residue or zero), else 0
     out <== IsZeroOrOne()(l);
