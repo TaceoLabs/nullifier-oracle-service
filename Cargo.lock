@@ -682,7 +682,8 @@ dependencies = [
  "ark-ff",
  "ark-std",
  "criterion",
- "hex",
+ "num-bigint",
+ "num-traits",
 ]
 
 [[package]]

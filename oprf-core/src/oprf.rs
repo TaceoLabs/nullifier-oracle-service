@@ -1,5 +1,6 @@
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{Field, UniformRand, Zero};
+use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
@@ -198,7 +199,7 @@ impl OPrfClient {
             unblinded_point.y,
         ];
 
-        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let poseidon = Poseidon2::<_, 4, 5>::default();
         let output = poseidon.permutation(&hash_input);
         Ok(output[1]) // Return the first element of the state as the field element,
     }
@@ -229,7 +230,7 @@ impl OPrfClient {
 mod mappings {
     use ark_ec::{AffineRepr, CurveGroup};
     use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
-    use poseidon2::POSEIDON2_BN254_PARAMS_3;
+    use poseidon2::Poseidon2;
 
     use crate::oprf::{Affine, BaseField};
 
@@ -260,7 +261,11 @@ mod mappings {
     /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
     fn hash_to_field(input: BaseField) -> BaseField {
         // hash the input to a field element using poseidon hash
-        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
+        let poseidon: Poseidon2<
+            ark_ff::Fp<ark_ff::MontBackend<ark_babyjubjub::FqConfig, 4>, 4>,
+            3,
+            5,
+        > = Poseidon2::<_, 3, 5>::default();
         let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
         output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
     }
@@ -269,7 +274,7 @@ mod mappings {
     /// Since we use poseidon as the hash function, this automatically ensures the property that the output is a uniformly random field element, without needing to sample extra output and reduce mod p.
     fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
         // hash the input to a field element using poseidon hash
-        let poseidon = poseidon2::Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
+        let poseidon = Poseidon2::<_, 3, 5>::default();
         let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
 
         [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
@@ -454,7 +459,7 @@ mod tests {
             .unwrap();
 
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
-        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
             BaseField::zero(),
             query,
@@ -498,7 +503,7 @@ mod tests {
             .unwrap();
 
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
-        let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+        let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
             BaseField::zero(),
             query,

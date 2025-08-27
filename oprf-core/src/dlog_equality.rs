@@ -1,6 +1,7 @@
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
+use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,7 +82,7 @@ pub(crate) fn challenge_hash(
         a.y,
         b.x, //b.y, c.x, c.y, d.x, d.y, r1.x, r1.y, r2.x, r2.y,
     ];
-    let poseidon = poseidon2::Poseidon2::new(&poseidon2::POSEIDON2_BN254_PARAMS_4);
+    let poseidon = Poseidon2::<_, 4, 5>::default();
     let mut state = poseidon.permutation(&hash_input);
     state[1] += b.y;
     state[2] += c.x;

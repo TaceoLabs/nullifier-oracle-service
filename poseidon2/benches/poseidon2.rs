@@ -1,9 +1,9 @@
 use criterion::*;
-use poseidon2::{POSEIDON2_BN254_PARAMS_3, POSEIDON2_BN254_PARAMS_4, Poseidon2};
+use poseidon2::Poseidon2;
 
 fn poseidon2_bench(c: &mut Criterion) {
     c.bench_function("Poseidon2 Permutation (t=3)", |b| {
-        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS_3);
+        let poseidon2 = Poseidon2::<_, 3, 5>::default();
         let input = [
             ark_bn254::Fr::from(42u64),
             ark_bn254::Fr::from(43u64),
@@ -13,7 +13,7 @@ fn poseidon2_bench(c: &mut Criterion) {
         b.iter(|| poseidon2.permutation(&input));
     });
     c.bench_function("Poseidon2 Permutation (t=4)", |b| {
-        let poseidon2 = Poseidon2::new(&POSEIDON2_BN254_PARAMS_4);
+        let poseidon2 = Poseidon2::<_, 4, 5>::default();
         let input = [
             ark_bn254::Fr::from(42u64),
             ark_bn254::Fr::from(43u64),
