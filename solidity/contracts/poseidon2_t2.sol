@@ -2,10 +2,46 @@
 
 pragma solidity >=0.8.8;
 
-library Poseidon2T2 {
+library Field {
+    type Type is uint256;
+
     // BN256 scalar field
     uint256 constant PRIME =
         0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001;
+
+    function add(
+        Field.Type a,
+        Field.Type b
+    ) internal pure returns (Field.Type c) {
+        assembly {
+            c := addmod(a, b, PRIME)
+        }
+    }
+
+    function mul(
+        Field.Type a,
+        Field.Type b
+    ) internal pure returns (Field.Type c) {
+        assembly {
+            c := mulmod(a, b, PRIME)
+        }
+    }
+
+    function add(Field.Type a, uint256 b) internal pure returns (Field.Type c) {
+        assembly {
+            c := addmod(a, b, PRIME)
+        }
+    }
+
+    function mul(Field.Type a, uint256 b) internal pure returns (Field.Type c) {
+        assembly {
+            c := mulmod(a, b, PRIME)
+        }
+    }
+}
+
+library Poseidon2T2 {
+    using Field for *;
 
     uint256 constant t = 2;
     uint256 constant rounds_f = 8;
@@ -16,18 +52,18 @@ library Poseidon2T2 {
         uint256[56] internal_round_constants;
     }
 
-    function compress(
-        uint256[2] memory inputs
-    ) internal pure returns (uint256) {
-        uint256[2] memory state = [inputs[0], inputs[1]];
+    function compress(uint256[2] memory inputs) public pure returns (uint256) {
+        Field.Type[2] memory state = [
+            Field.Type.wrap(inputs[0]),
+            Field.Type.wrap(inputs[1])
+        ];
         permutation_inplace(state, load());
-        state[0] += inputs[0]; // Fits into 256 bits
-        return state[0] % PRIME;
+        state[0] = state[0].add(inputs[0]);
+        return Field.Type.unwrap(state[0]);
     }
 
-    // Result is not modulo reduced
     function permutation_inplace(
-        uint256[2] memory state,
+        Field.Type[2] memory state,
         Constants memory constants
     ) private pure {
         // Apply 1st linear layer
@@ -36,7 +72,7 @@ library Poseidon2T2 {
 
         // First set of external rounds
         uint256 rf_half = rounds_f / 2;
-        for (uint256 r; r < rf_half; r++) {
+        for (uint256 r = 0; r < rf_half; r++) {
             add_external_round_constants(
                 state,
                 constants.external_round_constants,
@@ -69,77 +105,58 @@ library Poseidon2T2 {
         }
     }
 
-    // We don't perform modulo reduction at all here
     function add_external_round_constants(
-        uint256[2] memory state,
+        Field.Type[2] memory state,
         uint256[2][8] memory round_constant,
         uint256 round
     ) private pure {
-        state[0] += round_constant[round][0];
-        state[1] += round_constant[round][1];
+        state[0] = state[0].add(round_constant[round][0]);
+        state[1] = state[1].add(round_constant[round][1]);
     }
 
-    // We don't perform modulo reduction at all here
     function add_internal_round_constants(
-        uint256[2] memory state,
+        Field.Type[2] memory state,
         uint256[56] memory round_constant,
         uint256 round
     ) private pure {
-        state[0] += round_constant[round];
+        state[0] = state[0].add(round_constant[round]);
     }
 
-    // We don't perform modulo reduction at all here
-    // Assuming the inputs are BN254 scalar field elements, the output will fit another addition with the round constants:
-    //  sum = in0 + in1 has at most 255 bits
-    //  in0 + rc has at most 255 bits
-    //  in1 + rc has at most 255 bits
-    //  => in0 + rc + sum has at most 256 bits
-    //  => in1 + rc + sum has at most 256 bits
     function external_matrix_multiplication(
-        uint256[2] memory input
+        Field.Type[2] memory input
     ) private pure {
-        uint256 sum = input[0] + input[1];
-        input[0] += sum;
-        input[1] += sum;
+        Field.Type sum = input[0].add(input[1]);
+        input[0] = input[0].add(sum);
+        input[1] = input[1].add(sum);
     }
 
-    // We don't perform modulo reduction at all here
-    // Assuming the inputs are BN254 scalar field elements, the output[0] will fit another addition with the round constants:
-    //  sum = in0 + in1 has at most 255 bits
-    //  in0 + rc has at most 255 bits
-    //  in1 + in1 has at most 255 bits
-    //  => in0 + rc + sum has at most 256 bits
-    //  => in1 + in1 + sum has at most 256 bits
     function internal_matrix_multiplication(
-        uint256[2] memory input
+        Field.Type[2] memory input
     ) private pure {
-        uint256 sum = input[0] + input[1];
-        input[0] += sum;
-        input[1] += input[1] + sum;
+        Field.Type sum = input[0].add(input[1]);
+        input[0] = input[0].add(sum);
+        input[1] = input[1].add(input[1]);
+        input[1] = input[1].add(sum);
     }
 
-    function single_box(uint256 x) private pure returns (uint256 s) {
-        assembly {
-            s := mulmod(x, x, PRIME)
-            s := mulmod(mulmod(s, s, PRIME), x, PRIME)
-        }
+    function single_box(Field.Type x) private pure returns (Field.Type) {
+        Field.Type s = x.mul(x);
+        return s.mul(s).mul(x);
     }
 
-    // The output of the S-box is modulo reduced
-    function external_s_box(uint256[2] memory input) private pure {
+    function external_s_box(Field.Type[2] memory input) private pure {
         input[0] = single_box(input[0]);
         input[1] = single_box(input[1]);
     }
 
-    // The output of the S-box is modulo reduced
-    function internal_s_box(uint256[2] memory input) private pure {
+    function internal_s_box(Field.Type[2] memory input) private pure {
         input[0] = single_box(input[0]);
-        input[1] = input[1] % PRIME;
     }
 
     function load() internal pure returns (Constants memory constants) {
         constants = Constants({
             external_round_constants: [
+                // First externals
                 [
                     0x09c46e9ec68e9bd4fe1faaba294cba38a71aa177534cdd1b6c7dc0dbd0abd7a7,
                     0x0c0356530896eec42a97ed937f3135cfc5142b3ae405b8343c1d83ffa604cb81
@@ -156,6 +173,7 @@ library Poseidon2T2 {
                     0x0b66fdf356093a611609f8e12fbfecf0b985e381f025188936408f5d5c9f45d0,
                     0x012ee3ec1e78d470830c61093c2ade370b26c83cc5cebeeddaa6852dbdb09e21
                 ],
+                // Second externals
                 [
                     0x19b9b63d2f108e17e63817863a8f6c288d7ad29916d98cb1072e4e7b7d52b376,
                     0x015bee1357e3c015b5bda237668522f613d1c88726b5ec4224a20128481b4f7f
