@@ -1,4 +1,4 @@
-use crate::{dlog_equality::DLogEqualityProof, oprf::OPrfError};
+use crate::dlog_equality::DLogEqualityProof;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{UniformRand, Zero};
 use rand::{CryptoRng, Rng};
@@ -27,7 +27,19 @@ pub struct DLogEqualityProofShare {
     pub(crate) s: ScalarField, // The share of the response s
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DLogEqualityProofError {
+    #[error(
+        "Request ID mismatch: The request ID for the second round does not match the saved information from the first round."
+    )]
+    RequestIdMismatch,
+}
+
+/// The internal storage of a party in a distributed DlogEqualityProof protocol.
+///
+/// This is not `Clone` because it contains secret randomness that may only be used once.
+/// The `challenge` method consumes the session.
+#[derive(Debug)]
 
 pub struct DlogEqualitySession {
     /// request id
@@ -70,13 +82,15 @@ impl DlogEqualitySession {
         (session, comm)
     }
 
+    /// Finalizes a proof share for a given challenge hash and session.
+    /// The session and information therein is consumed to prevent reuse of the randomness.
     pub fn challenge(
-        &self,
+        self,
         x_share: ScalarField,
         challenge: DLogEqualityChallenge,
-    ) -> Result<DLogEqualityProofShare, OPrfError> {
+    ) -> Result<DLogEqualityProofShare, DLogEqualityProofError> {
         if self.request_id != challenge.request_id {
-            return Err(OPrfError::RequestIdMismatch);
+            return Err(DLogEqualityProofError::RequestIdMismatch);
         }
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
@@ -96,17 +110,17 @@ impl DLogEqualityChallenge {
         commitments: &[PartialDLogEqualityCommitments],
         a: Affine, // Combined public key of the provers
         b: Affine,
-    ) -> Result<(Affine, Self), OPrfError> {
+    ) -> Result<(Affine, Self), DLogEqualityProofError> {
         let request_id = commitments
             .first()
-            .ok_or(OPrfError::RequestIdMismatch)?
+            .ok_or(DLogEqualityProofError::RequestIdMismatch)?
             .request_id;
         if commitments
             .iter()
             .skip(1)
             .any(|c| c.request_id != request_id)
         {
-            return Err(OPrfError::RequestIdMismatch);
+            return Err(DLogEqualityProofError::RequestIdMismatch);
         }
 
         let mut c = Projective::zero();
@@ -131,12 +145,12 @@ impl DLogEqualityChallenge {
     }
 
     pub fn combine_proofs(
-        &self,
+        self,
         proofs: &[DLogEqualityProofShare],
-    ) -> Result<DLogEqualityProof, OPrfError> {
+    ) -> Result<DLogEqualityProof, DLogEqualityProofError> {
         let request_id = self.request_id;
         if proofs.iter().any(|p| p.request_id != request_id) {
-            return Err(OPrfError::RequestIdMismatch);
+            return Err(DLogEqualityProofError::RequestIdMismatch);
         }
 
         let mut s = ScalarField::zero();

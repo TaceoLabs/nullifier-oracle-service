@@ -1,9 +1,9 @@
 use crate::{
     ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
+        DLogEqualityChallenge, DLogEqualityProofError, DLogEqualityProofShare,
+        PartialDLogEqualityCommitments,
     },
     dlog_equality::DLogEqualityProof,
-    oprf::OPrfError,
 };
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::Zero;
@@ -16,12 +16,15 @@ type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualityChallenge {
     /// The accumulating party (e.g., the verifier) combines the shares of d+1 parties and creates the challenge hash.
+    ///
+    /// # Panics
+    /// Panics if the number of commitments does not match the number of Lagrange coefficients, i.e. `commitments.len() != lagrange.len()`.
     pub fn combine_commitments_and_create_challenge_shamir(
         commitments: &[PartialDLogEqualityCommitments],
         lagrange: &[ScalarField], // Lagrange coefficients for each share
         a: Affine,                // Combined public key of the provers
         b: Affine,
-    ) -> Result<(Affine, Self), OPrfError> {
+    ) -> Result<(Affine, Self), DLogEqualityProofError> {
         assert_eq!(
             commitments.len(),
             lagrange.len(),
@@ -29,14 +32,14 @@ impl DLogEqualityChallenge {
         );
         let request_id = commitments
             .first()
-            .ok_or(OPrfError::RequestIdMismatch)?
+            .ok_or(DLogEqualityProofError::RequestIdMismatch)?
             .request_id;
         if commitments
             .iter()
             .skip(1)
             .any(|c| c.request_id != request_id)
         {
-            return Err(OPrfError::RequestIdMismatch);
+            return Err(DLogEqualityProofError::RequestIdMismatch);
         }
 
         let mut c = Projective::zero();
@@ -60,11 +63,16 @@ impl DLogEqualityChallenge {
         Ok((c, DLogEqualityChallenge { request_id, e }))
     }
 
+    /// Combines the proof shares of d+1 parties into a full proof.
+    ///
+    /// # Panics
+    /// Panics if the number of proofs does not match the number of Lagrange coefficients,
+    /// i.e. `proofs.len() != lagrange.len()`.
     pub fn combine_proofs_shamir(
-        &self,
+        self,
         proofs: &[DLogEqualityProofShare],
         lagrange: &[ScalarField], // Lagrange coefficients for each share
-    ) -> Result<DLogEqualityProof, OPrfError> {
+    ) -> Result<DLogEqualityProof, DLogEqualityProofError> {
         assert_eq!(
             proofs.len(),
             lagrange.len(),
@@ -72,7 +80,7 @@ impl DLogEqualityChallenge {
         );
         let request_id = self.request_id;
         if proofs.iter().any(|p| p.request_id != request_id) {
-            return Err(OPrfError::RequestIdMismatch);
+            return Err(DLogEqualityProofError::RequestIdMismatch);
         }
 
         let mut s = ScalarField::zero();
