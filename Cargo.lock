@@ -681,6 +681,7 @@ dependencies = [
  "ark-bn254",
  "ark-ff",
  "ark-std",
+ "criterion",
  "hex",
 ]
 
