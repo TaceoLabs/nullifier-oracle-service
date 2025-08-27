@@ -1,7 +1,7 @@
 pragma circom 2.2.2;
 
-include "../poseidon2/poseidon2.circom";
-include "babyjubjub.circom";
+include "poseidon2/poseidon2.circom";
+include "babyjubjub/babyjubjub.circom";
 
 // Poseidon sponge construction by hand to compute the challenge point e. We use state size 4 with capacity 1 and absorb all provided points and squeeze once. The challenge we output is the first element not counting the capacity from the squeeze.
 template ComputeChallengeHash() {
