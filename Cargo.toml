@@ -23,3 +23,10 @@ ark-bn254 = { version = "0.5.0" }
 inherits = "bench"
 debug = true
 lto = "thin"
+
+# This profile can be used for CI in pull requests.
+[profile.ci-dev]
+inherits = "dev"
+opt-level = 1
+incremental = false
+debug = true

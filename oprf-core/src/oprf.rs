@@ -246,6 +246,7 @@ mod mappings {
     /// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
     ///
     /// In contrast to `encode_to_curve`, this function uses a two-step mapping to ensure that the output is uniformly random over the curve.
+    #[allow(dead_code)]
     pub fn hash_to_curve(input: BaseField) -> Affine {
         // Map the input to a point on the curve using Elligator2
         let [u0, u1] = hash_to_field2(input);
