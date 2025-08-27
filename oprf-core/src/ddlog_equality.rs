@@ -41,7 +41,7 @@ pub enum DLogEqualityProofError {
 /// The `challenge` method consumes the session.
 #[derive(Debug)]
 
-pub struct DlogEqualitySession {
+pub struct DLogEqualitySession {
     /// request id
     request_id: Uuid,
     /// randomness share used in the proof
@@ -53,7 +53,7 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
-impl DlogEqualitySession {
+impl DLogEqualitySession {
     /// Computes C=B*x_share and commitments to a random value k_share, which will be the share of the randomness used in the DlogEqualityProof.
     /// The result is meant to be sent to one accumulating party (e.g., the verifier) who combines all the shares of all parties and creates the challenge hash.
     pub fn partial_commitments(
@@ -74,7 +74,7 @@ impl DlogEqualitySession {
             r2,
         };
 
-        let session = DlogEqualitySession {
+        let session = DLogEqualitySession {
             request_id,
             k: k_share,
         };
@@ -195,7 +195,7 @@ mod tests {
         let mut commitments = Vec::with_capacity(num_parties);
         for x_ in x_shares.iter().cloned() {
             let (session, comm) =
-                DlogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
+                DLogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
             sessions.push(session);
             commitments.push(comm);
         }
