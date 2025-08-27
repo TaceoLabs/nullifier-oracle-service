@@ -19,3 +19,10 @@ uuid = { version = "1.18.0", features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }
 thiserror = "2.0.16"
 num-bigint = "0.4.3"
+
+[dev-dependencies]
+criterion = "0.7.0"
+
+[[bench]]
+name = "oprf"
+harness = false
