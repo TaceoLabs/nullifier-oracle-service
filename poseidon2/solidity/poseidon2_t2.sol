@@ -60,6 +60,7 @@ library Poseidon2T2 {
             Field.Type.wrap(inputs[1])
         ];
         permutation_inplace(state, load());
+        state[0] = state[0].add(inputs[0]);
         return Field.Type.unwrap(state[0]);
     }
 

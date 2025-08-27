@@ -21,9 +21,11 @@ library Poseidon2T2 {
     ) internal pure returns (uint256) {
         uint256[2] memory state = [inputs[0], inputs[1]];
         permutation_inplace(state, load());
-        return state[0];
+        state[0] += inputs[0]; // Fits into 256 bits
+        return state[0] % PRIME;
     }
 
+    // Result is not modulo reduced
     function permutation_inplace(
         uint256[2] memory state,
         Constants memory constants
@@ -65,10 +67,6 @@ library Poseidon2T2 {
             external_s_box(state);
             external_matrix_multiplication(state);
         }
-
-        // We need a last round of modular reduction here
-        state[0] = state[0] % PRIME;
-        state[1] = state[1] % PRIME;
     }
 
     // We don't perform modulo reduction at all here
