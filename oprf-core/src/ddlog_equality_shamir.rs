@@ -6,7 +6,7 @@ use crate::{
     dlog_equality::DLogEqualityProof,
 };
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::Zero;
+use ark_ff::{PrimeField, Zero};
 
 type ScalarField = ark_babyjubjub::Fr;
 type Affine = ark_babyjubjub::EdwardsAffine;
@@ -91,11 +91,31 @@ impl DLogEqualityChallenge {
         Ok(DLogEqualityProof { e: self.e, s })
     }
 }
+/// Compute the lagrange coeffs from given party indices
+pub fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
+    let num = coeffs.len();
+    let mut res = Vec::with_capacity(num);
+    for i in coeffs.iter() {
+        let mut num = F::one();
+        let mut den = F::one();
+        let i_ = F::from(*i as u64);
+        for j in coeffs.iter() {
+            if i != j {
+                let j_ = F::from(*j as u64);
+                num *= j_;
+                den *= j_ - i_;
+            }
+        }
+        let res_ = num * den.inverse().unwrap();
+        res.push(res_);
+    }
+    res
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ddlog_equality::DlogEqualitySession;
+    use crate::ddlog_equality::DLogEqualitySession;
     use ark_ff::{PrimeField, UniformRand};
     use rand::{Rng, seq::IteratorRandom};
     use uuid::Uuid;
@@ -130,27 +150,6 @@ mod tests {
             shares.push(share);
         }
         shares
-    }
-
-    /// Compute the lagrange coeffs
-    fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
-        let num = coeffs.len();
-        let mut res = Vec::with_capacity(num);
-        for i in coeffs.iter() {
-            let mut num = F::one();
-            let mut den = F::one();
-            let i_ = F::from(*i as u64);
-            for j in coeffs.iter() {
-                if i != j {
-                    let j_ = F::from(*j as u64);
-                    num *= j_;
-                    den *= j_ - i_;
-                }
-            }
-            let res_ = num * den.inverse().unwrap();
-            res.push(res_);
-        }
-        res
     }
 
     /// Reconstruct the from its shares and lagrange coefficients.
@@ -226,7 +225,7 @@ mod tests {
         let mut commitments = Vec::with_capacity(num_parties);
         for x_ in x_shares.iter().cloned() {
             let (session, comm) =
-                DlogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
+                DLogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
             sessions.push(session);
             commitments.push(comm);
         }
