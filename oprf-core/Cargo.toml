@@ -14,7 +14,7 @@ readme.workspace = true
 ark-ec = "0.5.0"
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-ff = "0.5.0"
-rand = "0.8"
+rand.workspace = true
 uuid = { version = "1.18.0", features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }
 thiserror = "2.0.16"
