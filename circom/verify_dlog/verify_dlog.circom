@@ -1,7 +1,7 @@
 pragma circom 2.2.2;
 
-include "../poseidon2/poseidon2.circom";
-include "babyjubjub.circom";
+include "poseidon2/poseidon2.circom";
+include "babyjubjub/babyjubjub.circom";
 
 // Poseidon sponge construction by hand to compute the challenge point e. We use state size 4 with capacity 1 and absorb all provided points and squeeze once. The challenge we output is the first element not counting the capacity from the squeeze.
 template ComputeChallengeHash() {
@@ -24,6 +24,7 @@ template ComputeChallengeHash() {
 
     perms[1] <== Poseidon2(4)(ins[1]);
     ins[2][0] <== perms[1][0];
+
     // We add the generator point to the sponge after adding A,B and C.
     ins[2][1] <== perms[1][1] + 5299619240641551281634865583518297030282874472190772894086521144482721001553;
     ins[2][2] <== perms[1][2] + 16950150798460657717958625567821834550301663161624707787222815936182638968203;
@@ -47,7 +48,6 @@ template VerifyDlog() {
     input signal b[2];
     input signal c[2];
 
-    // check if on curve
     // Point A is public input. This means we don't necessarily need to check this inside the circuit, but can delegate that to the verifier in Rust land.
     BabyJubJubPoint {twisted_edwards } a_p <== BabyJubJubCheck()(a[0], a[1]);
     BabyJubJubPoint {twisted_edwards } b_p <== BabyJubJubCheck()(b[0], b[1]);

@@ -1,13 +1,13 @@
 pragma circom 2.2.2;
 
-include "../poseidon2/poseidon2.circom";
-include "mux1.circom";
-include "babyjub.circom";
-include "comparators.circom";
-include "gates.circom";
-include "lib/inverse_or_zero/inverse_or_zero.circom";
-include "lib/quadratic_residue/quadratic_residue.circom";
-include "lib/sgn0/sgn0.circom";
+include "poseidon2/poseidon2.circom";
+include "circomlib/mux1.circom";
+include "circomlib/babyjub.circom";
+include "circomlib/comparators.circom";
+include "circomlib/gates.circom";
+include "inverse_or_zero/inverse_or_zero.circom";
+include "quadratic_residue/quadratic_residue.circom";
+include "sgn0/sgn0.circom";
 
 
 // An implementation of hash_to_field based on https://www.rfc-editor.org/rfc/rfc9380.html.
