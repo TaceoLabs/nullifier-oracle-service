@@ -170,3 +170,12 @@ template BabyJubJubCheckNotIdentity() {
     x_check * y_check === 0;
 }
 
+// Adds constraints to ensure a provided Twisted Edwards point is the identity element.
+// The identity in Twisted Edwards form is (x = 0, y = 1).
+template BabyJubJubCheckIsIdentity() {
+    input BabyJubJubPoint() { twisted_edwards } p;
+
+    p.x === 0;
+    p.y === 1;
+}
+

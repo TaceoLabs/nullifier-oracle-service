@@ -11,42 +11,37 @@ const b_x =
 const b_y =
   4914841023884182990424920031862777928930597684365442051411609356476877989803n;
 
-describe("BabyJubJub Not Identity Check", function () {
+describe("BabyJubJub Check Correct Subgroup", function () {
   this.timeout(10000);
 
   let circuit;
   before(async () => {
     circuit = await wasm(
-      path.join(__dirname, "circuits/baby_jubjub_not_identity_test.circom"),
+      path.join(__dirname, "circuits/check_correct_subgroup_test.circom"),
       { include: [path.join(__dirname, "../../")] },
     );
     await circuit.loadConstraints();
   });
 
-  it("NotIdentity(A)", async () => {
-    const witness = await circuit.calculateWitness({ p: [a_x, a_y] }, true);
+  it("A is correct subgroup", async () => {
+    const witness = await circuit.calculateWitness({ in: [a_x, a_y] }, true);
     await circuit.checkConstraints(witness);
   });
 
-  it("NotIdentity(B)", async () => {
-    const witness = await circuit.calculateWitness({ p: [b_x, b_y] }, true);
+  it("B is correct subgroup", async () => {
+    const witness = await circuit.calculateWitness({ in: [b_x, b_y] }, true);
     await circuit.checkConstraints(witness);
   });
 
-  it("NotIdentity(0, a_y)", async () => {
-    const witness = await circuit.calculateWitness({ p: [0, a_y] }, true);
+  it("Infinity is correct subgroup", async () => {
+    const witness = await circuit.calculateWitness({ in: [0, 1] }, true);
     await circuit.checkConstraints(witness);
   });
 
-  it("NotIdentity(b_x, 1)", async () => {
-    const witness = await circuit.calculateWitness({ p: [b_x, 1] }, true);
-    await circuit.checkConstraints(witness);
-  });
-
-  it("Check find identity", async () => {
+  it("Random point not correct subgroup", async () => {
     var did_fail = false;
     try {
-      await circuit.calculateWitness({ p: [0, 1] }, true);
+      await circuit.calculateWitness({ in: [a_x, b_x] }, true);
     } catch (e) {
       did_fail = true;
     }
