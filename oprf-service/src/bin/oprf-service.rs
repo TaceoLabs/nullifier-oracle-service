@@ -20,8 +20,13 @@ async fn main() -> eyre::Result<()> {
     )
     .await;
     match result {
-        Ok(()) => tracing::info!("good night!"),
-        Err(err) => tracing::error!("{err:?}"),
+        Ok(()) => {
+            tracing::info!("good night!");
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!("{err:?}");
+            Err(err)
+        }
     }
-    Ok(())
 }

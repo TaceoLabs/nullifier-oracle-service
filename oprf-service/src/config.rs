@@ -61,4 +61,14 @@ pub struct ServiceConfig {
         default_value = "100000"
     )]
     pub max_concurrent_jobs: usize,
+
+    /// Max wait time the service waits for its workers during shutdown.
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_MAX_WAIT_TIME_SHUTDOWN",
+        default_value = "10s",
+        value_parser = humantime::parse_duration
+
+    )]
+    pub max_wait_time_shutdown: Duration,
 }

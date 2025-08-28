@@ -1,14 +1,12 @@
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use eyre::Report;
 use serde::{Serialize, Serializer};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct ApiError {
     pub message: Option<String>,
     #[serde(serialize_with = "serialize_status_code")]
-    #[schema(value_type=u16)]
     pub code: StatusCode,
 }
 
@@ -22,11 +20,11 @@ pub type ApiResult<T> = Result<T, ApiErrors>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiErrors {
-    #[error("an explict error was returned: {0:?}")]
+    #[error("an explicit error was returned: {0:?}")]
     ExplicitError(ApiError),
     #[error("user is not authorized to perform this action")]
     Unauthorized,
-    #[error("user sent a misformed request: \"{0}\"")]
+    #[error("user sent a malformed request: \"{0}\"")]
     BadRequest(String),
     #[error("Cannot find resource: \"{0}\"")]
     NotFound(String),

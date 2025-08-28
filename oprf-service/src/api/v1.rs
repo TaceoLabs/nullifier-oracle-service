@@ -1,39 +1,31 @@
 use axum::Router;
-use utoipa::OpenApi;
-use utoipa_axum::router::OpenApiRouter;
-use utoipa_swagger_ui::SwaggerUi;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 pub mod oprf;
 
 use crate::{AppState, api};
 
-#[derive(OpenApi)]
-#[openapi(
-        info(version = "1.0", title = "TACEO OPRF Service", license(name= "MIT", identifier = "MIT")),
-        tags(
-            (name = "oprf-service", description = "TACEO:OPRF - Oblivious Pseudorandom Function Service"),
-        )
-    )]
-pub struct ApiDoc;
-
-fn unauthenticated_routes(input_max_body_limit: usize) -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().merge(oprf::router(input_max_body_limit))
+/// Builds the unauthenticated routes. At the moment all requests are unauthenticated.
+fn unauthenticated_routes(input_max_body_limit: usize) -> Router<AppState> {
+    oprf::router(input_max_body_limit)
 }
 
-/// Build the v1 API with login routes located at "/". Panics if another
-/// API registers login routes as well.
-pub(crate) fn build(app_state: AppState) -> Router {
-    let input_max_body_limit = app_state.config.input_max_body_limit;
+// Builds the axum router for v1. Limits the max body limit to provided value.
+pub(crate) fn build(input_max_body_limit: usize) -> Router<AppState> {
+    let merged = Router::new().merge(unauthenticated_routes(input_max_body_limit));
 
-    let merged = OpenApiRouter::new().merge(unauthenticated_routes(input_max_body_limit));
-
-    let (router, apidoc) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    // Setup a restrictive CORS layer for the v1 api. We only want to consume json, therefore
+    // we allow the content-type header (and user-agent header). As we only have POST request,
+    // we prohibit all other, expect for OPTION preflight.
+    //
+    // We setup a wildcard as we are a public API and everyone can access the service.
+    let cors = CorsLayer::new()
+        .allow_credentials(false)
+        .allow_headers([http::header::CONTENT_TYPE, http::header::USER_AGENT])
+        .allow_methods([http::Method::POST, http::Method::OPTIONS])
+        .allow_origin(AllowOrigin::any());
+    Router::new()
         .nest("/api/v1", merged)
         .merge(api::health::routes())
-        .split_for_parts();
-
-    let swagger_ui =
-        Router::new().merge(SwaggerUi::new("/swagger-ui").url("/api/v1/openapi.json", apidoc));
-
-    router.merge(swagger_ui).with_state(app_state)
+        .layer(cors)
 }
