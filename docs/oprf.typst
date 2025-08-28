@@ -197,10 +197,6 @@
   }
 ])
 
-//custom commands
-#let getsr = math.attach($arrow.l$, t: $\$$)
-
-
 // Main body.
 
 //// PAR CONFIG MAIN
@@ -226,7 +222,7 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
     table.header([Client($x$)], [], [Server($k$)]),
     table.hline(stroke: 0.05em),
     [
-      $beta getsr bb(Z)_q$
+      $beta arrowrl bb(Z)_q$
     ],
     [],
     [],
@@ -328,9 +324,9 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
     be the order of the prime-order subgroup of the BabyJubJub curve.
 
     #theorem(
-      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x getsr bb(F)_q$ are statistically indistinguishable.
+      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x arrowrl bb(F)_q$ are statistically indistinguishable.
         #proof(
-          [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x getsr bb(Z)_p$ and $y getsr bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x getsr bb(Z)_q; "return" x$ and $y getsr bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
+          [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x arrowrl bb(Z)_p$ and $y arrowrl bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x arrowrl bb(Z)_q; "return" x$ and $y arrowrl bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
         )
       ],
     )
@@ -349,7 +345,7 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
           "Prove",
           $x, B, D$,
           {
-            ($k getsr bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random " + $k$,)
+            ($k arrowrl bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random " + $k$,)
             Assign[$R_1$][$k dot D$]
             Assign[$R_2$][$k dot B$]
             Assign[$e$][$H(x dot D,B, x dot B,D,R_1, R_2) in bb(F)_p$]
@@ -397,7 +393,7 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
           "partial_commitments",
           $x_i, A, B, D$,
           {
-            ($k_i getsr bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random share " + $k_i$,)
+            ($k_i arrowrl bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random share " + $k_i$,)
             Assign[$R_(i,1)$][$k_i dot D$]
             Assign[$R_(i,2)$][$k_i dot B$]
             Assign[$C_i$][$x_i dot B$]
