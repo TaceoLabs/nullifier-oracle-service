@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-//! test
 use std::sync::Arc;
 
 use axum::{Router, extract::FromRef};

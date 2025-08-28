@@ -13,7 +13,7 @@ pub enum Enviroment {
     Dev,
 }
 
-/// The configuration for the CCL OPRF service.
+/// The configuration for the OPRF service.
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]

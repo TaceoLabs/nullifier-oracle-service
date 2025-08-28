@@ -16,8 +16,10 @@ impl IntoResponse for ApiError {
     }
 }
 
+#[expect(dead_code)]
 pub type ApiResult<T> = Result<T, ApiErrors>;
 
+#[expect(dead_code)]
 #[derive(Debug, thiserror::Error)]
 pub enum ApiErrors {
     #[error("an explicit error was returned: {0:?}")]

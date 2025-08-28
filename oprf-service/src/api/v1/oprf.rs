@@ -11,8 +11,6 @@ use uuid::Uuid;
 
 use crate::{AppState, api::errors::ApiError, config::ServiceConfig};
 
-const OPRF_TAG: &str = "oprf";
-
 #[derive(Debug, Deserialize)]
 pub struct OprfRequest {
     pub job_id: Uuid,
