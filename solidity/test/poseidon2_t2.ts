@@ -11,9 +11,12 @@ describe("Poseidon2", async function () {
   console.log("Poseidon2T2 deployed to:", poseidon2_lib.address);
   const poseidon2_lib_opt = await viem.deployContract("contracts/poseidon2_t2_opt.sol:Poseidon2T2opt");
   console.log("Poseidon2T2opt deployed to:", poseidon2_lib_opt.address);
+  const poseidon2_lib_inline = await viem.deployContract("contracts/poseidon2_t2_inline.sol:Poseidon2T2Inline");
+  console.log("Poseidon2TInline deployed to:", poseidon2_lib_inline.address);
+
 
   const poseidon2 = await viem.deployContract("Poseidon2", undefined, {libraries: {
-        "Poseidon2T2": poseidon2_lib.address, "Poseidon2T2opt": poseidon2_lib_opt.address
+        "Poseidon2T2": poseidon2_lib.address, "Poseidon2T2opt": poseidon2_lib_opt.address, "Poseidon2T2Inline": poseidon2_lib_inline.address
       }});
 
   console.log("Running Poseidon2 t2 compression kat...");
@@ -31,5 +34,13 @@ describe("Poseidon2", async function () {
   expect(res2).to.be.equal(BigInt("0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b"));
   console.log("...done");
   console.log("Gas used:", stats2.gasUsed);
+
+  console.log("Running Poseidon2 t2 inline compression kat...");
+  const hash3 = await poseidon2.write.compress_inline([[BigInt(0),BigInt(1)]]);
+  const stats3 = await publicClient.waitForTransactionReceipt({ hash: hash3 });
+  const res3 = await poseidon2.read.result();
+  expect(res3).to.be.equal(BigInt("0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b"));
+  console.log("...done");
+  console.log("Gas used:", stats3.gasUsed);
   });
 });
