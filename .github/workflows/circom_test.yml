@@ -18,6 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: wget https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -O circom && chmod +x circom && sudo mv circom /usr/local/bin/
       - run: npm ci
       - run: npm test
