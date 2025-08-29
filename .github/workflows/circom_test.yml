@@ -1,0 +1,24 @@
+name: Circom Tests
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - v*
+  pull_request:
+
+jobs:
+  test:
+    name: Circuit Unit/KAT Tests
+    runs-on: [arc-runner-set]
+    defaults:
+      run:
+        working-directory: ./circom/tests
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
