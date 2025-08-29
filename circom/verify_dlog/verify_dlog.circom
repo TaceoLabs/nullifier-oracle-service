@@ -2,6 +2,7 @@ pragma circom 2.2.2;
 
 include "poseidon2/poseidon2.circom";
 include "babyjubjub/babyjubjub.circom";
+include "babyjubjub/correct_sub_group.circom";
 
 // Poseidon sponge construction by hand to compute the challenge point e. We use state size 4 with capacity 1 and absorb all provided points and squeeze once. The challenge we output is the first element not counting the capacity from the squeeze.
 template ComputeChallengeHash() {
@@ -53,7 +54,9 @@ template VerifyDlog() {
     BabyJubJubPoint {twisted_edwards } b_p <== BabyJubJubCheck()(b[0], b[1]);
     BabyJubJubPoint {twisted_edwards } c_p <== BabyJubJubCheck()(c[0], c[1]);
 
-    // TODO we don't check whether the points are in the correct subgroup like we do in Rust. The points can be public, therefore we maybe add this check in Rust. 
+    // check that B and C are on the correct subgroup - we don't need to check A, as this is a public point and we expect the verifier to check that in Rust land.
+    BabyJubJubCheckInCorrectSubgroup()(b_p);
+    BabyJubJubCheckInCorrectSubgroup()(c_p);
 
     // check if not the identity
     BabyJubJubCheckNotIdentity()(a_p);
