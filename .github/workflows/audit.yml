@@ -33,7 +33,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+      - uses: taiki-e/install-action@cargo-deny
       - name: Run cargo-deny
         run: cargo deny --log-level error --all-features check ${{ matrix.checks }}
