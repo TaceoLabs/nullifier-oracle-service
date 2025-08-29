@@ -2106,6 +2106,7 @@ dependencies = [
  "ark-ff",
  "ark-groth16",
  "ark-serialize",
+ "async-trait",
  "axum",
  "base64ct",
  "clap",

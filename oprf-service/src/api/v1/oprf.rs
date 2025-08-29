@@ -10,7 +10,10 @@ use uuid::Uuid;
 use crate::{
     AppState,
     api::errors::ApiErrors,
-    services::oprf::{FinalizeOprfSessionRequestn, InitOprfSessionRequest, OprfService},
+    services::{
+        chain_watcher::{ChainEpoch, ChainWatcherService},
+        oprf::{FinalizeOprfSessionRequestn, InitOprfSessionRequest, OprfService},
+    },
 };
 
 type ApiResult<T> = Result<T, ApiErrors>;
@@ -18,6 +21,7 @@ type ApiResult<T> = Result<T, ApiErrors>;
 #[derive(Debug, Deserialize)]
 pub struct OprfRequest {
     pub request_id: Uuid,
+    pub epoch: ChainEpoch,
     pub user_proof: String,
     pub point_a: String,
 }
@@ -46,10 +50,13 @@ pub struct ChallengeResponse {
 /// Deserializes the request and forwards the parsed request to the [`OprfService`] to create the session and commit to the partial exponent.
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
+    State(chain_watcher): State<ChainWatcherService>,
     Json(request): Json<OprfRequest>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
+    // get the merkle root identified by the epoch
+    let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.epoch);
     // Parses the request
     let request = InitOprfSessionRequest::try_from(request)?;
     // Init the OPRF session
