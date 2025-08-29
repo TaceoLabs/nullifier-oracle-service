@@ -19,13 +19,19 @@ describe("Poseidon2", async function () {
         "Poseidon2T2": poseidon2_lib.address, "Poseidon2T2opt": poseidon2_lib_opt.address, "Poseidon2T2Inline": poseidon2_lib_inline.address
       }});
 
+  const fixed_gas_cost = 21000n + 1088n + 5000n; // base tx cost + contract call cost + storage cost
+
+
+  // First transaction to write to zero slot with more gas cost
+  const hash = await poseidon2.write.compress([[BigInt(0),BigInt(1)]]);
+
   console.log("Running Poseidon2 t2 compression kat...");
   const hash1 = await poseidon2.write.compress([[BigInt(0),BigInt(1)]]);
   const stats1 = await publicClient.waitForTransactionReceipt({ hash: hash1 });
   const res1 = await poseidon2.read.result();
   expect(res1).to.be.equal(BigInt("0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b"));
   console.log("...done");
-  console.log("Gas used:", stats1.gasUsed);
+  console.log("Gas used:", stats1.gasUsed - fixed_gas_cost);
 
   console.log("Running Poseidon2 t2 opt compression kat...");
   const hash2 = await poseidon2.write.compress_opt([[BigInt(0),BigInt(1)]]);
@@ -33,7 +39,7 @@ describe("Poseidon2", async function () {
   const res2 = await poseidon2.read.result();
   expect(res2).to.be.equal(BigInt("0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b"));
   console.log("...done");
-  console.log("Gas used:", stats2.gasUsed);
+  console.log("Gas used:", stats2.gasUsed - fixed_gas_cost);
 
   console.log("Running Poseidon2 t2 inline compression kat...");
   const hash3 = await poseidon2.write.compress_inline([[BigInt(0),BigInt(1)]]);
@@ -41,6 +47,6 @@ describe("Poseidon2", async function () {
   const res3 = await poseidon2.read.result();
   expect(res3).to.be.equal(BigInt("0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b"));
   console.log("...done");
-  console.log("Gas used:", stats3.gasUsed);
+  console.log("Gas used:", stats3.gasUsed - fixed_gas_cost);
   });
 });
