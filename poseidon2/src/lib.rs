@@ -1,3 +1,4 @@
+mod merkle_tree;
 mod params;
 mod poseidon2;
 
