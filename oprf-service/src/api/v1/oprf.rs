@@ -8,6 +8,7 @@ use tracing::instrument;
 use crate::{
     AppState,
     api::errors::ApiErrors,
+    services::chain_watcher::ChainWatcherService,
     services::oprf::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, OprfService},
 };
 
@@ -19,10 +20,13 @@ type ApiResult<T> = Result<T, ApiErrors>;
 #[instrument(level = "debug", name = "oprf", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
+    State(chain_watcher): State<ChainWatcherService>,
     Json(request): Json<OprfRequest>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
+    // get the merkle root identified by the epoch
+    let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.epoch);
     // Init the OPRF session
     let commitments = oprf_service.init_oprf_session(request)?;
     Ok(Json(OprfResponse {

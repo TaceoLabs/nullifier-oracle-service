@@ -22,7 +22,9 @@ use uuid::Uuid;
 use crate::{
     config::OprfConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
-    services::{crypto_device::CryptoDevice, session_store::SessionStore},
+    services::{
+        chain_watcher::MerkleEpoch, crypto_device::CryptoDevice, session_store::SessionStore,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -42,6 +44,7 @@ pub struct OprfRequest {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     pub point_a: ark_babyjubjub::EdwardsAffine,
+    pub epoch: MerkleEpoch,
 }
 
 #[derive(Debug, Serialize)]
