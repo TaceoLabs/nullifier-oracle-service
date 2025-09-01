@@ -1,4 +1,4 @@
-use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
@@ -23,7 +23,7 @@ impl DLogEqualityProof {
         let r2 = (b * k).into_affine();
         let a = (Projective::generator() * x).into_affine();
         let c = (b * x).into_affine();
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let e = challenge_hash(a, b, c, d, r1, r2);
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
@@ -54,7 +54,7 @@ impl DLogEqualityProof {
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e = convert_base_to_scalar(self.e);
 
-        let r_1 = Projective::generator() * self.s - a * e;
+        let r_1 = d * self.s - a * e;
         if r_1.is_zero() {
             return false;
         }
@@ -115,7 +115,7 @@ mod tests {
     fn test_dlog_equality() {
         let mut rng = rand::thread_rng();
         let x = ScalarField::rand(&mut rng);
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let a = (d * x).into_affine();
         let b = Affine::rand(&mut rng);
         let c = (b * x).into_affine();

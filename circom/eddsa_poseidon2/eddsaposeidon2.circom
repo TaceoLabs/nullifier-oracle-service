@@ -54,16 +54,27 @@ template EdDSAPoseidonVerifier() {
 
 // Calculate the h = H(R,A, msg)
 
-    component hash = Poseidon2(8);
+    // TODO use t=8 here?
+    component hash1 = Poseidon2(4);
+    hash1.in[0] <== 0;
+    hash1.in[1] <== R8x;
+    hash1.in[2] <== R8y;
+    hash1.in[3] <== Ax;
+    component hash = Poseidon2(4);
+    hash.in[0] <== hash1.out[0];
+    hash.in[1] <== hash1.out[1] + Ay;
+    hash.in[2] <== hash1.out[2] + M;
+    hash.in[3] <== hash1.out[3];
 
-    hash.in[0] <== 0;
-    hash.in[1] <== R8x;
-    hash.in[2] <== R8y;
-    hash.in[3] <== Ax;
-    hash.in[4] <== Ay;
-    hash.in[5] <== M;
-    hash.in[6] <== 0;
-    hash.in[7] <== 0;
+    // component hash = Poseidon2(8);
+    // hash.in[0] <== 0;
+    // hash.in[1] <== R8x;
+    // hash.in[2] <== R8y;
+    // hash.in[3] <== Ax;
+    // hash.in[4] <== Ay;
+    // hash.in[5] <== M;
+    // hash.in[6] <== 0;
+    // hash.in[7] <== 0;
 
     component h2bits = Num2Bits_strict();
     h2bits.in <== hash.out[1];

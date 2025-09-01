@@ -20,7 +20,7 @@ impl EdDSASignature {
         ScalarField::from_le_bytes_mod_order(&bytes)
     }
 
-    pub fn sign(sk: ScalarField, message: BaseField) -> Self {
+    pub fn sign(message: BaseField, sk: ScalarField) -> Self {
         // We hash the private key and the message to produce the nonce r
         // TODO this could be any hash function
         let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
@@ -66,12 +66,46 @@ impl EdDSASignature {
         lhs == rhs
     }
 
-    // TODO maybe use t=8 here? This is also not yet compatible with the circom implementation
+    // TODO maybe use t=8 here?
     fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
         let poseidon2_4 = Poseidon2::<_, 4, 5>::default();
         let mut state = poseidon2_4.permutation(&[BaseField::zero(), nonce_r.x, nonce_r.y, pk.x]);
         state[1] += pk.y;
         state[2] += message;
         poseidon2_4.permutation(&state)[1]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_ec::AffineRepr;
+    use ark_ff::UniformRand;
+
+    use super::*;
+
+    #[test]
+    fn test_eddsa() {
+        let mut rng = rand::thread_rng();
+        let sk = ScalarField::rand(&mut rng);
+        let pk = (Affine::generator() * sk).into_affine();
+        let message = BaseField::rand(&mut rng);
+
+        let signature = EdDSASignature::sign(message, sk);
+        assert!(
+            signature.verify(message, pk),
+            "valid signature should verify"
+        );
+
+        let message_ = BaseField::rand(&mut rng);
+        assert!(
+            !signature.verify(message_, pk),
+            "invalid signature should not verify"
+        );
+        let sk_ = ScalarField::rand(&mut rng);
+        let pk_ = (Affine::generator() * sk_).into_affine();
+        assert!(
+            !signature.verify(message, pk_),
+            "invalid signature should not verify"
+        );
     }
 }
