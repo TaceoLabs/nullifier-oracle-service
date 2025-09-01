@@ -71,6 +71,7 @@ feature-depth = 1
 # output a note when they are encountered.
 ignore = [
     { id = "RUSTSEC-2024-0436", reason = "Paste crate is unmaintained, but arkworks is still using it." },
+    { id = "RUSTSEC-2024-0388", reason = "derivative crate is unmaintained, but arkworks is still using it." },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.
