@@ -1,5 +1,5 @@
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::{BigInteger, PrimeField, Zero};
+use ark_ff::{AdditiveGroup, BigInteger, PrimeField, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 
@@ -33,6 +33,7 @@ impl EdDSASignature {
         let pk = Projective::generator().into_affine() * sk;
         let challenge = Self::challenge_hash(message, nonce_r.into_affine(), pk.into_affine());
         let c = Self::convert_base_to_scalar(challenge);
+        let c = c.double().double().double(); // multiply by 8
         let s = r_ + c * sk;
 
         Self {
@@ -61,6 +62,7 @@ impl EdDSASignature {
 
         let challenge = Self::challenge_hash(message, self.r, pk);
         let c = Self::convert_base_to_scalar(challenge);
+        let c = c.double().double().double(); // multiply by 8
         let lhs = Projective::generator() * self.s;
         let rhs = self.r + pk * c;
         lhs == rhs
@@ -86,7 +88,7 @@ mod tests {
 
     fn test(sk: ScalarField, message: BaseField, rng: &mut impl rand::Rng) {
         let pk = (Affine::generator() * sk).into_affine();
-        // println!("pk=({:?}, {:?})", pk.x, pk.y);
+        // println!("pk=({:?}n, {:?}n)", pk.x, pk.y);
 
         let signature = EdDSASignature::sign(message, sk);
         assert!(
@@ -94,7 +96,7 @@ mod tests {
             "valid signature should verify"
         );
         // println!(
-        //     "signature: s={:?}, r=({:?}, {:?})",
+        //     "signature: s={:?}n, r=({:?}n, {:?}n)",
         //     signature.s, signature.r.x, signature.r.y,
         // );
         // println!("message={:?}", message);
