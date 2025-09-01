@@ -80,32 +80,71 @@ impl EdDSASignature {
 mod tests {
     use ark_ec::AffineRepr;
     use ark_ff::UniformRand;
+    use poseidon2::field_from_hex_string;
 
     use super::*;
 
-    #[test]
-    fn test_eddsa() {
-        let mut rng = rand::thread_rng();
-        let sk = ScalarField::rand(&mut rng);
+    fn test(sk: ScalarField, message: BaseField, rng: &mut impl rand::Rng) {
         let pk = (Affine::generator() * sk).into_affine();
-        let message = BaseField::rand(&mut rng);
+        // println!("pk=({:?}, {:?})", pk.x, pk.y);
 
         let signature = EdDSASignature::sign(message, sk);
         assert!(
             signature.verify(message, pk),
             "valid signature should verify"
         );
+        // println!(
+        //     "signature: s={:?}, r=({:?}, {:?})",
+        //     signature.s, signature.r.x, signature.r.y,
+        // );
+        // println!("message={:?}", message);
 
-        let message_ = BaseField::rand(&mut rng);
+        let message_ = BaseField::rand(rng);
         assert!(
             !signature.verify(message_, pk),
             "invalid signature should not verify"
         );
-        let sk_ = ScalarField::rand(&mut rng);
+        let sk_ = ScalarField::rand(rng);
         let pk_ = (Affine::generator() * sk_).into_affine();
         assert!(
             !signature.verify(message, pk_),
             "invalid signature should not verify"
         );
+    }
+
+    #[test]
+    fn test_eddsa_rng() {
+        let mut rng = rand::thread_rng();
+        let sk = ScalarField::rand(&mut rng);
+        let message = BaseField::rand(&mut rng);
+        test(sk, message, &mut rng);
+    }
+
+    #[test]
+    fn test_eddsa_kat0() {
+        let mut rng = rand::thread_rng();
+        let sk = field_from_hex_string::<ScalarField>(
+            "0x11e822de29de9aef648b12049368633f4601bb1b7ed47e4e0b945fb31466998c",
+        )
+        .unwrap();
+        let message = field_from_hex_string::<BaseField>(
+            "0x6e94c93c5fc8c67e9f18200f4f963aa73fe45071d441362d17ede7e84fa0dd9",
+        )
+        .unwrap();
+        test(sk, message, &mut rng);
+    }
+
+    #[test]
+    fn test_eddsa_kat1() {
+        let mut rng = rand::thread_rng();
+        let sk = field_from_hex_string::<ScalarField>(
+            "0x1cc01b8ddd6851915a42e0cfc6b7088c4b660420cb103c96353d983ead661a5",
+        )
+        .unwrap();
+        let message = field_from_hex_string::<BaseField>(
+            "0x671e7802b9c4f1165955b9477a378bf30fd5723fddf7e727934bf2a7c2f3265",
+        )
+        .unwrap();
+        test(sk, message, &mut rng);
     }
 }

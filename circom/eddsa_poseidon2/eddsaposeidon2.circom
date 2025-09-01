@@ -26,7 +26,7 @@ include "circomlib/bitify.circom";
 include "circomlib/escalarmulany.circom";
 include "circomlib/escalarmulfix.circom";
 
-template EdDSAPoseidonVerifier() {
+template EdDSAPoseidon2Verifier() {
     signal input enabled;
     signal input Ax;
     signal input Ay;
