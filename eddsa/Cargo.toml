@@ -14,6 +14,7 @@ readme.workspace = true
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-ff = "0.5.0"
 ark-ec = "0.5.0"
+blake3 = "1.8"
 num-bigint = "0.4.3"
 rand = "0.8"
 poseidon2 = { path = "../poseidon2" }

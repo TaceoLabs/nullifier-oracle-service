@@ -1,4 +1,4 @@
-use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
@@ -20,21 +20,26 @@ impl EdDSASignature {
         ScalarField::from_le_bytes_mod_order(&bytes)
     }
 
-    pub fn sign(message: BaseField, sk: ScalarField) -> Self {
+    fn deterministic_nonce(message: BaseField, sk: ScalarField) -> ScalarField {
         // We hash the private key and the message to produce the nonce r
-        // TODO this could be any hash function
-        let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
-        let sk_ = BaseField::from(sk.into_bigint()); // Basefield is bigger than scalar field
-        let r = poseidon2_3.permutation(&[BaseField::zero(), sk_, message])[1];
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&sk.into_bigint().to_bytes_le());
+        hasher.update(&message.into_bigint().to_bytes_le());
+        let mut r = hasher.finalize_xof();
+        let mut output = [0u8; 64]; // 512 bits to get no bias when doing mod reduction
+        r.fill(&mut output);
+        ScalarField::from_le_bytes_mod_order(&output)
+    }
 
-        let r_ = Self::convert_base_to_scalar(r);
-        let nonce_r = Projective::generator().into_affine() * r_;
+    pub fn sign(message: BaseField, sk: ScalarField) -> Self {
+        let r = Self::deterministic_nonce(message, sk);
+        let nonce_r = Projective::generator().into_affine() * r;
 
         let pk = Projective::generator().into_affine() * sk;
         let challenge = Self::challenge_hash(message, nonce_r.into_affine(), pk.into_affine());
         let c = Self::convert_base_to_scalar(challenge);
         let c = c.double().double().double(); // multiply by 8
-        let s = r_ + c * sk;
+        let s = r + c * sk;
 
         Self {
             r: nonce_r.into_affine(),
@@ -54,7 +59,7 @@ impl EdDSASignature {
         }
 
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p, if s is given as a BaseField element.
-        // TODO since self.s is a ScalarField element, this check is not needed. Remove?
+        // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
         let s_biguint: BigUint = self.s.into();
         if s_biguint >= ScalarField::MODULUS.into() {
             return false;
@@ -62,7 +67,7 @@ impl EdDSASignature {
 
         let challenge = Self::challenge_hash(message, self.r, pk);
         let c = Self::convert_base_to_scalar(challenge);
-        let c = c.double().double().double(); // multiply by 8
+        let pk = pk.into_group().double().double().double(); // multiply by 8
         let lhs = Projective::generator() * self.s;
         let rhs = self.r + pk * c;
         lhs == rhs

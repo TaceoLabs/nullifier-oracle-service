@@ -46,6 +46,7 @@ impl DLogEqualityProof {
         }
 
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p.
+        // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
         let s_biguint: BigUint = self.s.into();
         if s_biguint >= ScalarField::MODULUS.into() {
             return false;
