@@ -110,7 +110,7 @@ fn ddlog_bench(c: &mut Criterion) {
         let x = ark_babyjubjub::Fr::rand(rng);
         let point = EdwardsAffine::rand(rng);
 
-        b.iter(|| DLogEqualitySession::partial_commitments(point, x, uuid::Uuid::new_v4(), rng));
+        b.iter(|| DLogEqualitySession::partial_commitments(point, x, rng));
     });
     c.bench_function("DDLOG/Server/Phase2", |b| {
         let rng = &mut rand::thread_rng();
@@ -120,17 +120,15 @@ fn ddlog_bench(c: &mut Criterion) {
 
         b.iter_batched(
             || {
-                let (session, comm) =
-                    DLogEqualitySession::partial_commitments(point, x, uuid::Uuid::new_v4(), rng);
+                let (session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
                 let (_, e) = DLogEqualityChallenge::combine_commitments_and_create_challenge(
                     &[comm],
                     pk,
                     point,
-                )
-                .unwrap();
+                );
                 (session, e)
             },
-            |(session, e)| session.challenge(x, e).unwrap(),
+            |(session, e)| session.challenge(x, e),
             BatchSize::SmallInput,
         );
     });
@@ -143,12 +141,7 @@ fn ddlog_bench(c: &mut Criterion) {
 
             b.iter_batched(
                 || {
-                    let (_session, comm) = DLogEqualitySession::partial_commitments(
-                        point,
-                        x,
-                        uuid::Uuid::new_v4(),
-                        rng,
-                    );
+                    let (_session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
                     vec![comm; set_size]
                 },
                 |commitments| {
@@ -157,7 +150,6 @@ fn ddlog_bench(c: &mut Criterion) {
                         pk,
                         point,
                     )
-                    .unwrap()
                 },
                 BatchSize::SmallInput,
             );
@@ -170,24 +162,22 @@ fn ddlog_bench(c: &mut Criterion) {
 
             b.iter_batched(
                 || {
-                    let uuid = uuid::Uuid::new_v4();
                     let (sessions, commitments) = (0..set_size)
-                        .map(|_| DLogEqualitySession::partial_commitments(point, x, uuid, rng))
+                        .map(|_| DLogEqualitySession::partial_commitments(point, x, rng))
                         .collect::<(Vec<_>, Vec<_>)>();
                     let (_, challenge) =
                         DLogEqualityChallenge::combine_commitments_and_create_challenge(
                             &commitments,
                             pk,
                             point,
-                        )
-                        .unwrap();
+                        );
                     let responses = sessions
                         .into_iter()
-                        .map(|s| s.challenge(x, challenge.clone()).unwrap())
+                        .map(|s| s.challenge(x, challenge.clone()))
                         .collect::<Vec<_>>();
                     (challenge, responses)
                 },
-                |(challenge, responses)| challenge.combine_proofs(&responses).unwrap(),
+                |(challenge, responses)| challenge.combine_proofs(&responses),
                 BatchSize::SmallInput,
             );
         });
@@ -199,12 +189,7 @@ fn ddlog_bench(c: &mut Criterion) {
 
             b.iter_batched(
                 || {
-                    let (_session, comm) = DLogEqualitySession::partial_commitments(
-                        point,
-                        x,
-                        uuid::Uuid::new_v4(),
-                        rng,
-                    );
+                    let (_session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
                     let used_parties = (1..=set_size * 2).choose_multiple(rng, set_size);
                     let lagrange = lagrange_from_coeff(&used_parties);
                     (vec![comm; set_size], lagrange)
@@ -216,7 +201,6 @@ fn ddlog_bench(c: &mut Criterion) {
                         pk,
                         point,
                     )
-                    .unwrap()
                 },
                 BatchSize::SmallInput,
             );
@@ -229,9 +213,8 @@ fn ddlog_bench(c: &mut Criterion) {
 
             b.iter_batched(
                 || {
-                    let uuid = uuid::Uuid::new_v4();
                     let (sessions, commitments) = (0..set_size)
-                        .map(|_| DLogEqualitySession::partial_commitments(point, x, uuid, rng))
+                        .map(|_| DLogEqualitySession::partial_commitments(point, x, rng))
                         .collect::<(Vec<_>, Vec<_>)>();
                     let used_parties = (1..=set_size * 2).choose_multiple(rng, set_size);
                     let lagrange = lagrange_from_coeff(&used_parties);
@@ -241,18 +224,15 @@ fn ddlog_bench(c: &mut Criterion) {
                             &lagrange,
                             pk,
                             point,
-                        )
-                        .unwrap();
+                        );
                     let responses = sessions
                         .into_iter()
-                        .map(|s| s.challenge(x, challenge.clone()).unwrap())
+                        .map(|s| s.challenge(x, challenge.clone()))
                         .collect::<Vec<_>>();
                     (challenge, responses, lagrange)
                 },
                 |(challenge, responses, lagrange)| {
-                    challenge
-                        .combine_proofs_shamir(&responses, &lagrange)
-                        .unwrap()
+                    challenge.combine_proofs_shamir(&responses, &lagrange)
                 },
                 BatchSize::SmallInput,
             );
