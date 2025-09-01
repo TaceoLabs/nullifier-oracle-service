@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use clap::{Parser, ValueEnum};
 
@@ -17,7 +17,7 @@ pub enum Enviroment {
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]
-pub struct ServiceConfig {
+pub struct OprfConfig {
     /// S3 bucket for file storage/sharing
     #[clap(long, env = "OPRF_SERVICE_ENVIRONMENT", default_value = "dev")]
     pub environment: Enviroment,
@@ -45,7 +45,10 @@ pub struct ServiceConfig {
     )]
     pub request_lifetime: Duration,
 
-    /// Interval for the Session cleanup task to do its thing.
+    /// Cleanup interval for session store.
+    ///
+    /// This interval specifies the time for the cleanup task to check
+    /// old sessions, not the validity of a session.
     #[clap(
         long,
         env = "OPRF_SERVICE_SESSION_CLEANUP_INTERVAL",
@@ -71,4 +74,16 @@ pub struct ServiceConfig {
 
     )]
     pub max_wait_time_shutdown: Duration,
+
+    /// Mailbox size for the session store.
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_SESSION_MAILBOX_SIZE",
+        default_value = "4096"
+    )]
+    pub session_store_mailbox: usize,
+
+    /// Path to the verification key used to verify the proof provided by the user during session initialization.
+    #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
+    pub user_verification_key_path: PathBuf,
 }

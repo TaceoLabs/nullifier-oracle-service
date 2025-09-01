@@ -3,6 +3,8 @@ use eyre::Report;
 use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
+use crate::services::oprf::OprfServiceError;
+
 #[derive(Debug, Serialize)]
 pub struct ApiError {
     pub message: Option<String>,
@@ -19,7 +21,6 @@ impl IntoResponse for ApiError {
 #[expect(dead_code)]
 pub type ApiResult<T> = Result<T, ApiErrors>;
 
-#[expect(dead_code)]
 #[derive(Debug, thiserror::Error)]
 pub enum ApiErrors {
     #[error("an explicit error was returned: {0:?}")]
@@ -37,6 +38,29 @@ pub enum ApiErrors {
 impl From<ApiError> for ApiErrors {
     fn from(inner: ApiError) -> Self {
         ApiErrors::ExplicitError(inner)
+    }
+}
+
+impl From<OprfServiceError> for ApiErrors {
+    fn from(value: OprfServiceError) -> Self {
+        tracing::debug!("{value:?}");
+        match value {
+            OprfServiceError::InvalidProof => ApiErrors::Unauthorized,
+            OprfServiceError::MalformedBase64(_) => {
+                ApiErrors::BadRequest(String::from("malformed base64"))
+            }
+            OprfServiceError::MalformedGrothProof(_) => {
+                ApiErrors::BadRequest(String::from("malformed Groth16 proof"))
+            }
+            OprfServiceError::MalformedPoint(_) => ApiErrors::BadRequest(String::from(
+                "malformed BabyJubJub point A (must be Affine)",
+            )),
+            OprfServiceError::MalformedDLogChallenge(_) => {
+                ApiErrors::BadRequest(String::from("malformed challenge"))
+            }
+            OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
+            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
+        }
     }
 }
 

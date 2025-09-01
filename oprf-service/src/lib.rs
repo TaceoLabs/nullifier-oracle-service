@@ -1,31 +1,46 @@
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
+use ark_bn254::Bn254;
+use ark_serialize::CanonicalDeserialize;
 use axum::{Router, extract::FromRef};
+use eyre::Context;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use crate::config::ServiceConfig;
+use crate::{
+    config::OprfConfig,
+    services::{crypto_device::CryptoDevice, oprf::OprfService},
+};
 
 mod api;
 pub mod config;
 pub mod metrics;
+pub(crate) mod services;
 pub mod telemetry;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
-    pub config: Arc<ServiceConfig>,
+    config: Arc<OprfConfig>,
+    oprf_service: OprfService,
 }
-impl FromRef<AppState> for Arc<ServiceConfig> {
+
+impl FromRef<AppState> for Arc<OprfConfig> {
     fn from_ref(input: &AppState) -> Self {
         Arc::clone(&input.config)
+    }
+}
+
+impl FromRef<AppState> for OprfService {
+    fn from_ref(input: &AppState) -> Self {
+        input.oprf_service.clone()
     }
 }
 
 /// Main entry point for the OPRF-Service. Parsed the config and spins up all necessary services.
 /// TODO better docs
 pub async fn start(
-    config: config::ServiceConfig,
+    config: config::OprfConfig,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
@@ -38,11 +53,30 @@ pub async fn start(
         tracing::warn!("we continue but this should not happen...");
     };
     let config = Arc::new(config);
-    let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
+    tracing::info!(
+        "loading Groth16 verification key from: {:?}",
+        config.user_verification_key_path
+    );
+    let vk = File::open(&config.user_verification_key_path)
+        .context("while opening file to verification key")?;
+    let vk = ark_groth16::VerifyingKey::<Bn254>::deserialize_uncompressed(vk)
+        .context("while parsing Groth16 verification key for user proof")?;
+
+    tracing::info!("init crypto device..");
+    let crypto_device =
+        CryptoDevice::load_key_by_environment(&config).context("while initiating crypto-device")?;
+
+    // start session-store service
+    tracing::info!("init oprf-service...");
+    let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk);
+
+    let cancellation_token = spawn_shutdown_task(shutdown_signal);
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
+
     let app_state = AppState {
         config: Arc::clone(&config),
+        oprf_service,
     };
 
     let axum_rest_api = Router::new()
@@ -60,13 +94,16 @@ pub async fn start(
                 .map(|x| x.to_string())
                 .unwrap_or(String::from("invalid addr"))
         );
+        let axum_shutdown_signal = axum_cancel_token.clone();
         let axum_result = axum::serve(listener, axum_rest_api)
-            .with_graceful_shutdown(async move { axum_cancel_token.cancelled().await })
+            .with_graceful_shutdown(async move { axum_shutdown_signal.cancelled().await })
             .await;
         tracing::info!("axum server shutdown");
         if let Err(err) = axum_result {
             tracing::error!("got error from axum: {err:?}");
         }
+        // we cancel the token in case axum encountered an error to shutdown the service
+        axum_cancel_token.cancel();
     });
     tracing::info!("everything started successfully - now waiting for shutdown...");
     cancellation_token.cancelled().await;

@@ -1,6 +1,6 @@
 use clap::Parser;
 use git_version::git_version;
-use oprf_service::config::ServiceConfig;
+use oprf_service::config::OprfConfig;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -14,11 +14,8 @@ async fn main() -> eyre::Result<()> {
         option_env!("GIT_HASH").unwrap_or(git_version!(fallback = "UNKNOWN"))
     );
 
-    let result = oprf_service::start(
-        ServiceConfig::parse(),
-        oprf_service::default_shutdown_signal(),
-    )
-    .await;
+    let result =
+        oprf_service::start(OprfConfig::parse(), oprf_service::default_shutdown_signal()).await;
     match result {
         Ok(()) => {
             tracing::info!("good night!");
