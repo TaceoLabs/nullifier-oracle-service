@@ -1,50 +1,33 @@
 use crate::dlog_equality::DLogEqualityProof;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{UniformRand, Zero};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use rand::{CryptoRng, Rng};
-use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PartialDLogEqualityCommitments {
-    pub(crate) request_id: Uuid,
     pub(crate) c: Affine, // The share of the actual result C=B*x
     pub(crate) r1: Affine,
     pub(crate) r2: Affine,
 }
 
-#[derive(Debug, Clone)]
-
+#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DLogEqualityChallenge {
-    pub(crate) request_id: Uuid,
-    pub(crate) e: BaseField, // The challenge hash
+    // The challenge hash
+    pub(crate) e: BaseField,
 }
 
-#[derive(Debug, Clone)]
-
+#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DLogEqualityProofShare {
-    /// request id
-    pub(crate) request_id: Uuid,
-    pub(crate) s: ScalarField, // The share of the response s
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum DLogEqualityProofError {
-    #[error(
-        "Request ID mismatch: The request ID for the second round does not match the saved information from the first round."
-    )]
-    RequestIdMismatch,
+    // The share of the response s
+    pub(crate) s: ScalarField,
 }
 
 /// The internal storage of a party in a distributed DlogEqualityProof protocol.
 ///
-/// This is not `Clone` because it contains secret randomness that may only be used once.
+/// This is not `Clone` because it contains secret randomness that may only be used once. We also don't implement `Debug` so we do don't print it by accident.
 /// The `challenge` method consumes the session.
-#[derive(Debug)]
-
 pub struct DLogEqualitySession {
-    /// request id
-    request_id: Uuid,
-    /// randomness share used in the proof
     k: ScalarField,
 }
 
@@ -53,13 +36,28 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
+impl PartialDLogEqualityCommitments {
+    pub fn into_bytes(self) -> Result<Vec<u8>, SerializationError> {
+        let mut bytes = vec![];
+        self.serialize_compressed(&mut bytes)?;
+        Ok(bytes)
+    }
+}
+
+impl DLogEqualityProofShare {
+    pub fn into_bytes(self) -> Result<Vec<u8>, SerializationError> {
+        let mut bytes = vec![];
+        self.serialize_compressed(&mut bytes)?;
+        Ok(bytes)
+    }
+}
+
 impl DLogEqualitySession {
     /// Computes C=B*x_share and commitments to a random value k_share, which will be the share of the randomness used in the DlogEqualityProof.
     /// The result is meant to be sent to one accumulating party (e.g., the verifier) who combines all the shares of all parties and creates the challenge hash.
     pub fn partial_commitments(
         b: Affine,
         x_share: ScalarField,
-        request_id: Uuid,
         rng: &mut (impl CryptoRng + Rng),
     ) -> (Self, PartialDLogEqualityCommitments) {
         let k_share = ScalarField::rand(rng);
@@ -67,17 +65,9 @@ impl DLogEqualitySession {
         let r2 = (b * k_share).into_affine();
         let c_share = (b * x_share).into_affine();
 
-        let comm = PartialDLogEqualityCommitments {
-            request_id,
-            c: c_share,
-            r1,
-            r2,
-        };
+        let comm = PartialDLogEqualityCommitments { c: c_share, r1, r2 };
 
-        let session = DLogEqualitySession {
-            request_id,
-            k: k_share,
-        };
+        let session = DLogEqualitySession { k: k_share };
 
         (session, comm)
     }
@@ -88,19 +78,12 @@ impl DLogEqualitySession {
         self,
         x_share: ScalarField,
         challenge: DLogEqualityChallenge,
-    ) -> Result<DLogEqualityProofShare, DLogEqualityProofError> {
-        if self.request_id != challenge.request_id {
-            return Err(DLogEqualityProofError::RequestIdMismatch);
-        }
-
+    ) -> DLogEqualityProofShare {
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e_ = crate::dlog_equality::convert_base_to_scalar(challenge.e);
-        let s_share = self.k + e_ * x_share;
-
-        Ok(DLogEqualityProofShare {
-            request_id: self.request_id,
-            s: s_share,
-        })
+        DLogEqualityProofShare {
+            s: self.k + e_ * x_share,
+        }
     }
 }
 
@@ -110,19 +93,7 @@ impl DLogEqualityChallenge {
         commitments: &[PartialDLogEqualityCommitments],
         a: Affine, // Combined public key of the provers
         b: Affine,
-    ) -> Result<(Affine, Self), DLogEqualityProofError> {
-        let request_id = commitments
-            .first()
-            .ok_or(DLogEqualityProofError::RequestIdMismatch)?
-            .request_id;
-        if commitments
-            .iter()
-            .skip(1)
-            .any(|c| c.request_id != request_id)
-        {
-            return Err(DLogEqualityProofError::RequestIdMismatch);
-        }
-
+    ) -> (Affine, Self) {
         let mut c = Projective::zero();
         let mut r1 = Projective::zero();
         let mut r2 = Projective::zero();
@@ -141,24 +112,16 @@ impl DLogEqualityChallenge {
 
         let e = crate::dlog_equality::challenge_hash(a, b, c, d, r1, r2);
 
-        Ok((c, DLogEqualityChallenge { request_id, e }))
+        (c, DLogEqualityChallenge { e })
     }
 
-    pub fn combine_proofs(
-        self,
-        proofs: &[DLogEqualityProofShare],
-    ) -> Result<DLogEqualityProof, DLogEqualityProofError> {
-        let request_id = self.request_id;
-        if proofs.iter().any(|p| p.request_id != request_id) {
-            return Err(DLogEqualityProofError::RequestIdMismatch);
-        }
-
+    pub fn combine_proofs(self, proofs: &[DLogEqualityProofShare]) -> DLogEqualityProof {
         let mut s = ScalarField::zero();
         for proof in proofs {
             s += proof.s;
         }
 
-        Ok(DLogEqualityProof { e: self.e, s })
+        DLogEqualityProof { e: self.e, s }
     }
 }
 
@@ -187,15 +150,13 @@ mod tests {
         assert_eq!(public_key, public_key_);
 
         // Crete session
-        let request_id = Uuid::new_v4();
         let b = Affine::rand(&mut rng);
 
         // 1) Client requests commitments from all servers
         let mut sessions = Vec::with_capacity(num_parties);
         let mut commitments = Vec::with_capacity(num_parties);
         for x_ in x_shares.iter().cloned() {
-            let (session, comm) =
-                DLogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
+            let (session, comm) = DLogEqualitySession::partial_commitments(b, x_, &mut rng);
             sessions.push(session);
             commitments.push(comm);
         }
@@ -205,18 +166,17 @@ mod tests {
             &commitments,
             public_key,
             b,
-        )
-        .unwrap();
+        );
 
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, challenge.to_owned()).unwrap();
+            let proof = session.challenge(x_, challenge.to_owned());
             proofs.push(proof);
         }
 
         // 4) Client combines all proofs
-        let proof = challenge.combine_proofs(&proofs).unwrap();
+        let proof = challenge.combine_proofs(&proofs);
 
         // Verify the result and the proof
         let d = Projective::generator().into_affine();

@@ -1,7 +1,6 @@
 use crate::{
     ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofError, DLogEqualityProofShare,
-        PartialDLogEqualityCommitments,
+        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
     },
     dlog_equality::DLogEqualityProof,
 };
@@ -24,23 +23,12 @@ impl DLogEqualityChallenge {
         lagrange: &[ScalarField], // Lagrange coefficients for each share
         a: Affine,                // Combined public key of the provers
         b: Affine,
-    ) -> Result<(Affine, Self), DLogEqualityProofError> {
+    ) -> (Affine, Self) {
         assert_eq!(
             commitments.len(),
             lagrange.len(),
             "Number of commitments must match number of Lagrange coefficients"
         );
-        let request_id = commitments
-            .first()
-            .ok_or(DLogEqualityProofError::RequestIdMismatch)?
-            .request_id;
-        if commitments
-            .iter()
-            .skip(1)
-            .any(|c| c.request_id != request_id)
-        {
-            return Err(DLogEqualityProofError::RequestIdMismatch);
-        }
 
         let mut c = Projective::zero();
         let mut r1 = Projective::zero();
@@ -60,7 +48,7 @@ impl DLogEqualityChallenge {
 
         let e = crate::dlog_equality::challenge_hash(a, b, c, d, r1, r2);
 
-        Ok((c, DLogEqualityChallenge { request_id, e }))
+        (c, DLogEqualityChallenge { e })
     }
 
     /// Combines the proof shares of d+1 parties into a full proof.
@@ -72,23 +60,19 @@ impl DLogEqualityChallenge {
         self,
         proofs: &[DLogEqualityProofShare],
         lagrange: &[ScalarField], // Lagrange coefficients for each share
-    ) -> Result<DLogEqualityProof, DLogEqualityProofError> {
+    ) -> DLogEqualityProof {
         assert_eq!(
             proofs.len(),
             lagrange.len(),
             "Number of commitments must match number of Lagrange coefficients"
         );
-        let request_id = self.request_id;
-        if proofs.iter().any(|p| p.request_id != request_id) {
-            return Err(DLogEqualityProofError::RequestIdMismatch);
-        }
 
         let mut s = ScalarField::zero();
         for (lambda, proof) in lagrange.iter().zip(proofs) {
             s += proof.s * *lambda;
         }
 
-        Ok(DLogEqualityProof { e: self.e, s })
+        DLogEqualityProof { e: self.e, s }
     }
 }
 /// Compute the lagrange coeffs from given party indices
@@ -118,7 +102,6 @@ mod tests {
     use crate::ddlog_equality::DLogEqualitySession;
     use ark_ff::{PrimeField, UniformRand};
     use rand::{Rng, seq::IteratorRandom};
-    use uuid::Uuid;
 
     /// Evaluate the poly at the given x
     fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
@@ -215,7 +198,6 @@ mod tests {
         assert_eq!(public_key, public_key_);
 
         // Crete session and choose the used set of parties
-        let request_id = Uuid::new_v4();
         let b = Affine::rand(&mut rng);
         let used_parties = (1..=num_parties).choose_multiple(&mut rng, degree + 1);
         let lagrange = lagrange_from_coeff(&used_parties);
@@ -224,8 +206,7 @@ mod tests {
         let mut sessions = Vec::with_capacity(num_parties);
         let mut commitments = Vec::with_capacity(num_parties);
         for x_ in x_shares.iter().cloned() {
-            let (session, comm) =
-                DLogEqualitySession::partial_commitments(b, x_, request_id, &mut rng);
+            let (session, comm) = DLogEqualitySession::partial_commitments(b, x_, &mut rng);
             sessions.push(session);
             commitments.push(comm);
         }
@@ -237,19 +218,17 @@ mod tests {
             .map(|&i| commitments[i - 1].clone())
             .collect::<Vec<_>>();
 
-        let (c, challenge) =
-            DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
-                &used_commitments,
-                &lagrange,
-                public_key,
-                b,
-            )
-            .unwrap();
+        let (c, challenge) = DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
+            &used_commitments,
+            &lagrange,
+            public_key,
+            b,
+        );
 
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, challenge.to_owned()).unwrap();
+            let proof = session.challenge(x_, challenge.to_owned());
             proofs.push(proof);
         }
 
@@ -259,9 +238,7 @@ mod tests {
             .iter()
             .map(|&i| proofs[i - 1].clone())
             .collect::<Vec<_>>();
-        let proof = challenge
-            .combine_proofs_shamir(&used_proofs, &lagrange)
-            .unwrap();
+        let proof = challenge.combine_proofs_shamir(&used_proofs, &lagrange);
 
         // Verify the result and the proof
         let d = Projective::generator().into_affine();

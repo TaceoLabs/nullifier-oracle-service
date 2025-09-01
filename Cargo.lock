@@ -1978,6 +1978,7 @@ dependencies = [
  "ark-babyjubjub",
  "ark-ec",
  "ark-ff",
+ "ark-serialize",
  "criterion",
  "num-bigint",
  "poseidon2",
