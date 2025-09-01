@@ -1,11 +1,10 @@
-use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
-type Projective = ark_babyjubjub::EdwardsProjective;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 pub struct EdDSASignature {
@@ -33,9 +32,9 @@ impl EdDSASignature {
 
     pub fn sign(message: BaseField, sk: ScalarField) -> Self {
         let r = Self::deterministic_nonce(message, sk);
-        let nonce_r = Projective::generator().into_affine() * r;
+        let nonce_r = Affine::generator() * r;
 
-        let pk = Projective::generator().into_affine() * sk;
+        let pk = Affine::generator() * sk;
         let challenge = Self::challenge_hash(message, nonce_r.into_affine(), pk.into_affine());
         let c = Self::convert_base_to_scalar(challenge);
         let c = c.double().double().double(); // multiply by 8
@@ -68,7 +67,7 @@ impl EdDSASignature {
         let challenge = Self::challenge_hash(message, self.r, pk);
         let c = Self::convert_base_to_scalar(challenge);
         let pk = pk.into_group().double().double().double(); // multiply by 8
-        let lhs = Projective::generator() * self.s;
+        let lhs = Affine::generator() * self.s;
         let rhs = self.r + pk * c;
         lhs == rhs
     }
