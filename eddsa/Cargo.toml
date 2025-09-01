@@ -1,0 +1,20 @@
+[package]
+name = "eddsa"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-babyjubjub = { path = "../ark-babyjubjub" }
+ark-ff = "0.5.0"
+ark-ec = "0.5.0"
+blake3 = "1.8"
+num-bigint = "0.4.3"
+rand = "0.8"
+poseidon2 = { path = "../poseidon2" }

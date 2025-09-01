@@ -1,4 +1,4 @@
-use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
@@ -13,17 +13,16 @@ pub struct DLogEqualityProof {
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
-type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualityProof {
     /// Creates a proof which shows that C=x*B and A=x*D share the same dlog x. This proof can be verified using B, C, and A=x*D. D is currently hard coded as the generator of the group.
     pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
         let k = ScalarField::rand(rng);
-        let r1 = (Projective::generator() * k).into_affine();
+        let r1 = (Affine::generator() * k).into_affine();
         let r2 = (b * k).into_affine();
-        let a = (Projective::generator() * x).into_affine();
+        let a = (Affine::generator() * x).into_affine();
         let c = (b * x).into_affine();
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let e = challenge_hash(a, b, c, d, r1, r2);
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
@@ -46,6 +45,7 @@ impl DLogEqualityProof {
         }
 
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p.
+        // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
         let s_biguint: BigUint = self.s.into();
         if s_biguint >= ScalarField::MODULUS.into() {
             return false;
@@ -54,7 +54,7 @@ impl DLogEqualityProof {
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e = convert_base_to_scalar(self.e);
 
-        let r_1 = Projective::generator() * self.s - a * e;
+        let r_1 = d * self.s - a * e;
         if r_1.is_zero() {
             return false;
         }
@@ -115,7 +115,7 @@ mod tests {
     fn test_dlog_equality() {
         let mut rng = rand::thread_rng();
         let x = ScalarField::rand(&mut rng);
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let a = (d * x).into_affine();
         let b = Affine::rand(&mut rng);
         let c = (b * x).into_affine();
