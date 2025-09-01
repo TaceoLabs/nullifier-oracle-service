@@ -4,7 +4,8 @@ use crate::{
     },
     dlog_equality::DLogEqualityProof,
 };
-use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 
 type ScalarField = ark_babyjubjub::Fr;
@@ -41,7 +42,7 @@ impl DLogEqualityChallenge {
         }
 
         // Create the challenge hash
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let c = c.into_affine();
         let r1 = r1.into_affine();
         let r2 = r2.into_affine();
@@ -189,10 +190,10 @@ mod tests {
         let x_shares = share(x, num_parties, degree, &mut rng);
 
         // Create public keys
-        let public_key = (Projective::generator() * x).into_affine();
+        let public_key = (Affine::generator() * x).into_affine();
         let public_key_shares = x_shares
             .iter()
-            .map(|x| (Projective::generator() * x))
+            .map(|x| (Affine::generator() * x))
             .collect::<Vec<_>>();
         let public_key_ = reconstruct_random_pointshares(&public_key_shares, degree, &mut rng);
         assert_eq!(public_key, public_key_);
@@ -241,7 +242,7 @@ mod tests {
         let proof = challenge.combine_proofs_shamir(&used_proofs, &lagrange);
 
         // Verify the result and the proof
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
         assert!(
             proof.verify(public_key, b, c, d),

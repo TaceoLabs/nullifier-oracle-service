@@ -1,5 +1,5 @@
 use crate::dlog_equality::DLogEqualityProof;
-use ark_ec::{CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use rand::{CryptoRng, Rng};
@@ -61,7 +61,7 @@ impl DLogEqualitySession {
         rng: &mut (impl CryptoRng + Rng),
     ) -> (Self, PartialDLogEqualityCommitments) {
         let k_share = ScalarField::rand(rng);
-        let r1 = (Projective::generator() * k_share).into_affine();
+        let r1 = (Affine::generator() * k_share).into_affine();
         let r2 = (b * k_share).into_affine();
         let c_share = (b * x_share).into_affine();
 
@@ -105,7 +105,7 @@ impl DLogEqualityChallenge {
         }
 
         // Create the challenge hash
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         let c = c.into_affine();
         let r1 = r1.into_affine();
         let r2 = r2.into_affine();
@@ -141,10 +141,10 @@ mod tests {
         let x = x_shares.iter().fold(ScalarField::zero(), |acc, x| acc + x);
 
         // Create public keys
-        let public_key = (Projective::generator() * x).into_affine();
+        let public_key = (Affine::generator() * x).into_affine();
         let public_key_ = x_shares
             .iter()
-            .map(|x| (Projective::generator() * x).into_affine())
+            .map(|x| (Affine::generator() * x).into_affine())
             .fold(Projective::zero(), |acc, x| acc + x)
             .into_affine();
         assert_eq!(public_key, public_key_);
@@ -179,7 +179,7 @@ mod tests {
         let proof = challenge.combine_proofs(&proofs);
 
         // Verify the result and the proof
-        let d = Projective::generator().into_affine();
+        let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
         assert!(
             proof.verify(public_key, b, c, d),

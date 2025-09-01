@@ -1,4 +1,4 @@
-use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
@@ -13,15 +13,14 @@ pub struct DLogEqualityProof {
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
-type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualityProof {
     /// Creates a proof which shows that C=x*B and A=x*D share the same dlog x. This proof can be verified using B, C, and A=x*D. D is currently hard coded as the generator of the group.
     pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
         let k = ScalarField::rand(rng);
-        let r1 = (Projective::generator() * k).into_affine();
+        let r1 = (Affine::generator() * k).into_affine();
         let r2 = (b * k).into_affine();
-        let a = (Projective::generator() * x).into_affine();
+        let a = (Affine::generator() * x).into_affine();
         let c = (b * x).into_affine();
         let d = Affine::generator();
         let e = challenge_hash(a, b, c, d, r1, r2);
