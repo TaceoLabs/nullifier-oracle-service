@@ -113,6 +113,8 @@ impl EdDSAPublicKey {
     /// In particular, this uses a so-called "cofactored" verification, such that batched signature verification is possible.
     ///
     /// The only assumption is that both the public key and the nonce point R are canonical, i.e., their encoding is using valid field elements, which must be checked during deserialization.
+    ///
+    // TODO: The circom circuit does not do the excact same operations as are done here. In particular it does not do the full cofactored verification below.
     pub fn verify(&self, message: BaseField, signature: &EdDSASignature) -> bool {
         // 1. Reject the signature if s not in [0, L-1]
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p, if s is given as a BaseField element.
