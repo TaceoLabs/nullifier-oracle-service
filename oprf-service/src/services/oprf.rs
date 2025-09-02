@@ -4,22 +4,22 @@
 //! - Verify client Groth16 proofs over the provided BabyJubJub point
 //! - Produce partial discrete-log equality commitments via the [`CryptoDevice`]
 //! - Persist per-session randomness in the [`SessionStore`]
-use std::fmt;
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
-use ark_serialize::{CanonicalDeserialize, SerializationError};
-use base64ct::{Base64, Encoding};
 use eyre::Context;
-use oprf_core::ddlog_equality::DLogEqualityChallenge;
+use oprf_core::{
+    ark_serde_compat::{self, groth16::Groth16Proof},
+    ddlog_equality::{
+        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
+    },
+};
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-type Groth16Proof = ark_groth16::Proof<Bn254>;
-
 use crate::{
-    api::v1::oprf::{ChallengeRequest, OprfRequest},
     config::OprfConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{crypto_device::CryptoDevice, session_store::SessionStore},
@@ -29,18 +29,56 @@ use crate::{
 pub(crate) enum OprfServiceError {
     #[error("client proof did not verify")]
     InvalidProof,
-    #[error(transparent)]
-    MalformedBase64(#[from] base64ct::Error),
-    #[error("malformed groth16 proof: {0}")]
-    MalformedGrothProof(#[source] SerializationError),
-    #[error("malformed BabyJubJub point: {0}")]
-    MalformedPoint(#[source] SerializationError),
-    #[error("malformed DLog Challenge: {0}")]
-    MalformedDLogChallenge(#[source] SerializationError),
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
+}
+
+#[derive(Deserialize)]
+pub struct OprfRequest {
+    pub request_id: Uuid,
+    pub user_proof: Groth16Proof,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    pub point_a: ark_babyjubjub::EdwardsAffine,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OprfResponse {
+    pub request_id: Uuid,
+    pub commitments: PartialDLogEqualityCommitments,
+}
+
+#[derive(Deserialize)]
+pub struct ChallengeRequest {
+    pub request_id: Uuid,
+    pub challenge: DLogEqualityChallenge,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChallengeResponse {
+    pub request_id: Uuid,
+    pub proof_share: DLogEqualityProofShare,
+}
+
+impl fmt::Debug for OprfRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OprfRequest")
+            .field("req_id", &self.request_id)
+            .field("A", &self.point_a.to_string())
+            .field("proof", &"omitted")
+            .finish()
+    }
+}
+
+impl fmt::Debug for ChallengeRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChallengeRequest")
+            .field("req_id", &self.request_id)
+            .field("challenge", &"omitted")
+            .finish()
+    }
 }
 
 #[derive(Clone)]
@@ -48,36 +86,6 @@ pub(crate) struct OprfService {
     crypto_device: Arc<CryptoDevice>,
     session_store: SessionStore,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
-}
-
-pub(crate) struct InitOprfSessionRequest {
-    id: Uuid,
-    user_proof: Groth16Proof,
-    point_a: ark_babyjubjub::EdwardsAffine,
-}
-
-pub(crate) struct FinalizeOprfSessionRequestn {
-    id: Uuid,
-    challenge: DLogEqualityChallenge,
-}
-
-impl fmt::Debug for InitOprfSessionRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InitOprfSessionRequest")
-            .field("req_id", &self.id)
-            .field("A", &self.point_a.to_string())
-            .field("proof", &"omitted")
-            .finish()
-    }
-}
-
-impl fmt::Debug for FinalizeOprfSessionRequestn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FinishOprfSessionRequest")
-            .field("req_id", &self.id)
-            .field("challenge", &"omitted")
-            .finish()
-    }
 }
 
 impl OprfService {
@@ -102,51 +110,45 @@ impl OprfService {
     #[instrument(level = "debug", skip(self))]
     pub(crate) fn init_oprf_session(
         &self,
-        request: InitOprfSessionRequest,
-    ) -> Result<String, OprfServiceError> {
-        tracing::debug!("handling session request: {}", request.id);
+        request: OprfRequest,
+    ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
+        tracing::debug!("handling session request: {}", request.request_id);
         // Verify the user proof
-        self.verify_user_proof(&request.user_proof, request.point_a)?;
+        self.verify_user_proof(request.user_proof, request.point_a)?;
         // Partial commit through the crypto device
         let (session, comm) = self.crypto_device.partial_commit(request.point_a);
         // Store the randomness for finalize request
-        self.session_store.store(request.id, session);
-        // Serialize result to bytes
-        let bytes = comm.into_bytes().context("while serializing commitments")?;
+        self.session_store.store(request.request_id, session);
         tracing::debug!("handled session");
-        Ok(Base64::encode_string(&bytes))
+        Ok(comm)
     }
 
     #[instrument(level = "debug", skip(self))]
     pub(crate) fn finalize_oprf_session(
         &self,
-        request: FinalizeOprfSessionRequestn,
-    ) -> Result<String, OprfServiceError> {
-        tracing::debug!("handling challenge request: {}", request.id);
+        request: ChallengeRequest,
+    ) -> Result<DLogEqualityProofShare, OprfServiceError> {
+        tracing::debug!("handling challenge request: {}", request.request_id);
         // Retrieve the randomness from the previous step. If the request is not known, we return an error
         let session = self
             .session_store
-            .retrieve(request.id)
-            .ok_or_else(|| OprfServiceError::UnknownRequestId(request.id))?;
-        // Consume the randomness, produce the final proof share and serialize to bytes
-        let proof_share = self
-            .crypto_device
-            .challenge(session, request.challenge)
-            .into_bytes()
-            .context("while serializing proof share")?;
+            .retrieve(request.request_id)
+            .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
+        // Consume the randomness, produce the final proof share
+        let proof_share = self.crypto_device.challenge(session, request.challenge);
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
-        Ok(Base64::encode_string(&proof_share))
+        Ok(proof_share)
     }
 
     /// Verifies the client's Groth16 proof against the provided BabyJubJub point.
     #[instrument(level = "debug", skip_all)]
     fn verify_user_proof(
         &self,
-        proof: &Groth16Proof,
+        proof: Groth16Proof,
         input: ark_babyjubjub::EdwardsAffine,
     ) -> Result<(), OprfServiceError> {
-        let valid = Groth16::<Bn254>::verify_proof(&self.vk, proof, &[input.x, input.y])
+        let valid = Groth16::<Bn254>::verify_proof(&self.vk, &proof.into(), &[input.x, input.y])
             .context("while verifying user proof")?;
         if valid {
             tracing::debug!("proof valid");
@@ -155,41 +157,5 @@ impl OprfService {
             tracing::debug!("proof INVALID");
             Err(OprfServiceError::InvalidProof)
         }
-    }
-}
-
-impl TryFrom<OprfRequest> for InitOprfSessionRequest {
-    type Error = OprfServiceError;
-
-    /// Decodes an [`OprfRequest`] into an `InitOprfSessionRequest` by base64-decoding and deserializing compressed arkworks encodings of the proof and point.
-    fn try_from(value: OprfRequest) -> Result<Self, Self::Error> {
-        let proof_bytes = Base64::decode_vec(&value.user_proof)?;
-        let point_a_bytes = Base64::decode_vec(&value.point_a)?;
-
-        let user_proof = Groth16Proof::deserialize_compressed(proof_bytes.as_slice())
-            .map_err(OprfServiceError::MalformedGrothProof)?;
-        let point_a =
-            ark_babyjubjub::EdwardsAffine::deserialize_compressed(point_a_bytes.as_slice())
-                .map_err(OprfServiceError::MalformedPoint)?;
-        Ok(Self {
-            id: value.request_id,
-            user_proof,
-            point_a,
-        })
-    }
-}
-
-impl TryFrom<ChallengeRequest> for FinalizeOprfSessionRequestn {
-    type Error = OprfServiceError;
-
-    /// Decodes an [`ChallengeRequest`] into an `FinishOprfSessionRequest` by base64-decoding and deserializing compressed arkworks encodings of the [`DLogEqualityChallenge`].
-    fn try_from(value: ChallengeRequest) -> Result<Self, Self::Error> {
-        let challenge_bytes = Base64::decode_vec(&value.challenge)?;
-        let challenge = DLogEqualityChallenge::deserialize_compressed(challenge_bytes.as_slice())
-            .map_err(OprfServiceError::MalformedDLogChallenge)?;
-        Ok(Self {
-            id: value.request_id,
-            challenge,
-        })
     }
 }

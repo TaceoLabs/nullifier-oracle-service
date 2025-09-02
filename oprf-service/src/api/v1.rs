@@ -25,7 +25,7 @@ pub(crate) fn build(input_max_body_limit: usize) -> Router<AppState> {
         .allow_methods([http::Method::POST, http::Method::OPTIONS])
         .allow_origin(AllowOrigin::any());
     Router::new()
-        .nest("/api/v1", merged)
+        .nest("/oprf", merged)
         .merge(api::health::routes())
         .layer(cors)
 }

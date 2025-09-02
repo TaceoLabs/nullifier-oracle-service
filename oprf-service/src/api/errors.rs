@@ -27,8 +27,6 @@ pub enum ApiErrors {
     ExplicitError(ApiError),
     #[error("user is not authorized to perform this action")]
     Unauthorized,
-    #[error("user sent a malformed request: \"{0}\"")]
-    BadRequest(String),
     #[error("Cannot find resource: \"{0}\"")]
     NotFound(String),
     #[error(transparent)]
@@ -46,18 +44,6 @@ impl From<OprfServiceError> for ApiErrors {
         tracing::debug!("{value:?}");
         match value {
             OprfServiceError::InvalidProof => ApiErrors::Unauthorized,
-            OprfServiceError::MalformedBase64(_) => {
-                ApiErrors::BadRequest(String::from("malformed base64"))
-            }
-            OprfServiceError::MalformedGrothProof(_) => {
-                ApiErrors::BadRequest(String::from("malformed Groth16 proof"))
-            }
-            OprfServiceError::MalformedPoint(_) => ApiErrors::BadRequest(String::from(
-                "malformed BabyJubJub point A (must be Affine)",
-            )),
-            OprfServiceError::MalformedDLogChallenge(_) => {
-                ApiErrors::BadRequest(String::from("malformed challenge"))
-            }
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
             OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
         }
@@ -73,7 +59,6 @@ impl IntoResponse for ApiErrors {
             ApiErrors::InternalSeverError(inner) => {
                 handle_internal_server_error(inner).into_response()
             }
-            ApiErrors::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
             ApiErrors::Unauthorized => (
                 StatusCode::UNAUTHORIZED,
                 "User is not authorized to perform this action",
