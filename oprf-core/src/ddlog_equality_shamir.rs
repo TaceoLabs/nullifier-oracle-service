@@ -6,7 +6,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ff::{PrimeField, Zero};
+use ark_ff::Zero;
 
 type ScalarField = ark_babyjubjub::Fr;
 type Affine = ark_babyjubjub::EdwardsAffine;
@@ -76,118 +76,19 @@ impl DLogEqualityChallenge {
         DLogEqualityProof { e: self.e, s }
     }
 }
-/// Compute the lagrange coeffs from given party indices
-pub fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
-    let num = coeffs.len();
-    let mut res = Vec::with_capacity(num);
-    for i in coeffs.iter() {
-        let mut num = F::one();
-        let mut den = F::one();
-        let i_ = F::from(*i as u64);
-        for j in coeffs.iter() {
-            if i != j {
-                let j_ = F::from(*j as u64);
-                num *= j_;
-                den *= j_ - i_;
-            }
-        }
-        let res_ = num * den.inverse().unwrap();
-        res.push(res_);
-    }
-    res
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ddlog_equality::DLogEqualitySession;
-    use ark_ff::{PrimeField, UniformRand};
-    use rand::{Rng, seq::IteratorRandom};
-
-    /// Evaluate the poly at the given x
-    fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
-        debug_assert!(!poly.is_empty());
-        let mut iter = poly.iter().rev();
-        let mut eval = iter.next().unwrap().to_owned();
-        for coeff in iter {
-            eval *= x;
-            eval += coeff;
-        }
-        eval
-    }
-
-    /// Share
-    fn share<F: PrimeField, R: Rng>(
-        secret: F,
-        num_shares: usize,
-        degree: usize,
-        rng: &mut R,
-    ) -> Vec<F> {
-        let mut shares = Vec::with_capacity(num_shares);
-        let mut coeffs = Vec::with_capacity(degree + 1);
-        coeffs.push(secret);
-        for _ in 0..degree {
-            coeffs.push(F::rand(rng));
-        }
-        for i in 1..=num_shares {
-            let share = evaluate_poly(&coeffs, F::from(i as u64));
-            shares.push(share);
-        }
-        shares
-    }
-
-    /// Reconstruct the from its shares and lagrange coefficients.
-    fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
-        debug_assert_eq!(shares.len(), lagrange.len());
-        let mut res = F::zero();
-        for (s, l) in shares.iter().zip(lagrange.iter()) {
-            res += *s * l
-        }
-
-        res
-    }
-
-    /// Reconstructs a curve point from its Shamir shares and lagrange coefficients.
-    fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField]) -> C {
-        debug_assert_eq!(shares.len(), lagrange.len());
-        let mut res = C::zero();
-        for (s, l) in shares.iter().zip(lagrange.iter()) {
-            res += *s * l
-        }
-
-        res
-    }
-
-    #[expect(unused)]
-    fn reconstruct_random_shares<F: PrimeField, R: Rng>(
-        shares: &[F],
-        degree: usize,
-        rng: &mut R,
-    ) -> F {
-        let num_parties = shares.len();
-        let parties = (1..=num_parties).choose_multiple(rng, degree + 1);
-        let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
-        let lagrange = lagrange_from_coeff(&parties);
-        reconstruct(&shares, &lagrange)
-    }
-
-    fn reconstruct_random_pointshares<C: CurveGroup, R: Rng>(
-        shares: &[C],
-        degree: usize,
-        rng: &mut R,
-    ) -> C {
-        let num_parties = shares.len();
-        let parties = (1..=num_parties).choose_multiple(rng, degree + 1);
-        let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
-        let lagrange = lagrange_from_coeff(&parties);
-        reconstruct_point(&shares, &lagrange)
-    }
+    use crate::{ddlog_equality::DLogEqualitySession, shamir};
+    use ark_ff::UniformRand;
+    use rand::seq::IteratorRandom;
 
     fn test_distributed_dlog_equality(num_parties: usize, degree: usize) {
         let mut rng = rand::thread_rng();
 
         let x = ScalarField::rand(&mut rng);
-        let x_shares = share(x, num_parties, degree, &mut rng);
+        let x_shares = shamir::share(x, num_parties, degree, &mut rng);
 
         // Create public keys
         let public_key = (Affine::generator() * x).into_affine();
@@ -195,13 +96,14 @@ mod tests {
             .iter()
             .map(|x| (Affine::generator() * x))
             .collect::<Vec<_>>();
-        let public_key_ = reconstruct_random_pointshares(&public_key_shares, degree, &mut rng);
+        let public_key_ =
+            shamir::reconstruct_random_pointshares(&public_key_shares, degree, &mut rng);
         assert_eq!(public_key, public_key_);
 
         // Crete session and choose the used set of parties
         let b = Affine::rand(&mut rng);
         let used_parties = (1..=num_parties).choose_multiple(&mut rng, degree + 1);
-        let lagrange = lagrange_from_coeff(&used_parties);
+        let lagrange = shamir::lagrange_from_coeff(&used_parties);
 
         // 1) Client requests commitments from all servers
         let mut sessions = Vec::with_capacity(num_parties);
