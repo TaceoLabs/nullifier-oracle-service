@@ -19,7 +19,7 @@ rand_chacha.workspace = true
 rand.workspace = true
 uuid = { version = "1.18.0", features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }
-eddsa = { path = "../eddsa" }
+eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
 thiserror = "2.0.16"
 num-bigint = "0.4.3"
 

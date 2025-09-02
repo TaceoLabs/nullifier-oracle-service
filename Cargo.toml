@@ -1,5 +1,11 @@
 [workspace]
-members = ["ark-babyjubjub", "oprf-service", "oprf-core", "poseidon2", "eddsa"]
+members = [
+    "ark-babyjubjub",
+    "oprf-service",
+    "oprf-core",
+    "poseidon2",
+    "eddsa-babyjubjub",
+]
 resolver = "3"
 
 [workspace.package]

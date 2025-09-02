@@ -1,6 +1,6 @@
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};
-use eddsa::EdDSASignature;
+use eddsa_babyjubjub::EdDSASignature;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
