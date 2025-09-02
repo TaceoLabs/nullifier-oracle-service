@@ -18,3 +18,4 @@ blake3 = "1.8"
 num-bigint = "0.4.3"
 rand = "0.8"
 poseidon2 = { path = "../poseidon2" }
+zeroize = "1"
