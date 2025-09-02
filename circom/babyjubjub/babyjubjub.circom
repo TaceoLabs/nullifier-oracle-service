@@ -107,7 +107,7 @@ template BabyJubJubScalarMulFix(BASE) {
     signal bits[251] <== Num2Bits(251)(e.f);
     signal result[2] <== EscalarMulFix(251, BASE)(bits);
     out.x <== result[0];
-    out.x <== result[1];
+    out.y <== result[1];
 }
 
 // Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
@@ -117,7 +117,7 @@ template BabyJubJubScalarMul() {
     output BabyJubJubPoint() { twisted_edwards } out;
 
     signal bits[251] <== Num2Bits(251)(e.f);
-    signal result[2] <== EscalarMulAny(251)(bits, [p.x,p.y]); 
+    signal result[2] <== EscalarMulAny(251)(bits, [p.x,p.y]);
     out.x <== result[0];
     out.y <== result[1];
 }
@@ -136,7 +136,7 @@ template BabyJubJubScalarMulBaseField() {
 
     signal bits[254] <== Num2Bits_strict()(e.f);
     // performs the module reduction correctly
-    signal result[2] <== EscalarMulAny(254)(bits, [p.x,p.y]); 
+    signal result[2] <== EscalarMulAny(254)(bits, [p.x,p.y]);
     out.x <== result[0];
     out.y <== result[1];
 }
@@ -154,7 +154,7 @@ template BabyJubJubIsInFr() {
 
     signal bits[254] <== Num2Bits_strict()(in);
     // CompConstant enforces <=, so compare against (fr - 1).
-    signal check <== CompConstant(fr - 1)(bits);    
+    signal check <== CompConstant(fr - 1)(bits);
     check === 0;
     out.f <== in;
 }
@@ -178,4 +178,3 @@ template BabyJubJubCheckIsIdentity() {
     p.x === 0;
     p.y === 1;
 }
-
