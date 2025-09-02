@@ -1,0 +1,18 @@
+[package]
+name = "serde-compat"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-bn254 = "0.5.0"
+ark-ec = "0.5.0"
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
+ark-babyjubjub = { path = "../ark-babyjubjub" }
