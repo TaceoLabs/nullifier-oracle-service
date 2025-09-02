@@ -92,7 +92,7 @@ impl OPrfService {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindedOPrfRequest {
     /// request id
-    request_id: Uuid,
+    pub(crate) request_id: Uuid,
     /// the blinded query
     pub(crate) blinded_query: Affine,
 }
@@ -102,9 +102,9 @@ pub struct BlindingFactor {
     /// the blinding factor used to blind the query
     pub(crate) factor: ScalarField,
     /// original query
-    query: BaseField,
+    pub(crate) query: BaseField,
     // request id, to track the response to the request
-    request_id: Uuid,
+    pub(crate) request_id: Uuid,
 }
 impl BlindingFactor {
     pub fn prepare(self) -> PreparedBlindingFactor {
@@ -121,7 +121,7 @@ impl BlindingFactor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
     /// the inverse of the blinding factor used to blind the query
-    factor: ScalarField,
+    pub(crate) factor: ScalarField,
     /// original query
     query: BaseField,
     // request id, to track the response to the request
@@ -133,7 +133,7 @@ pub struct BlindedOPrfResponse {
     /// request id, to track the response to the request
     request_id: Uuid,
     /// the blinded response
-    blinded_response: Affine,
+    pub(crate) blinded_response: Affine,
 }
 
 pub struct OPrfClient {
