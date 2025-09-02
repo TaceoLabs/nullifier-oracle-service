@@ -94,13 +94,13 @@ pub struct BlindedOPrfRequest {
     /// request id
     request_id: Uuid,
     /// the blinded query
-    blinded_query: Affine,
+    pub(crate) blinded_query: Affine,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindingFactor {
     /// the blinding factor used to blind the query
-    factor: ScalarField,
+    pub(crate) factor: ScalarField,
     /// original query
     query: BaseField,
     // request id, to track the response to the request

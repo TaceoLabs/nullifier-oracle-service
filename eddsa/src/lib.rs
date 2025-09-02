@@ -8,8 +8,8 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 pub struct EdDSASignature {
-    pub(crate) r: Affine,
-    pub(crate) s: ScalarField,
+    pub r: Affine,
+    pub s: ScalarField,
 }
 
 impl EdDSASignature {
