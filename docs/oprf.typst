@@ -574,7 +574,7 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
     [Semaphore (d=32)], [9383], [Sempahore proof with MT depth 32.],
     table.hline(stroke: 0.05em),
     [OprfQuery (d=32)], [17325], [Full OPRF query proof $pi_1$],
-    [OprfNullifier $pi_2$ (d=32)], [32414], [Full OPRF nullifier proof $pi_2$],
+    [OprfNullifier (d=32)], [32414], [Full OPRF nullifier proof $pi_2$],
   ),
   caption: [Constraint cost for various Circom ZK building blocks.],
 ) <tab:circom_constraints>
@@ -625,7 +625,7 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
 
     @scheme:proposal1 has the following (undesired) property: If party $P_j$ files a complaint against $P_i$ (round 3) the share $x_(i,j)$ is leaked. To prevent this, one can build the complaint round differently. If $P_j$ makes a complaint against $P_i$, then $P_i$ has to post a ZK proof that the share was derived correctly (using the commitments to the polynomials on chain) and that the encryption of the share on chain matches the correctly derived share. If that is the case, $P_j$ filed a wrong complaint and is slashed. Otherwise, or if $P_i$ fails to provide a proof in time, $P_i$ is slashed.
 
-    The cost of the ZK proof is $t + 1$ BabyJubJubScalarMulFix for checking the commitments, one  BabyJubJubScalarMulFix plus one BabyJubJubScalarMulAny for deriving a secret key for encryption using Diffie-Hellman key agreement with the public keys of $P_i$ and $P_j$, a Poseidon2 based encryption, and a recomputation of the polynomial evaluation over $bb(F)_q$ for deriving the correct share. Since the polynomial evaluation is over a field which is not native to the ZK proof, this evaluation is estimated to be the most costly part of the proof. Implementing an additionModQ gadget requires an estimate of 256 constraints, whereas multiplication mod $q$ can be implemented as a double-and-add ladder since the multiplications are with small constants (the evaluation point is the party id $j$) when using Horner's polynomial evaluation technique. Furthermore, this evaluation scales linearly with the degree of the polynomial $t$.
+    The cost of the ZK proof is $t + 1$ BabyJubJubScalarMulFix for checking the commitments, one  BabyJubJubScalarMulFix plus one BabyJubJubScalarMulAny for deriving a secret key for encryption using Diffie-Hellman key agreement with the public keys of $P_i$ and $P_j$, a Poseidon2 based encryption, and a recomputation of the polynomial evaluation over $bb(F)_q$ for deriving the correct share. Since the polynomial evaluation is over a field which is not native to the ZK proof, this evaluation is estimated to be the most costly part of the proof. Implementing an additionModQ gadget requires an estimate of 500 constraints, whereas multiplication mod $q$ can be implemented as a double-and-add ladder since the multiplications are with small constants (the evaluation point is the party id $j$) when using Horner's polynomial evaluation technique. Furthermore, this evaluation scales linearly with the degree of the polynomial $t$.
 
     To allow this complaint proof to be generic for thresholds which might change later on, the circuit can be modified to an upper bound of $t'$, and have the concrete $t$ as a public input. This requires to Cmux each random coeeficient with 0 in case its index is greater $t$ and recomputing $t'$ commitments using BabyJubJubScalarMulFix. Furthermore, it could make sense to accumulate the commitments using Poseidon2 to reduce the number of public inputs.
 
@@ -668,7 +668,7 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
       - $n$ BabyJubJubScalarMulAny for deriving the secret keys.
       - $n$ Poseidon2 hashes for the encryption.
 
-    Similar to the description for  @scheme:proposal1, the cost of the ZK proof is dominated by the $n$ polynomial evaluations in the non-native field $bb(F)_q$. Furthermore, constraint size scales linearly in both the degree $t$ and the number of parties $n$, making the proof very costly for larger number of parties. A first estimate for an untested implementation gives around 1.4 million R1CS constraints for $n=30$ and $t=15$.
+    Similar to the description for  @scheme:proposal1, the cost of the ZK proof is dominated by the $n$ polynomial evaluations in the non-native field $bb(F)_q$. Furthermore, constraint size scales linearly in both the degree $t$ and the number of parties $n$, making the proof very costly for larger number of parties. A first estimate for an untested implementation gives around 1 million R1CS constraints for $n=30$ and $t=15$.
 
 
     Alternatively, one can think of producing $n$ proofs for the $n$ derived shares instead of proving everything in one large proof, which comes at the disadvantage of having to pay the on-chain gas fee $n$ times.

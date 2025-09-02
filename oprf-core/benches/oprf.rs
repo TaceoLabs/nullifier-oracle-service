@@ -6,8 +6,8 @@ use ark_ff::UniformRand;
 use criterion::*;
 use oprf_core::{
     ddlog_equality::{DLogEqualityChallenge, DLogEqualitySession},
-    ddlog_equality_shamir::lagrange_from_coeff,
     oprf::{OPrfClient, OPrfKey, OPrfService},
+    shamir::lagrange_from_coeff,
 };
 use rand::seq::IteratorRandom;
 
