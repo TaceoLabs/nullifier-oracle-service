@@ -956,6 +956,7 @@ dependencies = [
  "num-bigint",
  "poseidon2",
  "rand 0.8.5",
+ "zeroize",
 ]
 
 [[package]]

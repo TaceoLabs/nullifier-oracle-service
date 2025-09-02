@@ -1,6 +1,5 @@
-use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};
-use eddsa_babyjubjub::EdDSASignature;
+use eddsa_babyjubjub::EdDSAPrivateKey;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
@@ -10,7 +9,6 @@ use crate::oprf::OPrfClient;
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
-type Affine = ark_babyjubjub::EdwardsAffine;
 
 #[derive(Debug, Clone)]
 pub struct QueryProofInput<const MAX_DEPTH: usize> {
@@ -61,24 +59,24 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
 
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         // Random inputs
-        let sk = ScalarField::rand(rng);
+        let sk = EdDSAPrivateKey::random(rng);
         let nonce = BaseField::rand(rng);
         let index_u64 = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
         let index = BaseField::from(index_u64);
         let siblings: [BaseField; MAX_DEPTH] = array::from_fn(|_| BaseField::rand(rng));
 
         // Calculate
-        let pk = (Affine::generator() * sk).into_affine();
-        let signature = EdDSASignature::sign(nonce, sk);
+        let pk = sk.public();
+        let signature = sk.sign(nonce);
 
-        let oprf_client = OPrfClient::new(pk);
+        let oprf_client = OPrfClient::new(pk.pk);
         let (blinded_request, blinding_factor) = oprf_client.blind_query(index, rng);
 
-        let merkkle_root = Self::merkle_root(pk.x, pk.y, &siblings, index_u64);
+        let merkkle_root = Self::merkle_root(pk.pk.x, pk.pk.y, &siblings, index_u64);
 
         Self {
             nonce,
-            pk: [pk.x, pk.y],
+            pk: [pk.pk.x, pk.pk.y],
             s: signature.s,
             r: [signature.r.x, signature.r.y],
             merkle_root: merkkle_root,
