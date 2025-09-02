@@ -7,6 +7,8 @@ type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
+/// An EdDSA signature on the Baby Jubjub curve, using Poseidon2 as the internal hash function for the Fiat-Shamir transform.
+#[derive(Debug, Clone)]
 pub struct EdDSASignature {
     pub r: Affine,
     pub s: ScalarField,
@@ -19,6 +21,10 @@ impl EdDSASignature {
         ScalarField::from_le_bytes_mod_order(&bytes)
     }
 
+    /// This function produces a nonce deterministically from the message and the secret key.
+    ///
+    /// This is a standard technique to avoid nonce reuse and to make the signature deterministic.
+    /// It deviates a bit from the Ed25519, in that the we do not hash the secret key twice to get the nonce-generation secret.
     fn deterministic_nonce(message: BaseField, sk: ScalarField) -> ScalarField {
         // We hash the private key and the message to produce the nonce r
         let mut hasher = blake3::Hasher::new();
@@ -30,6 +36,9 @@ impl EdDSASignature {
         ScalarField::from_le_bytes_mod_order(&output)
     }
 
+    /// Sign a message (a BaseField element) with the given secret key (a ScalarField element).
+    ///
+    /// The message should be hashed to a BaseField element if it is not encodable as one before signing.
     pub fn sign(message: BaseField, sk: ScalarField) -> Self {
         let r = Self::deterministic_nonce(message, sk);
         let nonce_r = Affine::generator() * r;
@@ -37,7 +46,6 @@ impl EdDSASignature {
         let pk = Affine::generator() * sk;
         let challenge = Self::challenge_hash(message, nonce_r.into_affine(), pk.into_affine());
         let c = Self::convert_base_to_scalar(challenge);
-        let c = c.double().double().double(); // multiply by 8
         let s = r + c * sk;
 
         Self {
@@ -46,7 +54,23 @@ impl EdDSASignature {
         }
     }
 
+    /// Verify the signature against the given message and public key.
+    ///
+    /// This verification function follows <https://eprint.iacr.org/2020/1244.pdf> to avoid common pitfalls.
+    /// In particular, this uses a so-called "cofactored" verification, such that batched signature verification is possible.
+    ///
+    /// The only assumption is that both the public key and the nonce point R are canonical, i.e., their encoding is using valid field elements, which must be checked during deserialization.
     pub fn verify(&self, message: BaseField, pk: Affine) -> bool {
+        // 1. Reject the signature if s not in [0, L-1]
+        // The following check is required to prevent malleability of the proofs by using different s, such as s + p, if s is given as a BaseField element.
+        // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
+        let s_biguint: BigUint = self.s.into();
+        if s_biguint >= ScalarField::MODULUS.into() {
+            return false;
+        }
+
+        // 2. Reject the signature if the public key A is one of 8 small order points.
+        // This boils down to the following checks.
         if [pk, self.r]
             .iter()
             .any(|p| !p.is_on_curve() || !p.is_in_correct_subgroup_assuming_on_curve())
@@ -56,23 +80,23 @@ impl EdDSASignature {
         if [pk, self.r].iter().any(|p| p.is_zero()) {
             return false;
         }
+        // 3. Reject the signature if A or R are non-canonical. We do not do this directly here, instead leaving this to the rust type system which ensure that the field elements are canonical.
+        // All deserialization routines need to ensure that only canonical field elements are accepted.
 
-        // The following check is required to prevent malleability of the proofs by using different s, such as s + p, if s is given as a BaseField element.
-        // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
-        let s_biguint: BigUint = self.s.into();
-        if s_biguint >= ScalarField::MODULUS.into() {
-            return false;
-        }
-
+        // 4. Compute the hash and reduce it mod the scalar field order L
         let challenge = Self::challenge_hash(message, self.r, pk);
         let c = Self::convert_base_to_scalar(challenge);
-        let pk = pk.into_group().double().double().double(); // multiply by 8
-        let lhs = Affine::generator() * self.s;
-        let rhs = self.r + pk * c;
-        lhs == rhs
+        // 5. Accept if 8*(s*G) = 8*R + 8*(c*Pk)
+        // Implemented by checking that 8(s*G - R - c*Pk) = 0, according to Section 4 of the above paper.
+        let mut v = (Affine::generator() * self.s) - self.r - (pk * c);
+        // multiply by the cofactor 8
+        v.double_in_place();
+        v.double_in_place();
+        v.double_in_place();
+        v.is_zero()
     }
 
-    // TODO maybe use t=8 here?
+    // TODO maybe use a poseidon variant with t=8 here?
     fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
         let poseidon2_4 = Poseidon2::<_, 4, 5>::default();
         let mut state = poseidon2_4.permutation(&[BaseField::zero(), nonce_r.x, nonce_r.y, pk.x]);
