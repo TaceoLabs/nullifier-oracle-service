@@ -13,12 +13,9 @@ readme.workspace = true
 [dependencies]
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-bn254 = "0.5.0"
-ark-ec = "0.5.0"
 ark-ff = "0.5.0"
 ark-groth16 = "0.5.0"
-ark-serialize = "0.5.0"
 axum = "0.8.4"
-base64ct = { version = "1.8.0", features = ["alloc"] }
 clap = { version = "4.5.46", features = ["derive", "env"] }
 eyre.workspace = true
 git-version = "0.3.9"
@@ -32,6 +29,7 @@ rand.workspace = true
 rustls = "0.23.31"
 secrecy = "0.10.3"
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "737bb0fc543214191e0448963b5a1ab279119f98" }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
