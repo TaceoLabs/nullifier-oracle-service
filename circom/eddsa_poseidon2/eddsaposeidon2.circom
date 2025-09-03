@@ -42,28 +42,15 @@ template EdDSAPoseidon2Verifier() {
     BabyJubJubScalarField() s_f <== s_range.out;
 
     // Calculate the h = H(R,A, msg)
-
-    // TODO use t=8 here?
-    component hash1 = Poseidon2(4);
-    hash1.in[0] <== 0;
-    hash1.in[1] <== Rx;
-    hash1.in[2] <== Ry;
-    hash1.in[3] <== Ax;
-    component hash = Poseidon2(4);
-    hash.in[0] <== hash1.out[0];
-    hash.in[1] <== hash1.out[1] + Ay;
-    hash.in[2] <== hash1.out[2] + M;
-    hash.in[3] <== hash1.out[3];
-
-    // component hash = Poseidon2(8);
-    // hash.in[0] <== 0;
-    // hash.in[1] <== Rx;
-    // hash.in[2] <== Ry;
-    // hash.in[3] <== Ax;
-    // hash.in[4] <== Ay;
-    // hash.in[5] <== M;
-    // hash.in[6] <== 0;
-    // hash.in[7] <== 0;
+    component hash = Poseidon2(8);
+    hash.in[0] <== 0;
+    hash.in[1] <== Rx;
+    hash.in[2] <== Ry;
+    hash.in[3] <== Ax;
+    hash.in[4] <== Ay;
+    hash.in[5] <== M;
+    hash.in[6] <== 0;
+    hash.in[7] <== 0;
 
     // We check that R is on the curve.
     // This is not strictly necessary for security, but since it only adds 3 constraints we do it anyway.

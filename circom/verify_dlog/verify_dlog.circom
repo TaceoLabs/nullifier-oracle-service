@@ -13,32 +13,24 @@ template ComputeChallengeHash() {
     input BabyJubJubPoint() r2;
     output signal challenge;
 
-    signal ins[4][4];
-    signal perms[4][4];
-    ins[0] <== [0, a.x, a.y, b.x];
-
-    perms[0] <== Poseidon2(4)(ins[0]);
-    ins[1][0] <== perms[0][0];
-    ins[1][1] <== perms[0][1] + b.y;
-    ins[1][2] <== perms[0][2] + c.x;
-    ins[1][3] <== perms[0][3] + c.y;
-
-    perms[1] <== Poseidon2(4)(ins[1]);
-    ins[2][0] <== perms[1][0];
-
-    // We add the generator point to the sponge after adding A,B and C.
-    ins[2][1] <== perms[1][1] + 5299619240641551281634865583518297030282874472190772894086521144482721001553;
-    ins[2][2] <== perms[1][2] + 16950150798460657717958625567821834550301663161624707787222815936182638968203;
-    ins[2][3] <== perms[1][3] + r1.x;
-
-    perms[2] <== Poseidon2(4)(ins[2]);
-    ins[3][0] <== perms[2][0];
-    ins[3][1] <== perms[2][1] + r1.y;
-    ins[3][2] <== perms[2][2] + r2.x;
-    ins[3][3] <== perms[2][3] + r2.y;
-
-    perms[3] <== Poseidon2(4)(ins[3]);
-    challenge <== perms[3][1];
+    component poseidon = Poseidon2(16);
+    poseidon.in[0] <== 0;
+    poseidon.in[1] <== a.x;
+    poseidon.in[2] <== a.y;
+    poseidon.in[3] <== b.x;
+    poseidon.in[4] <== b.y;
+    poseidon.in[5] <== c.x;
+    poseidon.in[6] <== c.y;
+    poseidon.in[7] <== 5299619240641551281634865583518297030282874472190772894086521144482721001553;
+    poseidon.in[8] <== 16950150798460657717958625567821834550301663161624707787222815936182638968203;
+    poseidon.in[9] <== r1.x;
+    poseidon.in[10] <== r1.y;
+    poseidon.in[11] <== r2.x;
+    poseidon.in[12] <== r2.y;
+    poseidon.in[13] <== 0;
+    poseidon.in[14] <== 0;
+    poseidon.in[15] <== 0;
+    challenge <== poseidon.out[1];
 }
 
 

@@ -75,29 +75,26 @@ pub(crate) fn challenge_hash(
     r1: Affine,
     r2: Affine,
 ) -> BaseField {
-    // TODO: Poseidon with statesize of at least 6*2?
+    let poseidon = Poseidon2::<_, 16, 5>::default();
     let hash_input = [
         BaseField::zero(),
         a.x,
         a.y,
-        b.x, //b.y, c.x, c.y, d.x, d.y, r1.x, r1.y, r2.x, r2.y,
+        b.x,
+        b.y,
+        c.x,
+        c.y,
+        d.x,
+        d.y,
+        r1.x,
+        r1.y,
+        r2.x,
+        r2.y,
+        BaseField::zero(),
+        BaseField::zero(),
+        BaseField::zero(),
     ];
-    let poseidon = Poseidon2::<_, 4, 5>::default();
-    let mut state = poseidon.permutation(&hash_input);
-    state[1] += b.y;
-    state[2] += c.x;
-    state[3] += c.y;
-    let mut state = poseidon.permutation(&state);
-    state[1] += d.x;
-    state[2] += d.y;
-    state[3] += r1.x;
-    let mut state = poseidon.permutation(&state);
-    state[1] += r1.y;
-    state[2] += r2.x;
-    state[3] += r2.y;
-    let state = poseidon.permutation(&state);
-
-    state[1] // output first state element as hash output
+    poseidon.permutation(&hash_input)[1] // output first state element as hash output
 }
 
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.

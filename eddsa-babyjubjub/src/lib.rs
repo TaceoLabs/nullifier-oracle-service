@@ -156,13 +156,18 @@ pub struct EdDSASignature {
     pub s: ScalarField,
 }
 
-// TODO maybe use a poseidon variant with t=8 here?
 fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
-    let poseidon2_4 = Poseidon2::<_, 4, 5>::default();
-    let mut state = poseidon2_4.permutation(&[BaseField::zero(), nonce_r.x, nonce_r.y, pk.x]);
-    state[1] += pk.y;
-    state[2] += message;
-    poseidon2_4.permutation(&state)[1]
+    let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
+    poseidon2_8.permutation(&[
+        BaseField::zero(),
+        nonce_r.x,
+        nonce_r.y,
+        pk.x,
+        pk.y,
+        message,
+        BaseField::zero(),
+        BaseField::zero(),
+    ])[1]
 }
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
 pub(crate) fn convert_base_to_scalar(f: BaseField) -> ScalarField {
