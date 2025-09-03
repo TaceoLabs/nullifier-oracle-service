@@ -5,7 +5,8 @@ mod poseidon2;
 pub use params::Poseidon2Params;
 pub use params::{
     bn254_t2::POSEIDON2_BN254_T2_PARAMS, bn254_t3::POSEIDON2_BN254_T3_PARAMS,
-    bn254_t4::POSEIDON2_BN254_T4_PARAMS,
+    bn254_t4::POSEIDON2_BN254_T4_PARAMS, bn254_t8::POSEIDON2_BN254_T8_PARAMS,
+    bn254_t12::POSEIDON2_BN254_T12_PARAMS, bn254_t16::POSEIDON2_BN254_T16_PARAMS,
 };
 pub use poseidon2::Poseidon2;
 

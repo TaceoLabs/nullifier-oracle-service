@@ -18,6 +18,14 @@ describe("Poseidon2 t=8 kats", function () {
     const witness = await circuit.calculateWitness({ in: [0, 1, 2, 3, 4, 5, 6, 7] }, true);
     await circuit.assertOut(witness, {
       out: [
+        0x1d1a50bcde871247856df135d56a4ca61af575f1140ed9b1503c77528cf345dfn,
+        0x2d3943cf476ed49fd8a636660d8a76c83b55f07d06bc082005ad7eb1a21791c5n,
+        0x2fcda2dd846fadfde8104b1d05175dcf3cf8bd698ed8ea3ad2fbcf9c06e00310n,
+        0x28811ac7e0829171f9d3d81f1c0ff8f34b360d407a16b331a1cb6b5d992de094n,
+        0x2c07c1817cfccb67c1297935514885c07abad5a0e15477f6c076c0b0fb1ad6f3n,
+        0x1b6114397199bc44e37437dd3ba1754dff007d3315bfcdcdc14ec27d02452f52n,
+        0x1431250baf36fb61a07618caee4dd2f500da339a05c553e8f529a3349e617aa2n,
+        0x0b19bfa00c8f1d505074130e7f8b49a8624b1905e280ceca5ba11099b081b265n
       ],
     });
     await circuit.checkConstraints(witness);
