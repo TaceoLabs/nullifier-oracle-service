@@ -1,6 +1,8 @@
 #import "preamble.typst": *
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
+#import "@preview/frame-it:1.2.0": *
 #show: thmrules.with(qed-symbol: $square$)
+
 
 /// Author creation function
 #let author(name, oicd: none, insts: ()) = {
@@ -124,6 +126,7 @@
 //// SUPER CONFIGS
 #set super(size: 8pt)
 
+#show math.equation.where(block: true): set block(spacing: 1em)
 
 // Title row.
 #align(center)[
@@ -202,6 +205,13 @@
 //// PAR CONFIG MAIN
 #set par(justify: true, first-line-indent: PAR_INDENT)
 
+#let (remark, implementation) = frames(
+  remark: ("Remark",),
+  implementation: ("Implementation Note",),
+)
+
+#show: frame-style(styles.hint)
+
 
 #outline()
 
@@ -235,6 +245,94 @@ The TwoHashDH OPRF was introduced in @JareckiL10 and its basic construction is g
   supplement: [Scheme],
 )
 <fig:twohashdh>
+
+
+== BabyJubJub
+
+BabyJubJub is an elliptic curve designed for efficient operations inside zk-SNARKs that operate over the BN254 scalar field. The main efficiency aspect stem from the fact that the BN254 scalar field is the base field of BabyJubJub and therefore we can directly operate on the $(x,y)$ coordinate representation in the proof system without having to use foreign field arithmetic, which is notoriously expensive. BabyJubJub is defined in EIP-2494 @eip2494, and it should be noted that there are a few conflicting definitions floating around that use slightly different, isomorphic curves instead.
+
+#implementation[On the `ark-ed-on-bn254` crate][ At the time of writing, the `ark-ed-on-bn254` crate is one of these conflicting implementations, as its definition of the twisted Edwards curve is actually using the "Reduced Twisted Edwards" form from @eip2494 and is therefore incompatible, although cheap mapping functions do exist. That is why we created a new crate `ark-babyjubjub` that follows the definitions below.]
+
+The definitions below follow the EIP-2494 proposal and are compatible with existing implementations in Circom. We repeat the definitions of the BabyJubJub curve below.
+
+
+
+=== Definiton of BabyJubJub
+Let
+$ p = 21888242871839275222246405745257275088548364400416034343698204186575808495617 $ and $bb(F)_p$ be the finite field with $p$ elements. $p$ is the order of the scalar field of the elliptic curve BN254, a common pairing curve used in zk-SNARKs.
+
+
+==== Twisted Edwards Form
+
+Let $E$ be the twisted Edwards elliptic curve defined over $bb(F)_p$ described by the equation $ 168700x^2 + y^2 = 1 + 168696 x^2 y^2. $ $E$ is called BabyJubJub and has order $ n = 21888242871839275222246405745257275088614511777268538073601725287587578984328, $ which factors into $n = h dot l$, where the cofactor $h = 8$ and the prime $ l = 2736030358979909402780800718157159386076813972158567259200215660948447373041. $
+
+The generator point $G$ of the elliptic curve is the point of order $n$ with $ G = (995203441582195749578291179787384436505546430278305826713579947235728471134,\ 5472060717959818805561601436314318772137091100104008585924551046643952123905). $
+The base point $B$ is chosen to be $B = 8G$ and has order $l$. Let $ B = (5299619240641551281634865583518297030282874472190772894086521144482721001553, \
+  16950150798460657717958625567821834550301663161624707787222815936182638968203). $
+
+==== Montgomery Form
+
+Let $E_M$ be the Montgomery elliptic curve defined over $bb(F)_p$ described by the equation $ v^2 = u^3 + 168698u^2 + u. $
+
+
+
+$E_M$ is birationally equivalent to $E$, and the following mappings are used to convert points from one curve to the other.
+
+$ E_M mapsto E: (u,v) -> (x,y) = (u/v, (u-1)/(u+1)) $
+$ E mapsto E_M: (x,y) -> (u,v) = ((1+y)/(1-y), (1+y)/((1-y)x)) $
+
+
+== EdDSA on BabyJubJub
+
+One of the main use-cases of BabyJubJub is to build a digital signature scheme from it and verify the resulting signatures in a Groth16 proof. EdDSA is somewhat standardized in RFC 8032 @rfc8032, however, concrete details are only given for the specific curves Curve25519 and Curve448. Furthermore, the default internal hash functions such as SHA-512 are not zk-SNARK friendly. We instantiate an EdDSA variant using the BabyJubJub elliptic curve using Poseidon2 as the hash function used for the Fiat-Shamir transform in @alg:eddsa. We also refer to @ChalkiasGN20 for a rigorous treatment of EdDSA variants and follow their recommendations to achieve a strongly unforgable variant. The variant below is also "cofactored", meaning it is amenable to batch verification.
+
+#show: style-algorithm
+#algorithm-figure(
+  "BabyJubJub/Poseidon EdDSA signature",
+  stroke: black,
+  {
+    import algorithmic: *
+    Function(
+      "KeyGen",
+      $$,
+      {
+        LineComment(Assign[$k$][${0,1}^256$], [Sample random $k$])
+        LineComment(Assign[$(h_0,h_1,...,h_511)$][$serif("Blake3")(k)$], [Expand secret using hash function])
+        LineComment(
+          Assign[$s$][$2^251 + h_250 dot 2^250 + dots + h_3 dot 2^3$],
+          [Compute secret scalar, with specific bits chosen],
+        )
+        LineComment(Assign[$A$][$s dot B$], [Compute the public key])
+        Return[$s, (h_256,...,h_511), A$]
+      },
+    )
+    LineBreak
+    Function(
+      "Sign",
+      $M, s, (h_256,...,h_511)$,
+      {
+        LineComment(Assign[$r$][$serif("Blake3")(h_256||...||h_511||M)$], [Generate a pseudorandom nonce])
+        LineComment(Assign[$R$][$r dot B$], [Interpret $r$ as a scalar and obtain a curve point ])
+        LineComment(Assign[$e$][$serif("Poseidon2")(R||A||M)$], [Compute the challenge $e$])
+        Assign[$S$][$r + e dot s mod l$]
+        Return[$R,S$]
+      },
+    )
+    LineBreak
+    Function(
+      "Verify",
+      $M, A, sigma = (R,S)$,
+      {
+        LineComment(Line([Reject if $S in.not {0,..,l-1}$]), [Check for non-canonical $S$])
+        Line([Reject if $A$ is one of the small-order points on $E$.])
+        Line([Reject if $A$ or $R$ are non-canonical.])
+        LineComment(Assign[$e$][$serif("Poseidon2")(R||A||M)$], [Compute the challenge $e$])
+        Line([Accept if $8(S dot B - R - e dot A) = 0$])
+      },
+    )
+  },
+)  <alg:eddsa>
+
 
 = Related Work
 
