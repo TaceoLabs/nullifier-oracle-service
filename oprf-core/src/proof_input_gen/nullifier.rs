@@ -1,6 +1,5 @@
 use ark_ec::CurveGroup;
-use ark_ff::{UniformRand, Zero};
-use poseidon2::Poseidon2;
+use ark_ff::UniformRand;
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 
@@ -16,7 +15,6 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 #[derive(Debug, Clone)]
 pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     // Signature
-    pub nonce: BaseField,
     pub user_pk: [BaseField; 2],
     pub query_s: ScalarField,
     pub query_r: [BaseField; 2],
@@ -26,6 +24,8 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     pub siblings: [BaseField; MAX_DEPTH],
     // OPRF query
     pub beta: ScalarField,
+    pub rp_id: BaseField,
+    pub action: BaseField,
     // Dlog Equality Proof
     pub dlog_e: BaseField,
     pub dlog_s: ScalarField,
@@ -33,9 +33,8 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     pub oprf_response_blinded: [BaseField; 2],
     // Unblinded response
     pub oprf_response: [BaseField; 2],
-    // Nullifier computation
-    pub nullified_action: BaseField,
-    pub nullified_epoch: BaseField,
+    // SignalHash as in Semaphore
+    pub signal_hash: BaseField,
     // Outputs
     pub nullifier: BaseField,
 }
@@ -46,31 +45,13 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         Self::generate(&mut rng)
     }
 
-    pub fn nullifier(
-        nullified_action: BaseField,
-        nullified_epoch: BaseField,
-        oprf_response: BaseField,
-        index: BaseField,
-    ) -> BaseField {
-        let poseidon2_4 = Poseidon2::<_, 4, 5>::default();
-        let mut state = poseidon2_4.permutation(&[
-            BaseField::zero(),
-            oprf_response,
-            nullified_action,
-            nullified_epoch,
-        ]);
-        state[1] += index;
-        poseidon2_4.permutation(&state)[1]
-    }
-
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         //  Random inputs
         let sk = OPrfKey::new(ScalarField::rand(rng));
-        let action = BaseField::rand(rng);
-        let epoch = BaseField::rand(rng);
+        let signal_hash = BaseField::rand(rng);
 
         // Create the query proof
-        let query_proof_input = QueryProofInput::<MAX_DEPTH>::generate(rng);
+        let (query_proof_input, query) = QueryProofInput::<MAX_DEPTH>::generate(rng);
 
         // These come from the QueryProof, but need to be reconstructed
         let blinded_query = Affine::new_unchecked(query_proof_input.q[0], query_proof_input.q[1]);
@@ -80,15 +61,17 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         };
         let blinding_factor = BlindingFactor {
             factor: query_proof_input.beta,
-            query: query_proof_input.index,
+            query,
             request_id: blinded_oprf_query.request_id,
         };
         let blinding_factor_prepared = blinding_factor.prepare();
 
+        // The OPRF response and proof
         let oprf_service = OPrfService::new(sk);
         let (oprf_blinded_response, dlog_proof) =
             oprf_service.answer_query_with_proof(blinded_oprf_query);
 
+        // Now the client finalizes the nullifier
         let client_pk = Affine::new_unchecked(query_proof_input.pk[0], query_proof_input.pk[1]);
         let oprf_client = OPrfClient::new(client_pk);
 
@@ -97,14 +80,11 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             * blinding_factor_prepared.factor)
             .into_affine();
 
-        let repsponse = oprf_client
+        let nullifier = oprf_client
             .finalize_query(oprf_blinded_response.to_owned(), blinding_factor_prepared)
             .expect("IDs should match");
 
-        let nullifier = Self::nullifier(action, epoch, repsponse, query_proof_input.index);
-
         Self {
-            nonce: query_proof_input.nonce,
             user_pk: query_proof_input.pk,
             query_s: query_proof_input.s,
             query_r: query_proof_input.r,
@@ -112,6 +92,8 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             index: query_proof_input.index,
             siblings: query_proof_input.siblings,
             beta: query_proof_input.beta,
+            rp_id: query_proof_input.rp_id,
+            action: query_proof_input.action,
             dlog_e: dlog_proof.e,
             dlog_s: dlog_proof.s,
             oprf_response_blinded: [
@@ -120,14 +102,12 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             ],
             oprf_response: [unblinded_response.x, unblinded_response.y],
             oprf_pk: [oprf_service.public_key().x, oprf_service.public_key().y],
-            nullified_action: action,
-            nullified_epoch: epoch,
+            signal_hash,
             nullifier,
         }
     }
 
     pub fn print(&self) {
-        println!("nonce: {}n,", self.nonce);
         println!("user_pk: [{}n, {}n],", self.user_pk[0], self.user_pk[1]);
         println!("query_s: {}n,", self.query_s);
         println!("query_r: [{}n, {}n],", self.query_r[0], self.query_r[1]);
@@ -143,6 +123,8 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         }
         println!("],");
         println!("beta: {}n,", self.beta);
+        println!("rp_id: {}n,", self.rp_id);
+        println!("action: {}n,", self.action);
         println!("dlog_e: {}n,", self.dlog_e);
         println!("dlog_s: {}n,", self.dlog_s);
         println!("oprf_pk: [{}n, {}n],", self.oprf_pk[0], self.oprf_pk[1]);
@@ -154,8 +136,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             "oprf_response: [{}n, {}n],",
             self.oprf_response[0], self.oprf_response[1]
         );
-        println!("nullified_action: {}n,", self.nullified_action);
-        println!("nullified_epoch: {}n,", self.nullified_epoch);
+        println!("signal_hash: {}n,", self.signal_hash);
         println!("nullifier: {}n,", self.nullifier);
     }
 }
