@@ -8,11 +8,9 @@ use std::sync::Arc;
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
+use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context;
-use oprf_core::{
-    ark_serde_compat::groth16::Groth16Proof,
-    ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments},
-};
+use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
 use oprf_types::api::v1::{ChallengeRequest, KeyIdentifier, OprfRequest};
 use tracing::instrument;
 use uuid::Uuid;
@@ -68,7 +66,15 @@ impl OprfService {
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
         // Verify the user proof
-        self.verify_user_proof(request.user_proof, request.point_b)?;
+        let public = [
+            request.point_b.x,
+            request.point_b.y,
+            request.merkle_root,
+            request.rp_key_id.rp_id.into(),
+            request.action,
+            request.nonce,
+        ];
+        self.verify_user_proof(request.proof, &public)?;
         // Partial commit through the crypto device
         let (session, comm) = self
             .crypto_device
@@ -106,9 +112,9 @@ impl OprfService {
     fn verify_user_proof(
         &self,
         proof: Groth16Proof,
-        input: ark_babyjubjub::EdwardsAffine,
+        public: &[ark_babyjubjub::Fq],
     ) -> Result<(), OprfServiceError> {
-        let valid = Groth16::<Bn254>::verify_proof(&self.vk, &proof.into(), &[input.x, input.y])
+        let valid = Groth16::<Bn254>::verify_proof(&self.vk, &proof.into(), public)
             .context("while verifying user proof")?;
         if valid {
             tracing::debug!("proof valid");

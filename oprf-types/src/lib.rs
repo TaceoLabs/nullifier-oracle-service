@@ -10,7 +10,6 @@
 //! in a type-safe way without worrying about manual (de)serialization.
 use std::fmt;
 
-use oprf_core::ark_serde_compat;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
@@ -61,6 +60,17 @@ impl KeyEpoch {
     }
 }
 
+impl RpId {
+    pub fn new(value: u128) -> Self {
+        Self(value)
+    }
+
+    /// Converts the RP id to an u128
+    pub fn into_inner(self) -> u128 {
+        self.0
+    }
+}
+
 impl MerkleRoot {
     /// Converts the merkle-root hash to its inner value, which is an element in the base field of BabyJubJub (which is equivalent to BN254 scalar field)
     pub fn into_inner(self) -> ark_babyjubjub::Fq {
@@ -89,5 +99,11 @@ impl fmt::Display for MerkleEpoch {
 impl fmt::Display for MerkleRoot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0.to_string())
+    }
+}
+
+impl From<RpId> for ark_babyjubjub::Fq {
+    fn from(value: RpId) -> Self {
+        Self::from(value.0)
     }
 }

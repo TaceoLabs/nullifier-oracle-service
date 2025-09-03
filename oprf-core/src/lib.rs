@@ -1,4 +1,3 @@
-pub mod ark_serde_compat;
 pub mod ddlog_equality;
 pub mod ddlog_equality_shamir;
 pub mod dlog_equality;

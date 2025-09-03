@@ -18,7 +18,6 @@ impl IntoResponse for ApiError {
     }
 }
 
-#[expect(dead_code)]
 pub type ApiResult<T> = Result<T, ApiErrors>;
 
 #[derive(Debug, thiserror::Error)]

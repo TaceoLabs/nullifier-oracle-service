@@ -10,6 +10,7 @@ This is a monorepo containing:
 * `docs`: A typst document serving as a writeup of the overall scheme.
 * `eddsa-babyjubjub`: An implementation of EdDSA on the BabyJubJub curve.
 * `noir`: A collection of Noir circuits.
+* `oprf-client`: A crate implementing a client for the REST API service.
 * `oprf-core`: A crate implementing a verifiable OPRF based on the TwoHashDH OPRF construction + a threshold variant of it.
 * `oprf-service`: A crate implementing a REST API service that answers OPRF requests.
 * `poseidon2`: A crate implementing the Poseidon2 hash function for various parameter sets, compatible with the Circom and Noir implementations thereof.

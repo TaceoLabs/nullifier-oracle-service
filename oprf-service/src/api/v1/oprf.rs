@@ -16,7 +16,7 @@ type ApiResult<T> = Result<T, ApiErrors>;
 /// Inits an OPRF session.
 ///
 /// Deserializes the request and forwards the parsed request to the [`OprfService`] to create the session and commit to the partial exponent.
-#[instrument(level = "debug", name = "oprf", skip_all)]
+#[instrument(level = "debug", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
     State(chain_watcher): State<ChainWatcherService>,
@@ -24,8 +24,15 @@ async fn oprf_request(
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
+
+    tracing::debug!("verify nonce signature");
+    if !request.rp_pk.verify(request.nonce, &request.signature) {
+        tracing::debug!("failed to verify nonce signature");
+        return Err(ApiErrors::Unauthorized);
+    }
     // get the merkle root identified by the epoch
     let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.merkle_epoch);
+    // TODO compare merkle root of request with cache and/or chain
     // Init the OPRF session
     let commitments = oprf_service.init_oprf_session(request)?;
     Ok(Json(OprfResponse {
@@ -34,6 +41,7 @@ async fn oprf_request(
     }))
 }
 
+#[instrument(level = "debug", skip_all)]
 async fn oprf_challenge(
     State(oprf_service): State<OprfService>,
     Json(request): Json<ChallengeRequest>,

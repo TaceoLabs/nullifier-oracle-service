@@ -1,4 +1,3 @@
-use crate::ark_serde_compat;
 use crate::dlog_equality::DLogEqualityProof;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};

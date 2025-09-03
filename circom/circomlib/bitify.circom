@@ -21,6 +21,9 @@ pragma circom 2.0.0;
 include "comparators.circom";
 include "aliascheck.circom";
 
+function bbf_num_2_bits_helper(in, i) {
+    return (in >> i) & 1;
+}
 
 template Num2Bits(n) {
     signal input in;
@@ -29,7 +32,7 @@ template Num2Bits(n) {
 
     var e2=1;
     for (var i = 0; i<n; i++) {
-        out[i] <-- (in >> i) & 1;
+        out[i] <-- bbf_num_2_bits_helper(in, i);
         out[i] * (out[i] -1 ) === 0;
         lc1 += out[i] * e2;
         e2 = e2+e2;
@@ -81,6 +84,11 @@ template Bits2Num_strict() {
     b2n.out ==> out;
 }
 
+
+function bbf_num_2_bits_neg_helper(in, n) {
+    return n == 0 ? 0 : 2**n - in;
+}
+
 template Num2BitsNeg(n) {
     signal input in;
     signal output out[n];
@@ -90,10 +98,10 @@ template Num2BitsNeg(n) {
 
     isZero = IsZero();
 
-    var neg = n == 0 ? 0 : 2**n - in;
+    var neg = bbf_num_2_bits_neg_helper(in, n);
 
     for (var i = 0; i<n; i++) {
-        out[i] <-- (neg >> i) & 1;
+        out[i] <-- bbf_num_2_bits_helper(neg, i);
         out[i] * (out[i] -1 ) === 0;
         lc1 += out[i] * 2**i;
     }

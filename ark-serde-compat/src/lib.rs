@@ -17,7 +17,7 @@ pub fn serialize_bn254_g1<S: Serializer>(
     ser: S,
 ) -> Result<S::Ok, S::Error> {
     let strings = g1_to_strings_projective(p);
-    let mut seq = ser.serialize_seq(Some(strings.len())).unwrap();
+    let mut seq = ser.serialize_seq(Some(strings.len()))?;
     for ele in strings {
         seq.serialize_element(&ele)?;
     }
@@ -88,20 +88,25 @@ pub fn serialize_bn254_gt<S: Serializer>(p: &ark_bn254::Fq12, ser: S) -> Result<
 }
 
 pub fn serialize_bn254_g1_sequence<S: Serializer>(
-    p: &[ark_bn254::G1Affine],
+    ps: &[ark_bn254::G1Affine],
     ser: S,
 ) -> Result<S::Ok, S::Error> {
-    let mut seq = ser.serialize_seq(Some(p.len())).unwrap();
-    let maybe_error = p
-        .iter()
-        .map(g1_to_strings_projective)
-        .map(|strings| seq.serialize_element(&strings))
-        .find(|r| r.is_err());
-    if let Some(Err(err)) = maybe_error {
-        Err(err)
-    } else {
-        seq.end()
+    let mut seq = ser.serialize_seq(Some(ps.len()))?;
+    for p in ps {
+        seq.serialize_element(&g1_to_strings_projective(p))?;
     }
+    seq.end()
+}
+
+pub fn serialize_babyjubjub_base_sequence<S: Serializer>(
+    ps: &[ark_babyjubjub::Fq],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    let mut seq = ser.serialize_seq(Some(ps.len()))?;
+    for p in ps {
+        seq.serialize_element(&p.to_string())?;
+    }
+    seq.end()
 }
 
 pub fn deserialize_bn254_g1<'de, D>(deserializer: D) -> Result<ark_bn254::G1Affine, D::Error>
@@ -133,14 +138,14 @@ pub fn deserialize_babyjubjub_scalar<'de, D>(
 where
     D: de::Deserializer<'de>,
 {
-    deserializer.deserialize_seq(BabyJubJubScalarVisitor)
+    deserializer.deserialize_str(BabyJubJubScalarVisitor)
 }
 
 pub fn deserialize_babyjubjub_base<'de, D>(deserializer: D) -> Result<ark_babyjubjub::Fq, D::Error>
 where
     D: de::Deserializer<'de>,
 {
-    deserializer.deserialize_seq(BabyJubJubBaseVisitor)
+    deserializer.deserialize_str(BabyJubJubBaseVisitor)
 }
 
 pub fn deserialize_bn254_gt<'de, D>(deserializer: D) -> Result<ark_bn254::Fq12, D::Error>
@@ -157,6 +162,15 @@ where
     D: de::Deserializer<'de>,
 {
     deserializer.deserialize_seq(Bn254G1SeqVisitor)
+}
+
+pub fn deserialize_babyjubjub_base_sequence<'de, D>(
+    deserializer: D,
+) -> Result<Vec<ark_babyjubjub::Fq>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    deserializer.deserialize_seq(BabyJubJubBaseSeqVisitor)
 }
 
 fn g1_to_strings_projective(p: &ark_bn254::G1Affine) -> Vec<String> {
@@ -479,6 +493,29 @@ impl<'de> de::Visitor<'de> for Bn254G1SeqVisitor {
                     })?,
                 );
             }
+        }
+        Ok(values)
+    }
+}
+
+struct BabyJubJubBaseSeqVisitor;
+
+impl<'de> de::Visitor<'de> for BabyJubJubBaseSeqVisitor {
+    type Value = Vec<ark_babyjubjub::Fq>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a sequence of elements representing babyjubjub scalar points.")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut values = vec![];
+        while let Some(v) = seq.next_element::<String>()? {
+            values.push(
+                ark_babyjubjub::Fq::from_str(&v).map_err(|_| de::Error::custom("Invalid data"))?,
+            );
         }
         Ok(values)
     }

@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub(crate) mod aws;
+pub(crate) mod local;
 
 /// Dyn trait for the secret manager service. Must be `Send` + `Sync` to work with Axum.
 pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;

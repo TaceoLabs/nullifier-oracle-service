@@ -108,7 +108,7 @@ impl ChainWatcher for HttpMockWatcher {
     }
 
     async fn check_chain_events(&self) -> Result<(), ChainWatcherError> {
-        todo!()
+        Ok(())
     }
 }
 

@@ -9,11 +9,10 @@
 //! they can be sent over the wire.
 use std::fmt;
 
-use oprf_core::{
-    ark_serde_compat::{self, groth16::Groth16Proof},
-    ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
-    },
+use ark_serde_compat::groth16::Groth16Proof;
+use eddsa_babyjubjub::{EdDSAPublicKey, EdDSASignature};
+use oprf_core::ddlog_equality::{
+    DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -21,12 +20,12 @@ use uuid::Uuid;
 use crate::{KeyEpoch, MerkleEpoch, RpId};
 
 /// A request sent by a client to perform an OPRF evaluation.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OprfRequest {
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
     /// Zero-knowledge proof provided by the user.
-    pub user_proof: Groth16Proof,
+    pub proof: Groth16Proof,
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
@@ -35,10 +34,26 @@ pub struct OprfRequest {
     pub rp_key_id: KeyIdentifier,
     /// The Merkle epoch associated with this request.
     pub merkle_epoch: MerkleEpoch,
+    /// The Merkle root
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    pub merkle_root: ark_babyjubjub::Fq,
+    /// The action
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    pub action: ark_babyjubjub::Fq,
+    /// The nonce
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    pub nonce: ark_babyjubjub::Fq,
+    /// The signature of the nonce
+    pub signature: EdDSASignature,
+    /// The RP public key
+    pub rp_pk: EdDSAPublicKey, // TODO remove
 }
 
 /// Identifies a relying party’s key by party and epoch.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeyIdentifier {
     /// ID of the relying party.
     pub rp_id: RpId,
@@ -47,7 +62,7 @@ pub struct KeyIdentifier {
 }
 
 /// Server response to an [`OprfRequest`].
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OprfResponse {
     /// ID of the request being answered.
     pub request_id: Uuid,
@@ -56,7 +71,7 @@ pub struct OprfResponse {
 }
 
 /// A request from the client to complete the DLog equality challenge.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ChallengeRequest {
     /// ID of the original OPRF request.
     pub request_id: Uuid,
@@ -67,7 +82,7 @@ pub struct ChallengeRequest {
 }
 
 /// Server response to a [`ChallengeRequest`].
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeResponse {
     /// ID of the request being answered.
     pub request_id: Uuid,
