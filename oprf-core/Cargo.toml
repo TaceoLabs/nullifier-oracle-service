@@ -17,6 +17,7 @@ ark-ff = "0.5.0"
 rand_chacha.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde-compat = { path = "../serde-compat" }
+serde_json.workspace = true
 rand.workspace = true
 uuid = { version = "1.18.0", features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }

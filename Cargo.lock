@@ -2120,6 +2120,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "oprf-client"
+version = "0.1.0"
+dependencies = [
+ "ark-babyjubjub",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-groth16",
+ "clap",
+ "eddsa-babyjubjub",
+ "eyre",
+ "http",
+ "humantime",
+ "oprf-core",
+ "oprf-service",
+ "poseidon2",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde-compat",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+ "uuid",
+]
+
+[[package]]
 name = "oprf-core"
 version = "0.1.0"
 dependencies = [
@@ -2134,6 +2164,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde-compat",
+ "serde_json",
  "thiserror 2.0.16",
  "uuid",
 ]

@@ -8,13 +8,13 @@ use serde::{Deserialize, Serialize};
 pub struct PartialDLogEqualityCommitments {
     #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
-    pub(crate) c: Affine, // The share of the actual result C=B*x
+    pub c: Affine, // The share of the actual result C=B*x
     #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
-    pub(crate) r1: Affine,
+    pub r1: Affine,
     #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
-    pub(crate) r2: Affine,
+    pub r2: Affine,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +22,7 @@ pub struct DLogEqualityChallenge {
     // The challenge hash
     #[serde(serialize_with = "serde_compat::serialize_babyjubjub_base")]
     #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_base")]
-    pub(crate) e: BaseField,
+    pub e: BaseField,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +30,7 @@ pub struct DLogEqualityProofShare {
     // The share of the response s
     #[serde(serialize_with = "serde_compat::serialize_babyjubjub_scalar")]
     #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_scalar")]
-    pub(crate) s: ScalarField,
+    pub s: ScalarField,
 }
 
 /// The internal storage of a party in a distributed DlogEqualityProof protocol.

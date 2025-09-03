@@ -5,13 +5,14 @@ use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 use std::array;
+use uuid::Uuid;
 
 use crate::oprf::OPrfClient;
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
 
-pub(crate) const MAX_PUBLIC_KEYS: usize = 7;
+pub const MAX_PUBLIC_KEYS: usize = 7;
 
 #[derive(Debug, Clone)]
 pub struct QueryProofInput<const MAX_DEPTH: usize> {
@@ -44,6 +45,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     // Also returns the query, since this is used in the nullifier proof input generation
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> (Self, BaseField) {
         // Random inputs
+        let request_id = Uuid::new_v4();
         let sk = EdDSAPrivateKey::random(rng);
         let mt_index_u64 = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
         let mt_index = BaseField::from(mt_index_u64);
@@ -71,7 +73,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         // Calculate OPRF
         let oprf_client = OPrfClient::new(pk.pk);
         let query = OPrfClient::generate_query(mt_index, rp_id, action);
-        let (blinded_request, blinding_factor) = oprf_client.blind_query(query, rng);
+        let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query, rng);
 
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
@@ -85,6 +87,51 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             r: [signature.r.x, signature.r.y],
             merkle_root: merkkle_root,
             mt_index,
+            siblings,
+            beta: blinding_factor.factor,
+            rp_id,
+            action,
+            q: [
+                blinded_request.blinded_query.x,
+                blinded_request.blinded_query.y,
+            ],
+        };
+
+        (result, blinding_factor.query)
+    }
+
+    // Also returns the query, since this is used in the nullifier proof input generation
+    pub fn new<R: Rng + CryptoRng>(
+        request_id: Uuid,
+        sk: EdDSAPrivateKey,
+        pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
+        pk_index: u64,
+        merkle_root: BaseField,
+        mt_index: u64,
+        siblings: [BaseField; MAX_DEPTH],
+        rp_id: BaseField,
+        action: BaseField,
+        rng: &mut R,
+    ) -> (Self, BaseField) {
+        let pk = sk.public();
+        let pk_index_ = BaseField::from(pk_index);
+        let mt_index_ = BaseField::from(mt_index);
+
+        // Calculate OPRF
+        let oprf_client = OPrfClient::new(pk.pk);
+        let query = OPrfClient::generate_query(mt_index_, rp_id, action);
+        let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query, rng);
+
+        // Sign the query
+        let signature = sk.sign(blinding_factor.query);
+
+        let result = Self {
+            pk: pks,
+            pk_index: pk_index_,
+            s: signature.s,
+            r: [signature.r.x, signature.r.y],
+            merkle_root,
+            mt_index: mt_index_,
             siblings,
             beta: blinding_factor.factor,
             rp_id,
@@ -126,6 +173,21 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         println!("rp_id: {}n,", self.rp_id);
         println!("action: {}n,", self.action);
         println!("q: [{}n, {}n],", self.q[0], self.q[1]);
+    }
+
+    pub fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "pk": self.pk.iter().map(|pk| [pk[0].to_string(), pk[1].to_string()]).collect::<Vec<_>>(),
+            "pk_index": self.pk_index.to_string(),
+            "s": self.s.to_string(),
+            "r": [self.r[0].to_string(), self.r[1].to_string()],
+            "merkle_root": self.merkle_root.to_string(),
+            "mt_index": self.mt_index.to_string(),
+            "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            "beta": self.beta.to_string(),
+            "rp_id": self.rp_id.to_string(),
+            "action": self.action.to_string()
+        })
     }
 
     pub fn merkle_root(

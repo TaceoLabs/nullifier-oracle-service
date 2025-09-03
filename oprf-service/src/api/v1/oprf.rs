@@ -22,10 +22,13 @@ async fn oprf_request(
     Json(request): Json<OprfRequest>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
-    let id = request.id;
+    let request_id = request.request_id;
     // Init the OPRF session
     let commitments = oprf_service.init_oprf_session(request)?;
-    Ok(Json(OprfResponse { id, commitments }))
+    Ok(Json(OprfResponse {
+        request_id,
+        commitments,
+    }))
 }
 
 async fn oprf_challenge(
@@ -33,10 +36,13 @@ async fn oprf_challenge(
     Json(request): Json<ChallengeRequest>,
 ) -> ApiResult<Json<ChallengeResponse>> {
     tracing::debug!("received Challenge for request: {request:?}");
-    let id = request.id;
+    let request_id = request.request_id;
     // Finalize the OPRF session
     let proof_share = oprf_service.finalize_oprf_session(request)?;
-    Ok(Json(ChallengeResponse { id, proof_share }))
+    Ok(Json(ChallengeResponse {
+        request_id,
+        proof_share,
+    }))
 }
 
 pub(crate) fn router(input_max_body_limit: usize) -> Router<AppState> {

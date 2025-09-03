@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// A proof in the Groth16 SNARK.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub(crate) struct Groth16Proof {
+pub struct Groth16Proof {
     /// The `A` element in `G1`.
     #[serde(rename = "pi_a")]
     #[serde(serialize_with = "serde_compat::serialize_bn254_g1")]

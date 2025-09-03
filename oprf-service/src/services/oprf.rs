@@ -33,38 +33,47 @@ pub(crate) enum OprfServiceError {
     InternalServerErrpr(#[from] eyre::Report),
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OprfRequest {
-    pub id: Uuid,
-    pub user_proof: Groth16Proof,
-    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
-    pub point_a: ark_babyjubjub::EdwardsAffine,
+    pub request_id: Uuid,
+    /// Query proof
+    pub proof: Groth16Proof,
+    /// Query output and public inputs as given by prover [a_x, a_y, nonce, merkle_root]
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_base_sequence")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_base_sequence")]
+    pub public: Vec<ark_babyjubjub::Fq>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OprfResponse {
-    pub id: Uuid,
+    pub request_id: Uuid,
     pub commitments: PartialDLogEqualityCommitments,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ChallengeRequest {
-    pub id: Uuid,
+    pub request_id: Uuid,
     pub challenge: DLogEqualityChallenge,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeResponse {
-    pub id: Uuid,
+    pub request_id: Uuid,
     pub proof_share: DLogEqualityProofShare,
 }
 
 impl fmt::Debug for OprfRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
-            .field("req_id", &self.id)
-            .field("A", &self.point_a.to_string())
+            .field("request_id", &self.request_id)
+            .field(
+                "public",
+                &self
+                    .public
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<String>>(),
+            )
             .field("proof", &"omitted")
             .finish()
     }
@@ -73,7 +82,7 @@ impl fmt::Debug for OprfRequest {
 impl fmt::Debug for ChallengeRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ChallengeRequest")
-            .field("req_id", &self.id)
+            .field("request_id", &self.request_id)
             .field("challenge", &"omitted")
             .finish()
     }
@@ -110,13 +119,14 @@ impl OprfService {
         &self,
         request: OprfRequest,
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
-        tracing::debug!("handling session request: {}", request.id);
+        tracing::debug!("handling session request: {}", request.request_id);
         // Verify the user proof
-        self.verify_user_proof(request.user_proof, request.point_a)?;
+        self.verify_user_proof(request.proof, &request.public)?;
         // Partial commit through the crypto device
-        let (session, comm) = self.crypto_device.partial_commit(request.point_a);
+        let point_a = ark_babyjubjub::EdwardsAffine::new(request.public[0], request.public[1]);
+        let (session, comm) = self.crypto_device.partial_commit(point_a);
         // Store the randomness for finalize request
-        self.session_store.store(request.id, session);
+        self.session_store.store(request.request_id, session);
         tracing::debug!("handled session");
         Ok(comm)
     }
@@ -126,12 +136,12 @@ impl OprfService {
         &self,
         request: ChallengeRequest,
     ) -> Result<DLogEqualityProofShare, OprfServiceError> {
-        tracing::debug!("handling challenge request: {}", request.id);
+        tracing::debug!("handling challenge request: {}", request.request_id);
         // Retrieve the randomness from the previous step. If the request is not known, we return an error
         let session = self
             .session_store
-            .retrieve(request.id)
-            .ok_or_else(|| OprfServiceError::UnknownRequestId(request.id))?;
+            .retrieve(request.request_id)
+            .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
         let proof_share = self.crypto_device.challenge(session, request.challenge);
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
@@ -144,9 +154,9 @@ impl OprfService {
     fn verify_user_proof(
         &self,
         proof: Groth16Proof,
-        input: ark_babyjubjub::EdwardsAffine,
+        public: &[ark_babyjubjub::Fq],
     ) -> Result<(), OprfServiceError> {
-        let valid = Groth16::<Bn254>::verify_proof(&self.vk, &proof.into(), &[input.x, input.y])
+        let valid = Groth16::<Bn254>::verify_proof(&self.vk, &proof.into(), public)
             .context("while verifying user proof")?;
         if valid {
             tracing::debug!("proof valid");
