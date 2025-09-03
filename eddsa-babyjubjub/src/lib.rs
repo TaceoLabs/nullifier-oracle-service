@@ -113,8 +113,6 @@ impl EdDSAPublicKey {
     /// In particular, this uses a so-called "cofactored" verification, such that batched signature verification is possible.
     ///
     /// The only assumption is that both the public key and the nonce point R are canonical, i.e., their encoding is using valid field elements, which must be checked during deserialization.
-    ///
-    // TODO: The circom circuit does not do the excact same operations as are done here. In particular it does not do the full cofactored verification below.
     pub fn verify(&self, message: BaseField, signature: &EdDSASignature) -> bool {
         // 1. Reject the signature if s not in [0, L-1]
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p, if s is given as a BaseField element.
@@ -184,7 +182,7 @@ mod tests {
     fn test(sk: [u8; 32], message: BaseField, rng: &mut impl rand::Rng) {
         let sk = EdDSAPrivateKey::from_bytes(sk);
         let pk = sk.public();
-        // println!("pk=({:?}n, {:?}n)", pk.x, pk.y);
+        // println!("pk=({:?}n, {:?}n)", pk.pk.x, pk.pk.y);
 
         let signature = sk.sign(message);
         assert!(
@@ -195,7 +193,7 @@ mod tests {
         //     "signature: s={:?}n, r=({:?}n, {:?}n)",
         //     signature.s, signature.r.x, signature.r.y,
         // );
-        // println!("message={:?}", message);
+        // println!("message={:?}n", message);
 
         let message_ = BaseField::rand(rng);
         assert!(

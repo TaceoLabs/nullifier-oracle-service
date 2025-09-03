@@ -18,7 +18,7 @@
 */
 pragma circom 2.0.0;
 
-// This file is copied from https://github.com/iden3/circomlib/blob/master/circuits/eddsaposeidon.circom and adapted to use Poseidon2 instead of Poseidon.
+// This file is copied from https://github.com/iden3/circomlib/blob/master/circuits/eddsaposeidon.circom and adapted to use Poseidon2 instead of Poseidon and use a more standard cofactored verification.
 
 include "circomlib/compconstant.circom";
 include "poseidon2/poseidon2.circom";
@@ -27,13 +27,12 @@ include "circomlib/escalarmulany.circom";
 include "circomlib/escalarmulfix.circom";
 
 template EdDSAPoseidon2Verifier() {
-    signal input enabled;
     signal input Ax;
     signal input Ay;
 
     signal input S;
-    signal input R8x;
-    signal input R8y;
+    signal input Rx;
+    signal input Ry;
 
     signal input M;
 
@@ -50,15 +49,15 @@ template EdDSAPoseidon2Verifier() {
         snum2bits.out[i] ==> compConstant.in[i];
     }
     compConstant.in[253] <== 0;
-    compConstant.out*enabled === 0;
+    compConstant.out === 0;
 
 // Calculate the h = H(R,A, msg)
 
     // TODO use t=8 here?
     component hash1 = Poseidon2(4);
     hash1.in[0] <== 0;
-    hash1.in[1] <== R8x;
-    hash1.in[2] <== R8y;
+    hash1.in[1] <== Rx;
+    hash1.in[2] <== Ry;
     hash1.in[3] <== Ax;
     component hash = Poseidon2(4);
     hash.in[0] <== hash1.out[0];
@@ -68,8 +67,8 @@ template EdDSAPoseidon2Verifier() {
 
     // component hash = Poseidon2(8);
     // hash.in[0] <== 0;
-    // hash.in[1] <== R8x;
-    // hash.in[2] <== R8y;
+    // hash.in[1] <== Rx;
+    // hash.in[2] <== Ry;
     // hash.in[3] <== Ax;
     // hash.in[4] <== Ay;
     // hash.in[5] <== M;
@@ -79,42 +78,31 @@ template EdDSAPoseidon2Verifier() {
     component h2bits = Num2Bits_strict();
     h2bits.in <== hash.out[1];
 
-// Calculate second part of the right side:  right2 = h*8*A
+// Calculate second part of the right side:  right2 = h*A
 
-    // Multiply by 8 by adding it 3 times.  This also ensure that the result is in
-    // the subgroup.
-    component dbl1 = BabyDbl();
-    dbl1.x <== Ax;
-    dbl1.y <== Ay;
-    component dbl2 = BabyDbl();
-    dbl2.x <== dbl1.xout;
-    dbl2.y <== dbl1.yout;
-    component dbl3 = BabyDbl();
-    dbl3.x <== dbl2.xout;
-    dbl3.y <== dbl2.yout;
 
     // We check that A is not zero.
     component isZero = IsZero();
-    isZero.in <== dbl3.x;
-    isZero.out*enabled === 0;
+    isZero.in <== Ax;
+    isZero.out === 0;
 
     component mulAny = EscalarMulAny(254);
     for (i=0; i<254; i++) {
         mulAny.e[i] <== h2bits.out[i];
     }
-    mulAny.p[0] <== dbl3.xout;
-    mulAny.p[1] <== dbl3.yout;
+    mulAny.p[0] <== Ax;
+    mulAny.p[1] <== Ay;
 
 
-// Compute the right side: right =  R8 + right2
+// Compute the right side: right =  R + right2
 
     component addRight = BabyAdd();
-    addRight.x1 <== R8x;
-    addRight.y1 <== R8y;
+    addRight.x1 <== Rx;
+    addRight.y1 <== Ry;
     addRight.x2 <== mulAny.out[0];
     addRight.y2 <== mulAny.out[1];
 
-// Calculate left side of equation left = S*B8
+// Calculate left side of equation left = S*B
 
     var BASE8[2] = [
         5299619240641551281634865583518297030282874472190772894086521144482721001553,
@@ -125,15 +113,27 @@ template EdDSAPoseidon2Verifier() {
         mulFix.e[i] <== snum2bits.out[i];
     }
 
-// Do the comparation left == right if enabled;
+    // compute v = s*B - R - h*A = s*B - (R + h*A)
+    component v = BabyAdd();
+    v.x1 <== mulFix.out[0];
+    v.y1 <== mulFix.out[1];
+    v.x2 <== -addRight.xout;
+    v.y2 <== addRight.yout;
 
-    component eqCheckX = ForceEqualIfEnabled();
-    eqCheckX.enabled <== enabled;
-    eqCheckX.in[0] <== mulFix.out[0];
-    eqCheckX.in[1] <== addRight.xout;
+    // Multiply by 8 by adding it 3 times.  This also ensure that the result is in
+    // the subgroup.
+    component dbl1 = BabyDbl();
+    dbl1.x <== v.xout;
+    dbl1.y <== v.yout;
+    component dbl2 = BabyDbl();
+    dbl2.x <== dbl1.xout;
+    dbl2.y <== dbl1.yout;
+    component dbl3 = BabyDbl();
+    dbl3.x <== dbl2.xout;
+    dbl3.y <== dbl2.yout;
 
-    component eqCheckY = ForceEqualIfEnabled();
-    eqCheckY.enabled <== enabled;
-    eqCheckY.in[0] <== mulFix.out[1];
-    eqCheckY.in[1] <== addRight.yout;
+// Do the comparison 8*v == Identity;
+
+    dbl3.xout === 0;
+    dbl3.yout === 1;
 }
