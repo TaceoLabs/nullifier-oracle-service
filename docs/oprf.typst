@@ -1,34 +1,6 @@
 #import "preamble.typst": *
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
 #import "@preview/frame-it:1.2.0": *
-#show: thmrules.with(qed-symbol: $square$)
-
-
-/// Author creation function
-#let author(name, oicd: none, insts: ()) = {
-  // make sure it is always an one dimensional array
-  if type(insts) != array {
-    insts = (insts,)
-  }
-
-  (
-    name: name,
-    oicd: oicd,
-    insts: insts,
-  )
-}
-
-
-/// Institute creation function
-#let institute(name, addr: none, email: none, url: none) = {
-  (
-    name: name,
-    addr: addr,
-    email: if email != none { link("mailto: " + email) } else { none },
-    url: if url != none { link(url) } else { none },
-  )
-}
-
 
 #let inst_taceo = institute("TACEO", email: "office@taceo.io");
 
@@ -42,176 +14,19 @@
 #let keywords = ("OPRF", "VOPRF", "threshold", "ZKP")
 
 
-#set text(font: "New Computer Modern")
-#show raw: set text(font: "Dejavu Sans Mono")
-#show heading: set block(above: 1.4em, below: 1em)
-
-#set page(
-  paper: "a4",
-  numbering: "1",
-)
-
-#let author_running = {
-  let an = authors.map(it => {
-    let ns = it.name.split(" ")
-    [#ns.at(0).at(0). #ns.last()]
-  })
-  if an.len() < 5 {
-    an.join(", ")
-  } else {
-    [#an.first() et al.]
-  }
-}
-
-#set page(header: context {
-  let pagenumer = counter(page).get().first()
-  if pagenumer == 1 { return [] }
-
-  if (calc.rem(pagenumer, 2) == 1) {
-    align(right)[
-      #title #line(length: 100%, stroke: 0.5pt)
-    ]
-  } else {
-    align(left)[
-      #author_running #line(length: 100%, stroke: 0.5pt)
-    ]
-  }
-})
-
-#let PAR_INDENT = 15pt
-#let TITLE_SIZE = 14pt
-#let TOP_PAGE_MARING = 50mm
-
-#set page(margin: (left: 25mm, right: 25mm, top: TOP_PAGE_MARING, bottom: 45mm))
-#set heading(numbering: "1.")
-#set cite(style: "alphanumeric")
-#set std.bibliography(title: text[References])
-
-//// PAR CONFIG
-#set par(leading: 0.50em, spacing: 0.4em)
-
-//// HEADING CONFIGS
-#set heading(numbering: "1.1")
-#show heading: it => if it.numbering == none { it } else {
-  block(counter(heading).display(it.numbering) + h(4.5mm) + it.body)
-}
-// padding
-#show heading.where(level: 1): pad.with(bottom: 0.45em, top: 0.64em)
-#show heading.where(level: 2): pad.with(bottom: 0.7em)
-
-#show figure.where(
-  kind: table,
-): set figure.caption(position: top)
-
-//// FOOTNOTE CONFIGS
-#show footnote.entry: set text(9pt)
-#show footnote.entry: it => pad(left: 1mm, top: 0mm, it)
-#set footnote.entry(separator: line(start: (10pt, 0pt), length: 57pt, stroke: 0.5pt))
-
-#set figure.caption(separator: [. ]) // separator to .
-#show figure.caption: it => align(
-  center,
-)[*#it.supplement #context it.counter.display()#it.separator*#it.body] // bold figure kind
-#show figure.where(kind: table): set figure.caption(position: top) // caption for table above figure
-#show figure.where(kind: image): set image(width: 100%)
-#set figure(gap: 4.5mm)
-#show figure: pad.with(top: 20.5pt, bottom: 22pt)
-#let fig_replace(it) = {
-  show "Figure": "Fig."
-  it
-}
-#show figure.where(kind: image): fig_replace
-#show ref: fig_replace
-
-//// SUPER CONFIGS
-#set super(size: 8pt)
-
-#show math.equation.where(block: true): set block(spacing: 1em)
-
-// Title row.
-#align(center)[
-  #block()[
-    #text(weight: "bold", TITLE_SIZE, title)
-  ]
-]
-
-#v(8.5mm)
-
-
-#set align(center)
-
-#let insts = authors.map(it => it.insts).flatten().dedup()
-
-// Author information.
-#(
-  authors
-    .enumerate()
-    .map(it => {
-      let a = it.at(1)
-      // find references
-      let refs = a.insts.map(ai => str(insts.position(i => i == ai) + 1)).join(",")
-
-      let oicd = if a.oicd != none { [[#a.oicd]] } else { "" }
-
-      // add "and" infront of last author
-      let und = if it.at(0) > 0 and it.at(0) == authors.len() - 1 { "and" } else { "" }
-
-      [#und #a.name#super([#refs])]
-    })
-).join(", ")
-
-#if authors.len() == 0 {
-  [ No Author Given]
-}
-
-// Institute information.
-#(
-  insts
-    .enumerate()
-    .map(it => {
-      let inst = it.at(1)
-      [#super([#{ it.at(0) + 1 }]) ]
-      [#inst.name]
-      if inst.addr != none [, #inst.addr ]
-      linebreak()
-      if inst.email != none [#text(font: "Dejavu Sans Mono", size: 9pt, inst.email) \ ]
-      if inst.url != none [#inst.url \ ]
-    })
-).join()
-
-#if insts.len() == 0 {
-  [ No Institute Given]
-}
-
-#set align(left)
-
-#v(10.7mm)
-
-// abstract and keywords.
-#figure(block(width: 104mm)[
-  #set align(left)
-  #set par(justify: true)
-  #set text(size: 9pt)
-  *Abstract.* #abstract
-  #if keywords.len() > 0 {
-    v(4.5mm)
-    let display = if type(keywords) == str { keywords } else { keywords.join([ $dot$ ]) }
-    text[*Keywords:* #display]
-  }
-])
-
-// Main body.
-
-//// PAR CONFIG MAIN
-#set par(justify: true, first-line-indent: PAR_INDENT)
 
 #let (remark, implementation) = frames(
   remark: ("Remark",),
   implementation: ("Implementation Note",),
 )
-
 #show: frame-style(styles.hint)
 
+#show: report.with(
+  title: title,
+  authors: authors,
+  abstract: abstract,
+  keywords: keywords,
+)
 
 #outline()
 
@@ -422,11 +237,11 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
     be the order of the prime-order subgroup of the BabyJubJub curve.
 
     #theorem(
-      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x arrowrl bb(F)_q$ are statistically indistinguishable.
-        #proof(
-          [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x arrowrl bb(Z)_p$ and $y arrowrl bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x arrowrl bb(Z)_q; "return" x$ and $y arrowrl bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
-        )
-      ],
+      [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x arrowrl bb(F)_q$ are statistically indistinguishable.],
+    )
+    #v(-1cm)
+    #proof(
+      [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x arrowrl bb(Z)_p$ and $y arrowrl bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x arrowrl bb(Z)_q; "return" x$ and $y arrowrl bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
     )
 
     = Discrete Logarithm Equality Proof
