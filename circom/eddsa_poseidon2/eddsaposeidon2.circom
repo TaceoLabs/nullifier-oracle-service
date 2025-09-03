@@ -20,11 +20,8 @@ pragma circom 2.0.0;
 
 // This file is copied from https://github.com/iden3/circomlib/blob/master/circuits/eddsaposeidon.circom and adapted to use Poseidon2 instead of Poseidon and use a more standard cofactored verification.
 
-include "circomlib/compconstant.circom";
 include "poseidon2/poseidon2.circom";
-include "circomlib/bitify.circom";
-include "circomlib/escalarmulany.circom";
-include "circomlib/escalarmulfix.circom";
+include "babyjubjub/babyjubjub.circom";
 
 template EdDSAPoseidon2Verifier() {
     signal input Ax;
@@ -38,20 +35,12 @@ template EdDSAPoseidon2Verifier() {
 
     var i;
 
-// Ensure S<Subgroup Order
+    // Ensure S < Subgroup Order
+    component s_range = BabyJubJubIsInFr();
+    s_range.in <== S;
+    BabyJubJubScalarField() s_f <== s_range.out;
 
-    component snum2bits = Num2Bits(253);
-    snum2bits.in <== S;
-
-    component  compConstant = CompConstant(2736030358979909402780800718157159386076813972158567259200215660948447373040);
-
-    for (i=0; i<253; i++) {
-        snum2bits.out[i] ==> compConstant.in[i];
-    }
-    compConstant.in[253] <== 0;
-    compConstant.out === 0;
-
-// Calculate the h = H(R,A, msg)
+    // Calculate the h = H(R,A, msg)
 
     // TODO use t=8 here?
     component hash1 = Poseidon2(4);
@@ -75,48 +64,36 @@ template EdDSAPoseidon2Verifier() {
     // hash.in[6] <== 0;
     // hash.in[7] <== 0;
 
-    component h2bits = Num2Bits_strict();
-    h2bits.in <== hash.out[1];
-
-// Calculate second part of the right side:  right2 = h*A
-
-
+    // Calculate second part of the right side:  right2 = h*A
     // We check that A is not zero.
     component isZero = IsZero();
     isZero.in <== Ax;
     isZero.out === 0;
 
-    component mulAny = EscalarMulAny(254);
-    for (i=0; i<254; i++) {
-        mulAny.e[i] <== h2bits.out[i];
-    }
-    mulAny.p[0] <== Ax;
-    mulAny.p[1] <== Ay;
+    BabyJubJubBaseField() h_f;
+    BabyJubJubPoint() { twisted_edwards } A_p;
+    h_f.f <== hash.out[1];
+    A_p.x <== Ax;
+    A_p.y <== Ay;
+    component mulAny = BabyJubJubScalarMulBaseField();
+    mulAny.e <== h_f;
+    mulAny.p <== A_p;
 
-
-// Compute the right side: right =  R + right2
-
+    // Compute the right side: right =  R + right2
     component addRight = BabyAdd();
     addRight.x1 <== Rx;
     addRight.y1 <== Ry;
-    addRight.x2 <== mulAny.out[0];
-    addRight.y2 <== mulAny.out[1];
+    addRight.x2 <== mulAny.out.x;
+    addRight.y2 <== mulAny.out.y;
 
-// Calculate left side of equation left = S*B
-
-    var BASE8[2] = [
-        5299619240641551281634865583518297030282874472190772894086521144482721001553,
-        16950150798460657717958625567821834550301663161624707787222815936182638968203
-    ];
-    component mulFix = EscalarMulFix(253, BASE8);
-    for (i=0; i<253; i++) {
-        mulFix.e[i] <== snum2bits.out[i];
-    }
+    // Calculate left side of equation left = S*B
+    component mulFix = BabyJubJubScalarGeneratorBits();
+    mulFix.e <== s_range.out_bits;
 
     // compute v = s*B - R - h*A = s*B - (R + h*A)
     component v = BabyAdd();
-    v.x1 <== mulFix.out[0];
-    v.y1 <== mulFix.out[1];
+    v.x1 <== mulFix.out.x;
+    v.y1 <== mulFix.out.y;
     v.x2 <== -addRight.xout;
     v.y2 <== addRight.yout;
 
@@ -132,8 +109,7 @@ template EdDSAPoseidon2Verifier() {
     dbl3.x <== dbl2.xout;
     dbl3.y <== dbl2.yout;
 
-// Do the comparison 8*v == Identity;
-
+    // Do the comparison 8*v == Identity;
     dbl3.xout === 0;
     dbl3.yout === 1;
 }

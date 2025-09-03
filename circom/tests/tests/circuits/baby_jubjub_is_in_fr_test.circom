@@ -6,7 +6,9 @@ template BabyJubJubIsInFrTest() {
     signal input in;
     signal output out;
 
-    BabyJubJubScalarField() result <== BabyJubJubIsInFr()(in);
+    component in_f = BabyJubJubIsInFr();
+    in_f.in <== in;
+    BabyJubJubScalarField() result <== in_f.out;
     out <== result.f;
 }
 
