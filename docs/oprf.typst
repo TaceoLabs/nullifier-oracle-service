@@ -258,7 +258,7 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
           "Prove",
           $x, B, D$,
           {
-            ($k arrowrl bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random " + $k$,)
+            LineComment(Assign[$k$][$bb(F)_p$], [Sample random $k$])
             Assign[$R_1$][$k dot D$]
             Assign[$R_2$][$k dot B$]
             Assign[$e$][$H(x dot D,B, x dot B,D,R_1, R_2) in bb(F)_p$]
@@ -301,20 +301,20 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
       stroke: black,
       {
         import algorithmic: *
-        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Comment([Each server $i$:])
         Function(
           "partial_commitments",
           $x_i, A, B, D$,
           {
-            ($k_i arrowrl bb(F)_p$ + "  " + sym.triangle.stroked.r + " Sample random share " + $k_i$,)
+            LineComment(Assign[$k_i$][$bb(F)_p$], [Sample random share $k_i$])
             Assign[$R_(i,1)$][$k_i dot D$]
             Assign[$R_(i,2)$][$k_i dot B$]
             Assign[$C_i$][$x_i dot B$]
             Return[$k_i, C_i, R_(i,1), R_(i,2)$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " The accumulator with input from all " + $n$ + " servers:",)
+        LineBreak
+        Comment([The accumulator with input from all $n$ servers:])
         Function(
           "create_challenge",
           $A, B, D, (C_1, R_{1,1}, R_{1,2}), dots, (C_n, R_{n,1}, R_{n,2})$,
@@ -326,8 +326,8 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
             Return[$e$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        LineBreak
+        Comment([Each server $i$:])
         Function(
           "challenge",
           $x_i, k_i, e$,
@@ -336,8 +336,8 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
             Return[$s_i$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " The accumulator with input from all " + $n$ + " servers:",)
+        LineBreak
+        Comment([The accumulator with input from all $n$ servers:])
         Function(
           "combine_proofs",
           $e, s_1, ..., s_n$,
@@ -363,20 +363,20 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
       stroke: black,
       {
         import algorithmic: *
-        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        Comment([Each server $i$:])
         Function(
           "partial_commitments",
           $x_i, A, B, D$,
           {
-            ($k_i arrow.l$ + `Shamir.Rand()` + "  " + sym.triangle.stroked.r + " Sample random Shamir share " + $k_i$,)
+            LineComment(Assign[$k_i$][`Shamir.Rand()`], [Sample random Shamir share $k_i$])
             Assign[$R_(i,1)$][$k_i dot D$]
             Assign[$R_(i,2)$][$k_i dot B$]
             Assign[$C_i$][$x_i dot B$]
             Return[$k_i, C_i, R_(i,1), R_(i,2)$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " The accumulator with input from " + $t = d+1$ + " out of  " + $n$ + " servers:",)
+        LineBreak
+        Comment([The accumulator with input from $t = d+1$ out of $n$ servers:])
         Function(
           "create_challenge",
           $A, B, D, (C_1, R_{1,1}, R_{1,2}), dots, (C_t, R_{t,1}, R_{t,2})$,
@@ -388,8 +388,8 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
             Return[$e$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " Each server " + $i$ + ":",)
+        LineBreak
+        Comment([Each server $i$:])
         Function(
           "challenge",
           $x_i, k_i, e$,
@@ -398,8 +398,8 @@ The approximate circuit size for these statements is: $15210 + 10296 + 240 + 231
             Return[$s_i$]
           },
         )
-        (strong(""),)
-        (sym.triangle.stroked.r + " The accumulator with input from " + $t = d+1$ + " out of  " + $n$ + " servers:",)
+        LineBreak
+        Comment([The accumulator with input from $t = d+1$ out of $n$ servers:])
         Function(
           "combine_proofs",
           $e, s_1, ..., s_t$,
