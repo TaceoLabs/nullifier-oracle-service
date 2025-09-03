@@ -150,7 +150,7 @@ impl OPrfClient {
 
     // Returns the used domain separator as a field element for the finalization of the query
     pub fn get_ds() -> BaseField {
-        BaseField::from_le_bytes_mod_order(Self::DS)
+        BaseField::from_be_bytes_mod_order(Self::DS)
     }
 
     /// Generates the query field element from the index, rp_id, and action.

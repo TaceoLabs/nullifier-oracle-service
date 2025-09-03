@@ -7,12 +7,13 @@ include "verify_dlog/verify_dlog.circom";
 
 template OprfNullifier(MAX_DEPTH) {
     // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
-    signal input user_pk[2];
+    signal input user_pk[7][2];
+    signal input pk_index; // 0..6
     signal input query_s;
     signal input query_r[2];
     // Merkle proof
     signal input merkle_root; // Public
-    signal input index;
+    signal input mt_index;
     signal input siblings[MAX_DEPTH];
     // Oprf query
     signal input beta;
@@ -30,16 +31,17 @@ template OprfNullifier(MAX_DEPTH) {
     signal output nullifier; // Public
 
     // Derive the query
-    var query_poseidon[4] = Poseidon2(4)([0, index, rp_id, action]);
+    var query_poseidon[4] = Poseidon2(4)([0, mt_index, rp_id, action]);
     signal query <== query_poseidon[1];
 
     // 1-3. Show that the original query was computed correctly
     component oprf_query = OprfQueryInner(MAX_DEPTH);
     oprf_query.pk <== user_pk;
+    oprf_query.pk_index <== pk_index;
     oprf_query.s <== query_s;
     oprf_query.r <== query_r;
     oprf_query.merkle_root <== merkle_root;
-    oprf_query.index <== index;
+    oprf_query.mt_index <== mt_index;
     oprf_query.siblings <== siblings;
     oprf_query.beta <== beta;
     oprf_query.query <== query;
@@ -70,7 +72,7 @@ template OprfNullifier(MAX_DEPTH) {
     oprf_response_blinded[1] === unblinder.out.y;
 
     // Hash the result to get the output of the OPRF
-    var DS = 2077634596643571865025471266844503; // b"World ID Proof"
+    var DS = 1773399373884719043551596035141478; // b"World ID Proof"
     var poseidon_result[4] = Poseidon2(4)([DS, query, oprf_response[0], oprf_response[1]]);
     nullifier <== poseidon_result[1];
 
