@@ -86,4 +86,8 @@ pub struct OprfConfig {
     /// Path to the verification key used to verify the proof provided by the user during session initialization.
     #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
     pub user_verification_key_path: PathBuf,
+
+    /// Path to the private key shamir share.
+    #[clap(long, env = "OPRF_SERVICE_PRIVATE_KEY_SHARE")]
+    pub private_key_share_path: PathBuf,
 }

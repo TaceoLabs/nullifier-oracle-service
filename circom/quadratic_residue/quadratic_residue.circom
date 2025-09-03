@@ -5,7 +5,7 @@ include "circomlib/comparators.circom";
 // -  1 if n is a quadratic residue and n != 0
 // - -1 if n is a non-quadratic residue
 // -  0 if n == 0
-function legendre(n) {
+function bbf_legendre(n) {
     if (n == 0) {
         return 0;
     } else {
@@ -30,10 +30,18 @@ template CheckZeroOneOrMinusOne() {
     lhs * rhs === 0;
 }
 
+function bbf_sqrt_input(l, a, na) {
+    if (l != -1) {
+        return a;
+    } else {
+        return na;
+    }
+}
+
 // This function returns sqrt(n) using Tonelli–Shanks parameters for BN254.
 // It does NOT check whether n is a quadratic residue in the BN254 scalar field.
 // Calling this function without checking the Legendre symbol results in undefined behavior.
-function sqrt_unchecked(n) {
+function bbf_sqrt_unchecked(n) {
     if (n == 0) {
         return 0;
     }
@@ -88,7 +96,7 @@ template IsQuadraticResidueOrZero() {
     signal output out;
 
     // Compute Legendre symbol l
-    signal l <-- legendre(a);
+    signal l <-- bbf_legendre(a);
 
     // Constrain l ∈ { -1, 0, 1 }
     component legendre_check = CheckZeroOneOrMinusOne();
@@ -99,14 +107,9 @@ template IsQuadraticResidueOrZero() {
     signal na <== n * a;
 
     // Witness for a square root under the appropriate condition
-    var sqrt_input;
-    if (l != -1) {
-        sqrt_input = a;
-    } else {
-        sqrt_input = na;
-    }
+    var sqrt_input = bbf_sqrt_input(l, a, na);
     // We don't use the ternary operator because Circom evaluates both branches which results in endless loops.
-    signal b <-- sqrt_unchecked(sqrt_input);
+    signal b <-- bbf_sqrt_unchecked(sqrt_input);
 
     // Compute the selectors
     signal s_na <== l * (l - 1); // 0 when l ∈ {0,1}, 2 when l = -1

@@ -12,10 +12,10 @@ use crate::{
     services::{crypto_device::CryptoDevice, oprf::OprfService},
 };
 
-mod api;
+pub mod api;
 pub mod config;
 pub mod metrics;
-pub(crate) mod services;
+pub mod services;
 pub mod telemetry;
 
 #[derive(Clone)]

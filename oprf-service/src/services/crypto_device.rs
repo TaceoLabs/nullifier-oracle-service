@@ -1,4 +1,5 @@
-use ark_ff::UniformRand as _;
+use std::str::FromStr;
+
 use oprf_core::ddlog_equality::{
     DLogEqualityChallenge, DLogEqualityProofShare, DLogEqualitySession,
     PartialDLogEqualityCommitments,
@@ -21,15 +22,12 @@ impl CryptoDevice {
                 todo!("prod not yet implemented")
             }
             Enviroment::Dev => {
-                tracing::warn!("starting dev environment - loading key from some file");
-                // TODO load from a file
-                ark_babyjubjub::Fr::rand(&mut rand::thread_rng())
+                tracing::warn!("starting dev environment - loading key from file");
+                let key_share = std::fs::read_to_string(&config.private_key_share_path)?;
+                PrivateKey::from_str(&key_share).unwrap()
             }
         };
-        Ok(Self {
-            private_key,
-            // public_key: PublicKey::generator() * private_key,
-        })
+        Ok(Self { private_key })
     }
 
     pub(crate) fn partial_commit(

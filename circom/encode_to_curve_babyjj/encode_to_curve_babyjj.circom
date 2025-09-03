@@ -60,7 +60,7 @@ template MapToCurveElligator2() {
     // Note: sqrt_unchecked(y2) may return either square root r or -r; it does not fix a sign.
     // We enforce a canonical choice for y via the additional constraint rather than relying on the function.
     // TODO: Consider folding this canonicalization into sqrt_unchecked so callers always receive the canonical root which we then of course have to constraint correctly.
-    signal y <-- sqrt_unchecked(y2);
+    signal y <-- bbf_sqrt_unchecked(y2);
     y*y === y2;
 
     signal e3 <== Sgn0()(y);
