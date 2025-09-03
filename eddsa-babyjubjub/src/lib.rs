@@ -123,14 +123,13 @@ impl EdDSAPublicKey {
         }
 
         // 2. Reject the signature if the public key A is one of 8 small order points.
-        // This boils down to the following checks.
-        if [self.pk, signature.r]
-            .iter()
-            .any(|p| !p.is_on_curve() || !p.is_in_correct_subgroup_assuming_on_curve())
+        // The following checks are sufficient for this, but it could be simplified by just checking against the 8 small order points.
+        // The check for R is not strictly necessary for security.
+        if self.pk.is_zero()
+            || !self.pk.is_on_curve()
+            || !self.pk.is_in_correct_subgroup_assuming_on_curve()
+            || !signature.r.is_on_curve()
         {
-            return false;
-        }
-        if [self.pk, signature.r].iter().any(|p| p.is_zero()) {
             return false;
         }
         // 3. Reject the signature if A or R are non-canonical. We do not do this directly here, instead leaving this to the rust type system which ensure that the field elements are canonical.

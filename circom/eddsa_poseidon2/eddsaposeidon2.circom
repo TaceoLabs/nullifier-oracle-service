@@ -22,6 +22,7 @@ pragma circom 2.0.0;
 
 include "poseidon2/poseidon2.circom";
 include "babyjubjub/babyjubjub.circom";
+include "babyjubjub/correct_sub_group.circom";
 
 template EdDSAPoseidon2Verifier() {
     signal input Ax;
@@ -64,17 +65,22 @@ template EdDSAPoseidon2Verifier() {
     // hash.in[6] <== 0;
     // hash.in[7] <== 0;
 
-    // Calculate second part of the right side:  right2 = h*A
+    // We check that R is on the curve.
+    // This is not strictly necessary for security, but since it only adds 3 constraints we do it anyway.
+    BabyJubJubPoint {twisted_edwards } R_p <== BabyJubJubCheck()(Rx, Ry);
+    // We check that A is on the curve.
+    BabyJubJubPoint {twisted_edwards } A_p <== BabyJubJubCheck()(Ax, Ay);
+    // We check that A is in the correct subgroup.
+    // TODO this can be simplified by just checking against the 8 small order points.
+    BabyJubJubCheckInCorrectSubgroup()(A_p);
     // We check that A is not zero.
     component isZero = IsZero();
     isZero.in <== Ax;
     isZero.out === 0;
 
+    // Calculate second part of the right side:  right2 = h*A
     BabyJubJubBaseField() h_f;
-    BabyJubJubPoint() { twisted_edwards } A_p;
     h_f.f <== hash.out[1];
-    A_p.x <== Ax;
-    A_p.y <== Ay;
     component mulAny = BabyJubJubScalarMulBaseField();
     mulAny.e <== h_f;
     mulAny.p <== A_p;
