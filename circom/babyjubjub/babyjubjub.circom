@@ -152,10 +152,15 @@ template BabyJubJubIsInFr() {
     // Prime order of BabyJubJub's scalar field Fr.
     var fr = 2736030358979909402780800718157159386076813972158567259200215660948447373041;
 
-    signal bits[254] <== Num2Bits_strict()(in);
+    signal bits[253] <== Num2Bits(253)(in);
     // CompConstant enforces <=, so compare against (fr - 1).
-    signal check <== CompConstant(fr - 1)(bits);
-    check === 0;
+    component compConstant = CompConstant(fr - 1);
+    for (var i=0; i<253; i++) {
+        bits[i] ==> compConstant.in[i];
+    }
+    compConstant.in[253] <== 0;
+
+    compConstant.out === 0;
     out.f <== in;
 }
 

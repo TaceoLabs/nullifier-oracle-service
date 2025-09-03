@@ -28,12 +28,11 @@ template OprfQuery(MAX_DEPTH) {
 
     // 1. Verify sk/pk by verifying a signature to a known message
     component eddsa_verifier = EdDSAPoseidon2Verifier();
-    eddsa_verifier.enabled <== 1;
     eddsa_verifier.Ax <== pk[0];
     eddsa_verifier.Ay <== pk[1];
     eddsa_verifier.S <== s;
-    eddsa_verifier.R8x <== r[0];
-    eddsa_verifier.R8y <== r[1];
+    eddsa_verifier.Rx <== r[0];
+    eddsa_verifier.Ry <== r[1];
     eddsa_verifier.M <== nonce;
 
     // 2. Merkle proof of pk
