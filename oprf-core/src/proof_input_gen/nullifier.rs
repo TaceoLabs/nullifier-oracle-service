@@ -1,5 +1,5 @@
 use ark_ec::CurveGroup;
-use ark_ff::UniformRand;
+use ark_ff::{PrimeField, UniformRand};
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 
@@ -15,12 +15,13 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 #[derive(Debug, Clone)]
 pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     // Signature
-    pub user_pk: [BaseField; 2],
+    pub user_pk: [[BaseField; 2]; super::query::MAX_PUBLIC_KEYS],
+    pub pk_index: BaseField, // 0..6
     pub query_s: ScalarField,
     pub query_r: [BaseField; 2],
     // Merkle proof
     pub merkle_root: BaseField,
-    pub index: BaseField,
+    pub mt_index: BaseField,
     pub siblings: [BaseField; MAX_DEPTH],
     // OPRF query
     pub beta: ScalarField,
@@ -40,6 +41,8 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
 }
 
 impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
+    pub const MAX_PUBLIC_KEYS: usize = QueryProofInput::<MAX_DEPTH>::MAX_PUBLIC_KEYS;
+
     pub fn generate_from_seed(seed: &[u8; 32]) -> Self {
         let mut rng = ChaCha12Rng::from_seed(*seed);
         Self::generate(&mut rng)
@@ -72,7 +75,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             oprf_service.answer_query_with_proof(blinded_oprf_query);
 
         // Now the client finalizes the nullifier
-        let client_pk = Affine::new_unchecked(query_proof_input.pk[0], query_proof_input.pk[1]);
+        let pk_index = query_proof_input.pk_index.into_bigint().0[0] as usize;
+        let pk = query_proof_input.pk[pk_index];
+        let client_pk = Affine::new_unchecked(pk[0], pk[1]);
         let oprf_client = OPrfClient::new(client_pk);
 
         // We need an intermediate result
@@ -86,10 +91,11 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
 
         Self {
             user_pk: query_proof_input.pk,
+            pk_index: query_proof_input.pk_index,
             query_s: query_proof_input.s,
             query_r: query_proof_input.r,
             merkle_root: query_proof_input.merkle_root,
-            index: query_proof_input.index,
+            mt_index: query_proof_input.mt_index,
             siblings: query_proof_input.siblings,
             beta: query_proof_input.beta,
             rp_id: query_proof_input.rp_id,
@@ -108,11 +114,20 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
     }
 
     pub fn print(&self) {
-        println!("user_pk: [{}n, {}n],", self.user_pk[0], self.user_pk[1]);
+        println!("user_pk: [");
+        for (i, pk) in self.user_pk.iter().enumerate() {
+            if i < self.user_pk.len() - 1 {
+                println!("  [{:?}n, {:?}n],", pk[0], pk[1]);
+            } else {
+                println!("  [{:?}n, {:?}n]", pk[0], pk[1]);
+            }
+        }
+        println!("],");
+        println!("pk_index: {}n,", self.pk_index);
         println!("query_s: {}n,", self.query_s);
         println!("query_r: [{}n, {}n],", self.query_r[0], self.query_r[1]);
         println!("merkle_root: {}n,", self.merkle_root);
-        println!("index: {}n,", self.index);
+        println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");
         for (i, s) in self.siblings.iter().enumerate() {
             if i < self.siblings.len() - 1 {
