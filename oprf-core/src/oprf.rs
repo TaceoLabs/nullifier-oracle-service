@@ -131,9 +131,9 @@ pub struct PreparedBlindingFactor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindedOPrfResponse {
     /// request id, to track the response to the request
-    request_id: Uuid,
+    pub request_id: Uuid,
     /// the blinded response
-    pub(crate) blinded_response: Affine,
+    pub blinded_response: Affine,
 }
 
 pub struct OPrfClient {
@@ -184,6 +184,7 @@ impl OPrfClient {
     /// The provided query field element is mapped to a point on the curve, using Elligator2 based methods.
     pub fn blind_query<R: Rng + CryptoRng>(
         &self,
+        request_id: Uuid,
         query: BaseField,
         rng: &mut R,
     ) -> (BlindedOPrfRequest, BlindingFactor) {
@@ -194,10 +195,7 @@ impl OPrfClient {
                 break random;
             }
         };
-        let request_id = Uuid::new_v4();
-
         let encoded_input = mappings::encode_to_curve(query);
-
         let blinded_query = (encoded_input * blinding_factor).into_affine();
         (
             BlindedOPrfRequest {
@@ -474,14 +472,16 @@ mod tests {
     #[test]
     fn test_oprf_determinism() {
         let mut rng = rand::thread_rng();
+        let request_id = Uuid::new_v4();
+        let request_id2 = Uuid::new_v4();
         let key = OPrfKey::random(&mut rng);
         let service = OPrfService::new(key);
         let client = OPrfClient::new(*service.public_key());
 
         let query =
             OPrfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
-        let (blinded_request, blinding_factor) = client.blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = client.blind_query(query, &mut rng);
+        let (blinded_request, blinding_factor) = client.blind_query(request_id, query, &mut rng);
+        let (blinded_request2, blinding_factor2) = client.blind_query(request_id2, query, &mut rng);
         assert_ne!(blinded_request, blinded_request2);
         assert_ne!(
             blinded_request.blinded_query,
@@ -515,14 +515,16 @@ mod tests {
     #[test]
     fn test_oprf_with_proof() {
         let mut rng = rand::thread_rng();
+        let request_id = Uuid::new_v4();
+        let request_id2 = Uuid::new_v4();
         let key = OPrfKey::random(&mut rng);
         let service = OPrfService::new(key);
         let client = OPrfClient::new(*service.public_key());
 
         let query =
             OPrfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
-        let (blinded_request, blinding_factor) = client.blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = client.blind_query(query, &mut rng);
+        let (blinded_request, blinding_factor) = client.blind_query(request_id, query, &mut rng);
+        let (blinded_request2, blinding_factor2) = client.blind_query(request_id2, query, &mut rng);
         assert_ne!(blinded_request, blinded_request2);
         assert_ne!(
             blinded_request.blinded_query,

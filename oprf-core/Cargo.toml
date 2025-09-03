@@ -13,9 +13,7 @@ readme.workspace = true
 [dependencies]
 ark-ec = "0.5.0"
 ark-babyjubjub = { path = "../ark-babyjubjub" }
-ark-bn254 = "0.5.0"
 ark-ff = "0.5.0"
-ark-groth16 = "0.5.0"
 rand_chacha.workspace = true
 itertools = "0.14"
 serde = { workspace = true, features = ["derive"] }
@@ -24,6 +22,7 @@ rand.workspace = true
 uuid = { version = "1.18.0", features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }
 eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
+ark-serde-compat = { path = "../ark-serde-compat" }
 thiserror = "2.0.16"
 num-bigint = "0.4.3"
 

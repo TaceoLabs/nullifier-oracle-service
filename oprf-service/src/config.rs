@@ -125,4 +125,8 @@ pub struct OprfConfig {
         default_value = "oprf/sk"
     )]
     pub private_key_secret_id: String,
+
+    /// Path to the private key shamir share.
+    #[clap(long, env = "OPRF_SERVICE_PRIVATE_KEY_SHARE")]
+    pub private_key_share_path: PathBuf,
 }

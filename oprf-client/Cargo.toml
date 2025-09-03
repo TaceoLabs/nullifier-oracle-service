@@ -1,5 +1,5 @@
 [package]
-name = "oprf-service"
+name = "oprf-client"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,43 +10,31 @@ license.workspace = true
 publish.workspace = true
 readme.workspace = true
 
-[features]
-default = ["mock-chain-watcher"]
-mock-chain-watcher = []
-
 [dependencies]
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-bn254 = "0.5.0"
-ark-ec = "0.5.0"
 ark-ff = "0.5.0"
-ark-groth16 = "0.5.0"
-aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
-aws-sdk-secretsmanager = "1.88.0"
-async-trait = "0.1.89"
-axum = "0.8.4"
+ark-ec = "0.5.0"
 clap = { version = "4.5.46", features = ["derive", "env"] }
 eyre.workspace = true
-git-version = "0.3.9"
-http = "1.3.1"
-humantime = "2.2.0"
-metrics = "0.24.2"
-metrics-exporter-dogstatsd = "0.9.6"
-metrics-exporter-prometheus = "0.17.2"
-metrics-exporter-statsd = "0.9.0"
 rand.workspace = true
-rustls = "0.23.31"
-secrecy = "0.10.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "737bb0fc543214191e0448963b5a1ab279119f98" }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tokio-util = "0.7.16"
-tower-http = { version = "0.6.6", features = ["set-header", "cors", "trace"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { version = "1.18.0", features = ["serde", "v4"] }
+reqwest = { version = "0.12.23", features = ["json"] }
 
 oprf-core = { path = "../oprf-core" }
 oprf-types = { path = "../oprf-types" }
+eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
 ark-serde-compat = { path = "../ark-serde-compat" }
+witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", branch = "dev" }
+groth16 = { git = "https://github.com/TaceoLabs/groth16.git" }
+circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.22.0"

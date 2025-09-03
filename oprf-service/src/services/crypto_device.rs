@@ -1,4 +1,3 @@
-use oprf_core::ark_serde_compat;
 use std::collections::HashMap;
 use tracing::instrument;
 

@@ -1,24 +1,24 @@
 use std::{fs::File, sync::Arc};
 
+use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::{Router, extract::FromRef};
 use eyre::Context;
-use oprf_core::ark_serde_compat::groth16::Groth16VerificationKey;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
 use crate::{
-    config::OprfConfig,
+    config::{Enviroment, OprfConfig},
     services::{
         chain_watcher::ChainWatcherService, crypto_device::CryptoDevice, oprf::OprfService,
         secret_manager,
     },
 };
 
-mod api;
+pub mod api;
 pub mod config;
 pub mod metrics;
-pub(crate) mod services;
+pub mod services;
 pub mod telemetry;
 
 #[derive(Clone)]
@@ -73,7 +73,10 @@ pub async fn start(
         .context("while parsing Groth16 verification key for user proof")?;
 
     // Load the secret manager. For now we only support AWS. Most likely we want to load from the SC and reconstruct the secrets, but let's see if we really need this or AWS is just fine.
-    let secret_manager = secret_manager::aws::init().await;
+    let secret_manager = match config.environment {
+        Enviroment::Prod => secret_manager::aws::init().await,
+        Enviroment::Dev => secret_manager::local::init()?,
+    };
 
     // TODO load all RP_ids from SC
 

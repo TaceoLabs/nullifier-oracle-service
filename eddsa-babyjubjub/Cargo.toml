@@ -19,3 +19,5 @@ num-bigint = "0.4.3"
 rand = "0.8"
 poseidon2 = { path = "../poseidon2" }
 zeroize = "1"
+serde = { workspace = true, features = ["derive"] }
+ark-serde-compat = { path = "../ark-serde-compat" }

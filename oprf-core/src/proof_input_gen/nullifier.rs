@@ -2,9 +2,13 @@ use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, UniformRand};
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
+use uuid::Uuid;
 
 use crate::{
-    oprf::{BlindedOPrfRequest, BlindingFactor, OPrfClient, OPrfKey, OPrfService},
+    dlog_equality::DLogEqualityProof,
+    oprf::{
+        BlindedOPrfRequest, BlindedOPrfResponse, BlindingFactor, OPrfClient, OPrfKey, OPrfService,
+    },
     proof_input_gen::query::QueryProofInput,
 };
 
@@ -124,6 +128,75 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
+    pub fn new(
+        request_id: Uuid,
+        oprf_pk: Affine,
+        signal_hash: BaseField,
+        query_proof_input: QueryProofInput<MAX_DEPTH>,
+        query: BaseField,
+        blinded_response: Affine,
+        dlog_proof: DLogEqualityProof,
+        id_commitment_r: BaseField,
+    ) -> Self {
+        // These come from the QueryProof, but need to be reconstructed
+        let blinding_factor = BlindingFactor {
+            factor: query_proof_input.beta,
+            query,
+            request_id,
+        };
+        let blinding_factor_prepared = blinding_factor.prepare();
+
+        let oprf_blinded_response = BlindedOPrfResponse {
+            request_id,
+            blinded_response,
+        };
+
+        // Now the client finalizes the nullifier
+        let pk_index = query_proof_input.pk_index.into_bigint().0[0] as usize;
+        let pk = query_proof_input.pk[pk_index];
+        let client_pk = Affine::new_unchecked(pk[0], pk[1]);
+        let oprf_client = OPrfClient::new(client_pk);
+
+        // We need an intermediate result
+        let unblinded_response = (oprf_blinded_response.blinded_response
+            * blinding_factor_prepared.factor)
+            .into_affine();
+
+        let nullifier = oprf_client
+            .finalize_query(oprf_blinded_response.to_owned(), blinding_factor_prepared)
+            .expect("IDs should match");
+
+        // lets commit to the id
+        let id_commitment = OPrfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
+
+        Self {
+            user_pk: query_proof_input.pk,
+            pk_index: query_proof_input.pk_index,
+            query_s: query_proof_input.s,
+            query_r: query_proof_input.r,
+            merkle_root: query_proof_input.merkle_root,
+            mt_index: query_proof_input.mt_index,
+            siblings: query_proof_input.siblings,
+            beta: query_proof_input.beta,
+            rp_id: query_proof_input.rp_id,
+            action: query_proof_input.action,
+            dlog_e: dlog_proof.e,
+            dlog_s: dlog_proof.s,
+            oprf_response_blinded: [
+                oprf_blinded_response.blinded_response.x,
+                oprf_blinded_response.blinded_response.y,
+            ],
+            oprf_response: [unblinded_response.x, unblinded_response.y],
+            oprf_pk: [oprf_pk.x, oprf_pk.y],
+            signal_hash,
+            nonce: query_proof_input.nonce,
+            id_commitment_r,
+            id_commitment,
+            nullifier,
+        }
+    }
+
     pub fn print(&self) {
         println!("user_pk: [");
         for (i, pk) in self.user_pk.iter().enumerate() {
@@ -167,6 +240,29 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         println!("id_commitment_r: {}n,", self.id_commitment_r);
         println!("id_commitment: {}n,", self.id_commitment);
         println!("nullifier: {}n,", self.nullifier);
+    }
+
+    pub fn json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "user_pk": self.user_pk.iter().map(|pk| [pk[0].to_string(), pk[1].to_string()]).collect::<Vec<_>>(),
+            "pk_index": self.pk_index.to_string(),
+            "query_s": self.query_s.to_string(),
+            "query_r": [self.query_r[0].to_string(), self.query_r[1].to_string()],
+            "merkle_root": self.merkle_root.to_string(),
+            "mt_index": self.mt_index.to_string(),
+            "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            "beta": self.beta.to_string(),
+            "rp_id": self.rp_id.to_string(),
+            "action": self.action.to_string(),
+            "dlog_e": self.dlog_e.to_string(),
+            "dlog_s": self.dlog_s.to_string(),
+            "oprf_pk": [self.oprf_pk[0].to_string(), self.oprf_pk[1].to_string()],
+            "oprf_response_blinded": [self.oprf_response_blinded[0].to_string(), self.oprf_response_blinded[1].to_string()],
+            "oprf_response": [self.oprf_response[0].to_string(), self.oprf_response[1].to_string()],
+            "signal_hash": self.signal_hash.to_string(),
+            "nonce": self.nonce.to_string(),
+            "id_commitment_r": self.id_commitment_r.to_string()
+        })
     }
 }
 

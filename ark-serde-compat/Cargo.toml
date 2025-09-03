@@ -1,5 +1,5 @@
 [package]
-name = "oprf-types"
+name = "ark-serde-compat"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+ark-ec = "0.5.0"
 ark-babyjubjub = { path = "../ark-babyjubjub" }
-eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
-ark-serde-compat = { path = "../ark-serde-compat" }
-oprf-core = { path = "../oprf-core" }
+ark-bn254 = "0.5.0"
+ark-groth16 = "0.5.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-uuid = { version = "1.18.0", features = ["serde", "v4"] }
+thiserror = "2.0.16"

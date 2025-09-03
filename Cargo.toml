@@ -5,8 +5,10 @@ members = [
     "oprf-core",
     "poseidon2",
     "eddsa-babyjubjub",
-    "oprf-types"
-    ]
+    "oprf-types",
+    "oprf-client",
+    "ark-serde-compat"
+]
 resolver = "3"
 
 [workspace.package]
