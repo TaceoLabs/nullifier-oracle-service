@@ -86,16 +86,8 @@ template BabyJubJubScalarGenerator() {
     // do with generator (scalarmul fix)
     input BabyJubJubScalarField() e;
     output BabyJubJubPoint() { twisted_edwards } out;
-    // The generator of BabyJubJub
-    var GENERATOR[2] = [
-        5299619240641551281634865583518297030282874472190772894086521144482721001553,
-        16950150798460657717958625567821834550301663161624707787222815936182638968203
-    ];
 
-    signal bits[251] <== Num2Bits(251)(e.f);
-    signal result[2] <== EscalarMulFix(251, GENERATOR)(bits);
-    out.x <== result[0];
-    out.y <== result[1];
+    out <== BabyJubJubScalarGeneratorBits()(Num2Bits(251)(e.f));
 }
 
 // Performs fixed-base scalar multiplication e·G, where G is the BabyJubJub generator.
@@ -121,10 +113,8 @@ template BabyJubJubScalarGeneratorBits() {
 template BabyJubJubScalarMulFix(BASE) {
     input BabyJubJubScalarField() e;
     output BabyJubJubPoint() { twisted_edwards } out;
-    signal bits[251] <== Num2Bits(251)(e.f);
-    signal result[2] <== EscalarMulFix(251, BASE)(bits);
-    out.x <== result[0];
-    out.y <== result[1];
+
+    out <== BabyJubJubScalarMulFixBits(BASE)(Num2Bits(251)(e.f));
 }
 
 // Performs fixed-point scalar multiplication e·P for a constant point P.
@@ -145,10 +135,7 @@ template BabyJubJubScalarMul() {
     input BabyJubJubPoint() { twisted_edwards } p;
     output BabyJubJubPoint() { twisted_edwards } out;
 
-    signal bits[251] <== Num2Bits(251)(e.f);
-    signal result[2] <== EscalarMulAny(251)(bits, [p.x,p.y]);
-    out.x <== result[0];
-    out.y <== result[1];
+    out <== BabyJubJubScalarMulBits()(Num2Bits(251)(e.f), p);
 }
 
 // Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
