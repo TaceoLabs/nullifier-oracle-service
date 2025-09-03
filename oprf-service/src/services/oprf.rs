@@ -146,6 +146,7 @@ impl OprfService {
         proof: &Groth16Proof,
         input: ark_babyjubjub::EdwardsAffine,
     ) -> Result<(), OprfServiceError> {
+        // This can only fail if the verification key is corrupt, which is an internal server error and not a authorization error
         let valid = Groth16::<Bn254>::verify_proof(&self.vk, proof, &[input.x, input.y])
             .context("while verifying user proof")?;
         if valid {
@@ -158,6 +159,7 @@ impl OprfService {
     }
 }
 
+// TODO this uses currently ark-serialize. We don't want to use ark-serialize for this
 impl TryFrom<OprfRequest> for InitOprfSessionRequest {
     type Error = OprfServiceError;
 
@@ -179,6 +181,7 @@ impl TryFrom<OprfRequest> for InitOprfSessionRequest {
     }
 }
 
+// TODO this uses currently ark-serialize. We don't want to use ark-serialize for this
 impl TryFrom<ChallengeRequest> for FinalizeOprfSessionRequestn {
     type Error = OprfServiceError;
 
