@@ -11,7 +11,7 @@ on:
 jobs:
   test:
     name: Circuit Unit/KAT Tests
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./circom/tests
