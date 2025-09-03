@@ -1,6 +1,9 @@
+pub mod bn254_t12;
+pub mod bn254_t16;
 pub mod bn254_t2;
 pub mod bn254_t3;
 pub mod bn254_t4;
+pub mod bn254_t8;
 
 use ark_ff::PrimeField;
 
