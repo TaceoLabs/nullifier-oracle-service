@@ -63,15 +63,17 @@ template VerifyDlog() {
     BabyJubJubCheckNotIdentity()(b_p);
     BabyJubJubCheckNotIdentity()(c_p);
 
-    // Check that proof.s is in field Fq. This check is required to prevent malleability of the proof by using different s, such as s + q 
+    // Check that proof.s is in field Fq. This check is required to prevent malleability of the proof by using different s, such as s + q
     // Fq has 251 bits, therefore we call LessThan with 251
-    BabyJubJubScalarField() s_f <== BabyJubJubIsInFr()(s);
+    component s_range = BabyJubJubIsInFr();
+    s_range.in <== s;
+    signal s_f[251] <== s_range.out_bits;
 
     // The Rust implementation now converts e to Fr by doing a modulo reduction. We don't do this here because this is rather expensive. Therefore, we perform the segmentmul with 3 bits extra work, but the added constraints there are cheaper than doing the mod reduction.
 
     // compute
     // G * s - a * e
-    BabyJubJubPoint() lhs_r1 <== BabyJubJubScalarGenerator()(s_f);
+    BabyJubJubPoint() lhs_r1 <== BabyJubJubScalarGeneratorBits()(s_f);
     BabyJubJubPoint() rhs_r1 <== BabyJubJubScalarMulBaseField()(e, a_p);
 
     BabyJubJubPoint() r1 <== BabyJubJubSub()(lhs_r1, rhs_r1);
@@ -80,7 +82,7 @@ template VerifyDlog() {
 
     // compute
     // b * s - c * e
-    BabyJubJubPoint() lhs_r2 <== BabyJubJubScalarMul()(s_f, b_p);
+    BabyJubJubPoint() lhs_r2 <== BabyJubJubScalarMulBits()(s_f, b_p);
     BabyJubJubPoint() rhs_r2 <== BabyJubJubScalarMulBaseField()(e, c_p);
 
     BabyJubJubPoint() r2 <== BabyJubJubSub()(lhs_r2, rhs_r2);

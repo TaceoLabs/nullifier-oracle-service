@@ -98,6 +98,23 @@ template BabyJubJubScalarGenerator() {
     out.y <== result[1];
 }
 
+// Performs fixed-base scalar multiplication e·G, where G is the BabyJubJub generator.
+// This is a thin wrapper around EscalarMulFix with the hardcoded generator.
+template BabyJubJubScalarGeneratorBits() {
+    // do with generator (scalarmul fix)
+    signal input e[251];
+    output BabyJubJubPoint() { twisted_edwards } out;
+    // The generator of BabyJubJub
+    var GENERATOR[2] = [
+        5299619240641551281634865583518297030282874472190772894086521144482721001553,
+        16950150798460657717958625567821834550301663161624707787222815936182638968203
+    ];
+
+    signal result[2] <== EscalarMulFix(251, GENERATOR)(e);
+    out.x <== result[0];
+    out.y <== result[1];
+}
+
 // Performs fixed-point scalar multiplication e·P for a constant point P.
 // When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul
 // to reduce constraints.
@@ -110,6 +127,18 @@ template BabyJubJubScalarMulFix(BASE) {
     out.y <== result[1];
 }
 
+// Performs fixed-point scalar multiplication e·P for a constant point P.
+// When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul
+// to reduce constraints.
+template BabyJubJubScalarMulFixBits(BASE) {
+    signal input e[251];
+    output BabyJubJubPoint() { twisted_edwards } out;
+    signal result[2] <== EscalarMulFix(251, BASE)(e);
+    out.x <== result[0];
+    out.y <== result[1];
+}
+
+
 // Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
 template BabyJubJubScalarMul() {
     input BabyJubJubScalarField() e;
@@ -121,6 +150,18 @@ template BabyJubJubScalarMul() {
     out.x <== result[0];
     out.y <== result[1];
 }
+
+// Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
+template BabyJubJubScalarMulBits() {
+    signal input e[251];
+    input BabyJubJubPoint() { twisted_edwards } p;
+    output BabyJubJubPoint() { twisted_edwards } out;
+
+    signal result[2] <== EscalarMulAny(251)(e, [p.x,p.y]);
+    out.x <== result[0];
+    out.y <== result[1];
+}
+
 
 // Performs scalar multiplication e·P where e is provided in the base field Fq of BabyJubJub.
 // The scalar field Fr has 251 bits. To avoid an explicit modular reduction in-circuit,
@@ -149,6 +190,7 @@ template BabyJubJubScalarMulBaseField() {
 template BabyJubJubIsInFr() {
     signal input in;
     output BabyJubJubScalarField() out;
+    output signal out_bits[251];
     // Prime order of BabyJubJub's scalar field Fr.
     var fr = 2736030358979909402780800718157159386076813972158567259200215660948447373041;
 
@@ -159,6 +201,10 @@ template BabyJubJubIsInFr() {
         bits[i] ==> compConstant.in[i];
     }
     compConstant.in[253] <== 0;
+
+    for (var i=0; i<251; i++) {
+        out_bits[i] <== bits[i];
+    }
 
     compConstant.out === 0;
     out.f <== in;
