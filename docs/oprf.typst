@@ -54,7 +54,8 @@ To add another secret back into the nullifier calculation, we employ an Obliviou
 Finally, an important part of the original Semaphore protocol is the zero-knowledge proof attesting the correct calculation of the nullifier. We still require this property, but have to extend it with the correct calculation of the OPRF. Therefore, a verifiable variant of the OPRF is used, which allows the OPRF servers to prove the correct calculation of the OPRF against a known public key. This proof must then be verified in the zero-knowledge proof attesting the correct calculation of the nullifier.
 
 == Notation
-#todo(position: "inline")[Write]
+
+In the rest of the manuscript, if not described otherwise, we refer to the prime describging the scalarfield of the BN254 curve (which is also the basefield of the BabyJubJub curve) as $p$ and refer to the prime describing the scalarfield of the BabyJubJub curve as $q$. Furthermore, we denote field elements $in bb(F)$ with small letters, whereas elliptic curve points are denoted by capital letters. To denote a secret sharing of a value $x$ or $X$ we use a bracket notation $[x]$ and $[X]$.
 
 = Background
 
@@ -211,7 +212,7 @@ Adding verifiability to @fig:twohashdh can be done by adding a discrete logarith
 
 = Our Construction
 
-In this section we describe the full protocol between the client and multiple OPRF servers.
+In this section we describe the full protocol between the client and multiple OPRF servers. We start by describing threhsold variants of the OPRF construction and the discrete logarithm equality proof, before we give our full protocol with the accompanying zero-knowledge proofs.
 
 == Threshold OPRF
 
@@ -239,8 +240,7 @@ Translating @fig:twohashdh from a single-server OPRF to a threshold OPRF is triv
 
 === Additively Shared Discrete Logarithm Equality Proof
 
-#todo(position: "inline")[adapt the text]
-In this section we describe how to distribute @alg:prover to multiple provers, which each have an additive secret-share of the value $x$. To reduce communication complexity, we introduce an accumulator party which reconstructs public values and computes challenges. Thus, each prover only has to communicate with the accumulating party, which in practice can be the verifier.
+In this section we describe how to distribute @alg:prover to multiple provers, where each prover has an additive secret-share of the value $k$. To reduce communication complexity, we introduce an accumulator party which reconstructs public values and computes challenges. Thus, each prover only has to communicate with the accumulating party, which in practice can be the verifier. We depict the protocol in @alg:add_prover.
 
 #show: style-algorithm
 #algorithm-figure(
@@ -296,14 +296,13 @@ In this section we describe how to distribute @alg:prover to multiple provers, w
   },
 )  <alg:add_prover>
 
-@alg:add_prover has two communication rounds between each server and the accumulator, but the servers do not need to communicate with any other server. Thereby, each random share of the server is protected by the discrete logarithm hardness assumption, preventing the accumulator from learning anything about the secrets $x, k$ and their shares.
+@alg:add_prover requires two communication rounds between each server and the accumulator, but the servers do not need to communicate with any other server. Thereby, each random share of the server is protected by the discrete logarithm hardness assumption, preventing the accumulator from learning anything about the secrets $k, r$ and their shares.
 
-In essence, @alg:add_prover rewrite the non-interactive prove back to its interactive version. Thus, the accumulator would not need to sample the random value $e$ via the Fiat-Shamir random oracle. However, keeping the same verifier as in the non-distributed version and keeping public verifiability (i.e., proving on chain it is not a simulated proof) requires the usage of the random oracle. Since the prover now does not chose the challenge via Fiat-Shamir itself, each server now should only respond once to a challenge for an existing random share $k_i$.
+In essence, @alg:add_prover rewrites the non-interactive prove back to its interactive version. Thus, the accumulator would not need to sample the random value $e$ via the Fiat-Shamir random oracle. However, keeping the same verifier as in the non-distributed version and keeping public verifiability (i.e., proving on chain it is not a simulated proof) requires the usage of the random oracle. Since the provers do not chose the challenge via Fiat-Shamir themselves, each server should only respond at most once to a challenge for an existing random share $r_i$.
 
 === Shamir Shared Discrete Logarithm Equality Proof
 
-#todo(position: "inline")[adapt the text]
-In order to rewrite @alg:add_prover from additive to Shamir secret-sharing, we have to make the following changes. First, the share $x_i$ needs to be a valid Shamir share. Second, the random share $k_i$ also needs to be sampled as a valid Shamir shares, which introduces an additional communication round. Finally, the accumulator reconstructs the commitments $C, R_1, R_2$ and the proof $s$ using lagrange interpolation from a set of $d+1$ servers, where $d$ is the chosen degree of the underlying sharing polynomial.
+In order to rewrite @alg:add_prover from additive to Shamir secret-sharing, we have to make the following changes. First, the share $x_i$ needs to be a valid Shamir share. Second, the random share $r_i$ also needs to be sampled as a valid Shamir share, which introduces an additional communication round. Finally, the accumulator reconstructs the commitments $C, R_1, R_2$ and the proof $s$ using lagrange interpolation from a set of $d+1$ servers, where $d$ is the chosen degree of the underlying sharing polynomial. We depict the protocol in @alg:shamir_prover.
 
 #show: style-algorithm
 #algorithm-figure(
@@ -359,11 +358,11 @@ In order to rewrite @alg:add_prover from additive to Shamir secret-sharing, we h
   },
 )  <alg:shamir_prover>
 
-The presence of $k_i arrow.l$ `Shamir.Rand()` in @alg:shamir_prover has the implication, that the servers now need to be able to communicate with each other in order to be able to create valid Shamir shares. In practices one can think of either generating this random share directly on request, or precomputing random values $k$ in an offline phase and consuming them in the online phase. Another solution can be to let the accumulator chose the $d+1$ servers in the beginning of the protocol and only use their shares in the whole computation. In this setting, the chosen parties can simply sample their shares at random without communication, since the requirement that all $n$ shares need to be on the same polynomial is not there anymore.
+The presence of $r_i arrow.l$ `Shamir.Rand()` in @alg:shamir_prover has the implication, that the servers now need to be able to communicate with each other in order to be able to create valid Shamir shares. However, one can make a crucial optimization to get rid of this requirement again. First, observe that the only requirement on $r$ is that it needs to be chosen to be uniform at random. Furthermore, $r$ is only used in linear operations. Thus, when each server samples its $r_i$ uniformly at random, each set of $d+1$ servers have a valid Shamir sharing of a random value $r$. Consequently, a client can just query all servers, choose the responses of $d+1$ servers to create the challenge, and use the *same* set of $d+1$ servers to construct the final proof. In this way the servers do not have to agree on all of their shares being points of the same underlying sharing polynomial and no communication between the servers is required for sampling $r$.
 
 == Full Distributed OPRF-Based Nullifier Protocol
 
-We give the full verifiable OPRF based distributed nullifier service construction in @fig:full_protocol. For the description of the zero knowledge proofs $pi_1$ and $pi_2$ we refer to @sec:ZK.
+We give the full verifiable OPRF based distributed nullifier service construction in @fig:full_protocol. For the description of the zero-knowledge proofs $pi_1$ and $pi_2$ we refer to @sec:ZK.
 
 #figure(
   rect(table(
@@ -395,13 +394,13 @@ We give the full verifiable OPRF based distributed nullifier service constructio
 )
 <fig:full_protocol>
 
-=== Clients Zero Knowledge Proofs <sec:ZK>
+=== Clients Zero-Knowledge Proofs <sec:ZK>
 
 We describe the ZK proofs $pi_1$ and $pi_2$ from @fig:full_protocol in this section.
 
 ==== Query Proof $pi_1$
 
-The goal of the query proof $pi_1$ is to convince the server that a client is authorized to send a request. Therefore, `valid`$(pk)$ is a core part of this zero knowledge which shows that the used public key $pk$ is in some kind of allowlist. To prove knowledge of the corresponding private key $sk$ we opt to verify a signature $sigma <-$`Sign`$(sk, q)$ of the actual query $q$ inside the ZK proof. We use this signature to not have $sk$ as a private witness in the ZK proof. This has the advantage that a client can securely outsource proof generation to, e.g., an MPC-based prover network without having to secret-share its key $sk$ with them, minimizing damage in case of a privacy breach.
+The goal of the query proof $pi_1$ is to convince the server that a client is authorized to send a request. Therefore, `valid`$(pk)$ is a core part of this zero-knowledge which shows that the used public key $pk$ is in some kind of allowlist. To prove knowledge of the corresponding private key $sk$ we opt to verify a signature $sigma <-$`Sign`$(sk, q)$ of the actual query $q$ inside the ZK proof. We use this signature to not have $sk$ as a private witness in the ZK proof. This has the advantage that a client can securely outsource proof generation to, e.g., an MPC-based prover network without having to secret-share its key $sk$ with them, minimizing damage in case of a privacy breach.
 
 Finally, $pi_1$ binds everything together by proving the correct calculation of the query point $A$ from its part.
 
@@ -433,7 +432,7 @@ The role of $pi_2$ is having a proof of the full nullifier construction. Thus, i
 #figure(
   box(stroke: black, inset: 1em)[
     #align(left)[
-      *Proof $pi_2 <-$ `prove`$(sigma, A,$`valid`$(pk),$ `dlog.verify`$(e,s), n)$:*
+      *Proof $pi_2 <-$ `prove`$(sigma, A,$ `valid`$(pk),$ `dlog.verify`$(e,s), n)$:*
       1. All 4 statements of the query proof $pi_1$ from @fig:pi1 are proven.
       2. The discrete logarithm equality proof from the OPRF servers is verified to show that the servers computed the response honestly. This is done by evaluating the verifier from @alg:prover inside the ZK proof, similar to proving the correct EdDSA signature.
       3. The OPRF result is unblinded and hashed to get the OPRF output $n = H_4(q, beta^(-1)dot C)$. To avoid inverting $beta$ in the BabyJubJub scalarfield $bb(F)_q$ inside a ZK proof over a different prime field $bb(F)_p$ (the BabyJubJub basefield) we prove the unblinding step via injecting the result $C'= beta^(-1)dot C$, showing it is a valid BabyJubJub point and proving $C=beta dot C'$.
@@ -457,11 +456,11 @@ The following elements need to be public inputs to $pi_2$:
 
 = Evaluation
 
+In this section we report some preliminary performance numbers of our proposed protocols.
+
 == ZK Proofs: Circom
 
-#todo(position: "inline")[Correct the numbers]
-
-In @tab:circom_constraints, we give the R1CS constraint count for various building blocks of the ZK proof.
+We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circom and report on the number of R1CS constraints of parts and the full proofs in this Section. The numbers are reported in @tab:circom_constraints for a Merkle tree registry of depth $d=32$ which allows to hold $t=7$ public keys in its leaf.
 
 #figure(
   table(
@@ -470,53 +469,24 @@ In @tab:circom_constraints, we give the R1CS constraint count for various buildi
     stroke: none,
     table.header([Function], [Constraint Cost], [Comment]),
     table.hline(stroke: 0.05em),
-    [BabyJubJubScalarMulAny], [2310], [$P s$ for arbitrary $P$, 254 bit $s$.],
-    [BabyJubJubScalarMulFix], [512], [$P s$, for fixed, public $P$, 254 bit $s$.],
+    [BabyJubJubScalarMulAny], [2310], [$s dot P$ for arbitrary $P$, 254 bit $s$.],
+    [BabyJubJubScalarMulFix], [512], [$s dot P$, for fixed, public $P$, 254 bit $s$.],
+    [Poseidon2 (t=2)], [216], [Poseidon2 with statesize 2.],
     [Poseidon2 (t=3)], [240], [Poseidon2 with statesize 3.],
-    [Poseidon2 (t=4)], [264], [Poseidon2 with statesize 4.],
-    [BabyJubJubPoseidonEdDSAVerify], [4217], [EdDSA Verification on BabyJubJub, using Poseidon as a Hash.],
-    [encode_to_curve], [808], [Encoding an arbitrary field element into a random BabyJubJub Curve point.],
-    [DLogEqVerify], [10296], [Verification of a discrete logarithm equality proof over BabyJubJub.],
-    [BinaryMerkleTree (d=32)], [7875], [Binary Merkle Tree using Poseidon with state size 2, depth 32.],
+    [Poseidon2 (t=4)], [265], [Poseidon2 with statesize 4.],
+    [Poseidon2 (t=8)], [363], [Poseidon2 with statesize 8.],
+    [Poseidon2 (t=16)], [555], [Poseidon2 with statesize 16.],
+    [EdDSAPoseidon2Verifier], [5615], [EdDSA Verification on BabyJubJub, using Poseidon2 as a Hash.],
+    [EncodeToCurveBabyJubJub], [808], [Encoding an arbitrary field element into a random BabyJubJub Curve point.],
+    [DLogEqVerify], [12287], [Verification of a discrete logarithm equality proof over BabyJubJub.],
+    [BinaryMerkleTree (d=32)], [7875], [Binary Merkle Tree using Poseidon2 with state size 2, depth 32.],
     [Semaphore (d=32)], [9383], [Sempahore proof with MT depth 32.],
+    table.hline(stroke: 0.05em),
+    [OprfQuery (d=32)], [17325], [Full OPRF query proof $pi_1$],
+    [OprfNullifier $pi_2$ (d=32)], [32414], [Full OPRF nullifier proof $pi_2$],
   ),
   caption: [Constraint cost for various Circom ZK building blocks.],
 ) <tab:circom_constraints>
-
-=== OPRF client query validity proof
-#todo(position: "inline")[Just write we implemented it in circom and it takes n constraints]
-
-// For the OPRF protocol, the client needs to proof the validity of the following statements:
-// 1. I know a secret key $sk$ for a given public key $pk$.
-//   - This statement is proven by providing a signature of a nonce under the given secret key $sk$. This signature is then verified in the ZK proof.
-//   - $serif("Verify")(pk, sigma, nonce) == 1$
-// 2. The public key $pk$ is at the leaf with index $uid$ in the Merkle tree corresponding to the root hash $h$.
-//   - This statement is proven by providing $uid$, the Merkle tree path neighbors $h_i$ and recomputing the path up to the root.
-//   - $serif("MTPathVerify")(pk, h_i, h)$
-// 3. The OPrf query $q$ is derived as specified from $uid$ as $H(uid)^beta$, for a random, but known $beta$.
-//   - This statement is proven by recalculating the hash function $H$ which hashes a field element to the BabyJubJub curve, followed by a scalar multiplication with $beta$.
-//   - $serif("ECScalarMul")(serif("encode_to_curve")(uid), beta) = q$
-
-The approximate circuit size for these statements is: $4217 + 7875 + 808 + 2310 = 15210 < 2^14$.
-
-=== Nullifier Validity Proof
-
-#todo(position: "inline")[Just write we implemented it in circom and it takes n constraints]
-
-// After the OPRF protocol has been executed, the client computes the nullifier $ell = H(rpuid, action, epoch, rpid)$. It then proofs the validity of the whole derivation of the nullifier. This includes the steps 1-3 from above, as well as:
-// 4. The OPRF result returned from the servers is correct w.r.t. their OPRF public key.
-//   - This is handled using a discrete logarithm equality proof to show that $log_g (g^k) = log_q (q^k)$
-//   - $serif("DLogEqVerify")(g,g^k, q, z = q^k, s, e) == 1$
-// 5. The OPRF result is unblinded and hashed to get the OPRF output $rpuid = H'(uid, z^(beta^(-1)))$.
-//   - This would normally require inverting $beta$, which is expensive since it is not native to the proof system scalar field. However, we can utilize a common trick in ZKPs and inject the result $y = z^beta^(-1)$ and show that $y^beta = z$ instead, which saves the calculation of the inverse.
-//   - $serif("Hash2")(uid, y) == rpuid$ and $serif("ECScalarMul")(y, beta) == z$
-// 6. The Nullifier is calculated correctly:
-//   - $serif("Nullifier")(rpuid, action,epoch, rpid)$
-
-The approximate circuit size for these statements is: $15210 + 10296 + 240 + 2310 + 264 = 28320 < 2^15.$
-
-
-= Conclusion
 
 
 #bibliography("references.bib")
