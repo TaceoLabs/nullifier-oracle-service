@@ -43,7 +43,7 @@ template EdDSAPoseidon2Verifier() {
 
     // Calculate the h = H(R,A, msg)
     component hash = Poseidon2(8);
-    hash.in[0] <== 0;
+    hash.in[0] <== 360302137480307891234917541314130533; // Domain separator in capacity element b"EdDSA Signature"
     hash.in[1] <== Rx;
     hash.in[2] <== Ry;
     hash.in[3] <== Ax;

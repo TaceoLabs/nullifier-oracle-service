@@ -156,10 +156,19 @@ pub struct EdDSASignature {
     pub s: ScalarField,
 }
 
+impl EdDSASignature {
+    const CHALL_DS: &[u8] = b"EdDSA Signature";
+
+    // Returns the domain separator for the challenge hash as a field element
+    fn get_chall_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::CHALL_DS)
+    }
+}
+
 fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
     let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
     poseidon2_8.permutation(&[
-        BaseField::zero(),
+        EdDSASignature::get_chall_ds(), // Domain separator in capacity element
         nonce_r.x,
         nonce_r.y,
         pk.x,

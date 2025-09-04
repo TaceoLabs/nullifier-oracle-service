@@ -1,5 +1,5 @@
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{UniformRand, Zero};
+use ark_ff::{PrimeField, UniformRand, Zero};
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
@@ -34,6 +34,12 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
 
 impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     pub const MAX_PUBLIC_KEYS: usize = MAX_PUBLIC_KEYS;
+    const PK_DS: &[u8] = b"World ID PK";
+
+    // Returns the domain separator for the hashing of all public keys as a field element
+    fn get_pk_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::PK_DS)
+    }
 
     // Also returns the query, since this is used in the nullifier proof input generation
     pub fn generate_from_seed(seed: &[u8; 32]) -> (Self, BaseField) {
@@ -76,7 +82,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
         // Compute the Merkle root
-        let merkkle_root = Self::merkle_root(pk.pk.x, pk.pk.y, &siblings, mt_index_u64);
+        let merkkle_root = Self::merkle_root(&pks, &siblings, mt_index_u64);
 
         let result = Self {
             pk: pks,
@@ -129,14 +135,19 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     }
 
     pub fn merkle_root(
-        pk_x: BaseField,
-        pk_y: BaseField,
+        pks: &[[BaseField; 2]; MAX_PUBLIC_KEYS],
         siblings: &[BaseField; MAX_DEPTH],
         mut index: u64,
     ) -> BaseField {
         // Hash pk
-        let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
-        let mut current_hash = poseidon2_3.permutation(&[BaseField::zero(), pk_x, pk_y])[1];
+        let poseidon2_16 = Poseidon2::<_, 16, 5>::default();
+        let mut input = array::from_fn(|_| BaseField::zero());
+        input[0] = Self::get_pk_ds();
+        for (i, pk) in pks.iter().enumerate() {
+            input[1 + i * 2] = pk[0];
+            input[1 + i * 2 + 1] = pk[1];
+        }
+        let mut current_hash = poseidon2_16.permutation(&input)[1];
 
         // Merkle chain
         let poseidon2_2 = Poseidon2::<_, 2, 5>::default();

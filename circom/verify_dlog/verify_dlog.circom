@@ -14,7 +14,7 @@ template ComputeChallengeHash() {
     output signal challenge;
 
     component poseidon = Poseidon2(16);
-    poseidon.in[0] <== 0;
+    poseidon.in[0] <== 1523098184080632582082867317389990410064981862; // Domain separator in capacity element b"DLOG Equality Proof"
     poseidon.in[1] <== a.x;
     poseidon.in[2] <== a.y;
     poseidon.in[3] <== b.x;

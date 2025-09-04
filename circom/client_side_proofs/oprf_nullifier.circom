@@ -31,7 +31,8 @@ template OprfNullifier(MAX_DEPTH) {
     signal output nullifier; // Public
 
     // Derive the query
-    var query_poseidon[4] = Poseidon2(4)([0, mt_index, rp_id, action]);
+    // The domain separator is in the capacity element b"World ID Query"
+    var query_poseidon[4] = Poseidon2(4)([1773399373884719043551600379785849, mt_index, rp_id, action]);
     signal query <== query_poseidon[1];
 
     // 1-3. Show that the original query was computed correctly
