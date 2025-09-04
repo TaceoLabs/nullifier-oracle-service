@@ -199,6 +199,7 @@
   if authors.len() == 0 {
     [ No Author Given]
   }
+  linebreak()
 
   // Institute information.
   (
