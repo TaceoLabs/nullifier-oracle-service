@@ -142,21 +142,28 @@ pub struct OPrfClient {
 }
 
 impl OPrfClient {
-    const DS: &[u8] = b"World ID Proof";
+    const OPRF_DS: &[u8] = b"World ID Proof";
+    const QUERY_DS: &[u8] = b"World ID Query";
 
     pub fn new(public_key: Affine) -> Self {
         OPrfClient { public_key }
     }
 
-    // Returns the used domain separator as a field element for the finalization of the query
-    pub fn get_ds() -> BaseField {
-        BaseField::from_be_bytes_mod_order(Self::DS)
+    // Returns the domain separator for the query finalization as a field element
+    fn get_oprf_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::OPRF_DS)
+    }
+
+    // Returns the domain separator for the query generation as a field element
+    fn get_query_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::QUERY_DS)
     }
 
     /// Generates the query field element from the index, rp_id, and action.
     pub fn generate_query(index: BaseField, rp_id: BaseField, action: BaseField) -> BaseField {
         let poseidon = Poseidon2::<_, 4, 5>::default();
-        let input = [BaseField::zero(), index, rp_id, action];
+        // capacity of the sponge has domain separator
+        let input = [Self::get_query_ds(), index, rp_id, action];
         poseidon.permutation(&input)[1]
     }
 
@@ -207,7 +214,7 @@ impl OPrfClient {
         // compute the second hash in the 2Hash-DH construction
         // out = H(query, unblinded_point)
         let hash_input = [
-            Self::get_ds(), // capacity of the sponge with domain separator
+            Self::get_oprf_ds(), // capacity of the sponge with domain separator
             blinding_factor.query,
             unblinded_point.x,
             unblinded_point.y,
@@ -476,7 +483,7 @@ mod tests {
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
         let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
-            OPrfClient::get_ds(),
+            OPrfClient::get_oprf_ds(),
             query,
             expected_response.x,
             expected_response.y,
@@ -521,7 +528,7 @@ mod tests {
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
         let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
-            OPrfClient::get_ds(),
+            OPrfClient::get_oprf_ds(),
             query,
             expected_response.x,
             expected_response.y,

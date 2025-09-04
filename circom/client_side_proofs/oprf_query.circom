@@ -14,7 +14,7 @@ template MerkleLeaf() {
     signal output out;
 
     component hasher = Poseidon2(16);
-    hasher.in[0] <== 0;
+    hasher.in[0] <== 105702839725298824521994315; // Domain separator in capacity element b"World ID PK"
     for (var i = 0; i < 7; i++) {
         hasher.in[i * 2 + 1] <== pk[i][0];
         hasher.in[i * 2 + 2] <== pk[i][1];
@@ -93,6 +93,7 @@ template OprfQueryInner(MAX_DEPTH) {
     merkle_proof.depth <== MAX_DEPTH;
     merkle_proof.index <== mt_index;
     merkle_proof.siblings <== siblings;
+    merkle_proof.out === merkle_root;
 
     // 3. Query is computed correctly
     component hasher = EncodeToCurveBabyJubJub();
@@ -125,7 +126,8 @@ template OprfQuery(MAX_DEPTH) {
     signal output q[2]; // Public
 
     // Derive the query
-    var query_poseidon[4] = Poseidon2(4)([0, mt_index, rp_id, action]);
+    // The domain separator is in the capacity element b"World ID Query"
+    var query_poseidon[4] = Poseidon2(4)([1773399373884719043551600379785849, mt_index, rp_id, action]);
     signal query <== query_poseidon[1];
 
     component inner = OprfQueryInner(MAX_DEPTH);

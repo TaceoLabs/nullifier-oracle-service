@@ -15,6 +15,13 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 impl DLogEqualityProof {
+    const DLOG_DS: &[u8] = b"DLOG Equality Proof";
+
+    // Returns the domain separator for the query finalization as a field element
+    fn get_dlog_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::DLOG_DS)
+    }
+
     /// Creates a proof which shows that C=x*B and A=x*D share the same dlog x. This proof can be verified using B, C, and A=x*D. D is currently hard coded as the generator of the group.
     pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
         let k = ScalarField::rand(rng);
@@ -77,7 +84,7 @@ pub(crate) fn challenge_hash(
 ) -> BaseField {
     let poseidon = Poseidon2::<_, 16, 5>::default();
     let hash_input = [
-        BaseField::zero(),
+        DLogEqualityProof::get_dlog_ds(), // Domain separator in capacity of hash
         a.x,
         a.y,
         b.x,
