@@ -11,7 +11,7 @@
 )
 
 #let title = "A Nullifier Protocol based on a Verifiable, Threshold OPRF"
-#let abstract = ""
+#let abstract = "In this paper we describe a service capable of creating publicly verifiable nullifiers using a threshold version of a verifiable oblivious pseudo random function (OPRF). Our construction is based on the TwoHashDH OPRF, discrete logarithm equality proofs, Shamir secret sharing and zk-SNARKs."
 #let keywords = ("OPRF", "VOPRF", "threshold", "ZKP")
 
 #show: report.with(
@@ -55,11 +55,11 @@ Finally, an important part of the original Semaphore protocol is the zero-knowle
 
 == Notation
 
-In the rest of the manuscript, if not described otherwise, we refer to the prime describging the scalarfield of the BN254 curve (which is also the basefield of the BabyJubJub curve) as $p$ and refer to the prime describing the scalarfield of the BabyJubJub curve as $q$. Furthermore, we denote field elements $in bb(F)$ with small letters, whereas elliptic curve points are denoted by capital letters. To denote a secret sharing of a value $x$ or $X$ we use a bracket notation $[x]$ and $[X]$.
+In the rest of the manuscript, if not described otherwise, we refer to the prime describing the scalarfield of the BN254 curve (which is also the basefield of the BabyJubJub curve) as $p$ and refer to the prime describing the scalarfield of the BabyJubJub curve as $q$. Furthermore, we denote field elements $in bb(F)$ with small letters, whereas elliptic curve points are denoted by capital letters. To denote a secret sharing of a value $x$ or $X$ we use a bracket notation $[x]$ and $[X]$.
 
 = Background
 
-== BabyJubJub
+== BabyJubJub <sec:babyjubjub>
 
 BabyJubJub is an elliptic curve designed for efficient operations inside zk-SNARKs that operate over the BN254 scalar field. The main efficiency aspect stem from the fact that the BN254 scalar field is the base field of BabyJubJub and therefore we can directly operate on the $(x,y)$ coordinate representation in the proof system without having to use foreign field arithmetic, which is notoriously expensive. BabyJubJub is defined in EIP-2494 @eip2494, and it should be noted that there are a few conflicting definitions floating around that use slightly different, isomorphic curves instead.
 
@@ -93,7 +93,7 @@ $ E mapsto E_M: (x,y) -> (u,v) = ((1+y)/(1-y), (1+y)/((1-y)x)) $
 
 == EdDSA on BabyJubJub
 
-One of the main use-cases of BabyJubJub is to build a digital signature scheme from it and verify the resulting signatures in a Groth16 proof. EdDSA is somewhat standardized in RFC 8032 @rfc8032, however, concrete details are only given for the specific curves Curve25519 and Curve448. Furthermore, the default internal hash functions such as SHA-512 are not zk-SNARK friendly. We instantiate an EdDSA variant using the BabyJubJub elliptic curve using Poseidon2 @GrassiKS23 the hash function used for the Fiat-Shamir transform in @alg:eddsa. We also refer to @ChalkiasGN20 for a rigorous treatment of EdDSA variants and follow their recommendations to achieve a strongly unforgable variant. The variant below is also "cofactored", meaning it is amenable to batch verification.
+One of the main use-cases of BabyJubJub is to build a digital signature scheme from it and verify the resulting signatures in a Groth16 proof. EdDSA is somewhat standardized in RFC 8032 @rfc8032, however, concrete details are only given for the specific curves Curve25519 and Curve448. Furthermore, the default internal hash functions such as SHA-512 are not zk-SNARK friendly. We instantiate an EdDSA variant using the BabyJubJub elliptic curve using Poseidon2 @GrassiKS23 the hash function used for the Fiat-Shamir transform in @alg:eddsa. We also refer to @ChalkiasGN20 for a rigorous treatment of EdDSA variants and follow their recommendations to achieve a strongly unforgeable variant. The variant below is also "cofactored", meaning it is amenable to batch verification.
 
 #show: style-algorithm
 #algorithm-figure(
@@ -212,7 +212,7 @@ Adding verifiability to @fig:twohashdh can be done by adding a discrete logarith
 
 = Our Construction
 
-In this section we describe the full protocol between the client and multiple OPRF servers. We start by describing threhsold variants of the OPRF construction and the discrete logarithm equality proof, before we give our full protocol with the accompanying zero-knowledge proofs.
+In this section we describe the full protocol between the client and multiple OPRF servers. We start by describing threshold variants of the OPRF construction and the discrete logarithm equality proof, before we give our full protocol with the accompanying zero-knowledge proofs.
 
 == Threshold OPRF
 
@@ -452,7 +452,55 @@ The following elements need to be public inputs to $pi_2$:
 
 === Key Generation and Reshare
 
-#todo(position: "inline")[Write a discussion and mention the stuff in the appendix there.]
+In this section, we discuss how to generate the Shamir-shared OPRF key $k$ and how it can be reshared with a potentially new set of key holders. This reshare protocol can also be used to refresh the existing shares by resharing to the same set of computing nodes. We begin by describing the maliciously secure distributed key generation with identifiable abort from @CritesKM21 (which is dubbed PedPoP) which allows to securely generate a fresh Shamir secret with any threshold of corrupted parties $t < n$.
+
+#remark[Key generation and resharing is work in progrees][At the time of writing, it is not fully decided on how key generation and resharing will be realized and implemented. Thus, this section mainly discusses the PedPop protocol as a starting point and we refer to @sec:keygen for two proposals on how to translate this to a practical implementation. A first prototype of the final protocol will most likely be implemented using a default Shamir randomness generation, no malicious security and no resharing.]
+
+=== Pedersen's Protocol with Proof of Possession (PedPoP) @CritesKM21
+The PedPoP protocol is an adaption of the protocol introduced in @KomloG20. It is basically a parallel instantiation of verifiable secret-sharing (VSS) based on Shamir secret-sharing with the addition of vector commitments and Schnorr proofs to ensure that communicated shares are consistent and that unforgeability holds even if more than half of the parties are corrupted. Furthermore, the protocol allows to detect and disqualify malicious parties during the key generation protocol. We depict the protocol in @scheme:pedpop.
+
+#figure(
+  box(stroke: black, inset: 1em)[
+    #align(left)[
+      - *Round1*:
+        1. Each party $P_i$ chooses a random polynomial $f_i (Z)$ over $bb(F)_p$ of degree $t$ $ f_i(Z) = a_(i,0) + a_(i,1) Z + dots + a_(i,t) Z^t $ and computes $A_(i,k) = G^(a_(i,k))$ for $k in[t]$. Denote $x_i= a_(i,0)$ and $X_i = A_(i,0)$. Each $P_i$ computes a proof of possession of $X_i$ as a Schnorr signature as follows. They sample $r_i arrowrl bb(F)_p$ and set $R_i arrow.l G^(r_i)$. They set $c_i arrow.l H(R_i, X_i)$ and set $z_i arrow.l r_i + c_i dot x_i$. They then derive a commitment $arrow(C)_i = (A_(i,0), dots, A_(i, t-1))$ and broadcast $((R_i, z_i), arrow(C)_i)$.
+        2. After receiving the commitment from all other parties, each participant verifies the Schnorr signature by computing $c'_j arrow.l H(R_j, A_(j, 0))$ and checking that $ R_j A_(j,0)^(c'_j) = G^(z_j). $ If any checks fail, they disqualify the corresponding participant; otherwise, they continue to the next step.
+      - *Round2*:
+        3. Each $P_i$ computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and sends $x_(i,j)$ secretly to party $P_j$.
+        4. Each party $P_j$ verifies the shares they received from the other parties by checking that
+        $ G^(x_(i,j)) = product_(k=0)^(t)A_(i,k)^(serif(id)_j^k) $ If the check fails for an index $i$, then $P_j$ broadcasts a complaint against $P_i$.
+      - *Round3*:
+        5. For each of the complaining parties $P_j$ against $P_i$, $P_i$ broadcasts the share $x_(i,j)$. If any of the revealed shares fails to satisfy the equation, or should $P_i$ not broadcast anything for a complaining player, then $P_i$ is disqualified. The share of a disqualified party $P_i$ is set to $0$.
+      - *Output*:
+        6. The secret-share for each $P_j$ is $s_j = sum_(i=1)^n x_(i,j)$.
+        7 If $X_i=X_j$ for any $i != j$, then abort. Else, the output is the joint public key $serif(pk)=product_(i=1)^n X_i$.
+    ]],
+  caption: [The PedPoP key generation protocol @CritesKM21.],
+)<scheme:pedpop>
+
+=== PedPoP Reshare Protocol
+
+After the pair $[serif(sk)], serif(pk)$ is generated, one can use a combined version of the reshare algorithm from @ChoudhuriGGJK21 and the PedPoP protocol @CritesKM21 to reshare the key $[serif(sk)]$ to a new set of parties, while also maintaining its correctness, privacy, and the possibility to identify malicious parties. While the original PedPoP key generation protocol requires 3 communication rounds (2 rounds for the computation plus an extra round for blaming malicious parties), our PedPoP reshare protocol only requires 2 rounds. During key generation, performing the two computation rounds in parallel would allow malicious parties to potentially introduce a bias into the random key. Since during resharing the key is already fixed, one does not need to protect against this attack vector and can perform the two communication rounds in parallel. We depict our resharing protocol in @scheme:pedpop_reshare.
+
+#figure(
+  box(stroke: black, inset: 1em)[
+    #align(left)[
+      - *Round1*:
+        1. To reshare the share $x_i$ each party $P_i$ chooses a random polynomial $f_i (Z)$ over $bb(F)_p$ $ f_i (Z) = x_i + a_(i,1) Z + dots + a_(i,t) Z^t $ and computes $A_(i, k) = G^(a_(i, k))$ for $k in[t]$. Denote $X_i = A_(i, 0) = G^(x_i)$. Each $P_i$ computes a proof of possession of $X_i$ as a Schnorr signature as follows. They sample $r_i arrowrl bb(F)_p$ and set $R_i arrow.l G^(r_i)$. They set $c_i arrow.l H(R_i, X_i)$ and set $z_i arrow.l r_i + c_i dot x_i$. They then derive a commitment $arrow(C)_i = (A_(i, 0), dots, A_(i, t-1))$ and broadcast $((R_i, z_i), arrow(C)_i)$ to the new set of parties.
+        2. After receiving the commitment from all old parties, each participant of the new set of parties verifies the Schnorr signature by computing $c'_j arrow.l H(R_j, A_(j, 0))$ and checking that $ R_j A_(j,0)^(c'_j) = G^(z_j). $ Verify, that $A_(j,0)$ is equal to the commitment one receives by interpolating the commitments from Step 4 from the previous reshare round (in the exponent). If any checks fail, they accuse the corresponding participant and remove its contribution; otherwise, they continue to the next step.
+      - *Round2* (In parallel to Round 1):
+        3. Each $P_i$ of the old set of parties computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and sends $x_(i,j)$ secretly to party $P_j$ of the new set.
+        4. Each party $P_j$ of the new set verifies the shares they received from the old parties:
+          $ G^(x_(i,j)) = product_(k=0)^(t)A_(i,k)^(serif(id)_j^k) $
+          If the check fails for an index $i$, then $P_j$ broadcasts a complaint against $P_i$ from the old set.
+      - *Round3*:
+        5. For each of the complaining parties $P_j$ against $P_i$, $P_i$ broadcasts the share $x_(i,j)$. If any of the revealed shares fails to satisfy the equation, or should $P_i$ not broadcast anything for a complaining player, then $P_i$ is disqualified. The share of a disqualified party $P_i$ is ignored.
+      - *Output*:
+        6. The secret-share for each $P_j$ is $s_j = sum_(i=1)^n x_(i,j)lambda_i$, whre $lambda_i$ is the corresponding lagrange coefficient.
+        7. Check, whether the output $product_(i=1)^n X_i^(lambda_i)$ is equal to the public key $serif(pk)$. This should always happen if there are at most $t$ cheating parties.
+    ]],
+  caption: [The PedPoP reshare protocol.],
+)<scheme:pedpop_reshare>
 
 = Evaluation
 
@@ -496,12 +544,7 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
   [
     = Random sampling
 
-    Let
-    $ p = 21888242871839275222246405745257275088548364400416034343698204186575808495617 $
-    be the order of the BN254 curve.
-    Let
-    $ q = 2736030358979909402780800718157159386076813972158567259200215660948447373041 $
-    be the order of the prime-order subgroup of the BabyJubJub curve.
+    Let $p$ be the order of the BN254 curve and $q$ be the order of the BabyJubJub curve (see @sec:babyjubjub).
 
     #theorem(
       [Given a uniform random element $x in bb(F)_p$, the distributions $x mod q$ and $x arrowrl bb(F)_q$ are statistically indistinguishable.],
@@ -511,60 +554,13 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
       [Let $r = 8q$, then $r approx p + 2^(125.637)$. The distributions $x arrowrl bb(Z)_p$ and $y arrowrl bb(Z)_r$ are distinguishable only if the drawn element is from the gap of the two ranges, i.e. from the interval \[p, r\). This event happens with probability $(r-p)/r approx 2^(125.637)/r approx 1/2^(127.96)$, which is negligible, meaning our two distributions are statistically indistinguishable. For the second part of the proof, observe that $r$ is an exact multiple of $q$ by design. This means that the distributions $x arrowrl bb(Z)_q; "return" x$ and $y arrowrl bb(Z)_r; "return" y mod q$ are indistinguishable, since $bb(Z)_q$ is a subgroup of $bb(Z)_r.$ Putting the two facts together concludes the proof.],
     )
 
-    == Shamir Key Generation and Resharing
+    == Shamir Key Generation and Resharing Proposals <sec:keygen>
 
-    In this section we describe how to generate the Shamir-shared OPRF key and how to reshare it with a potentially new set of key holders. The reshare protocol can also be used to refresh the shares of the OPRF key by resharing to the same set of computing nodes. We begin by describing the maliciously secure distributed key generation with identifiable abort which allows to securely generate a fresh Shamir secret with any threshold of corrupted parties $t < n$.
-
-    === Pedersen's Protocol with Proof of Possession (PedPoP) @CritesKM21
-    The PedPoP protocol is an adaption of the protocol introduced in @KomloG20. It is basically a parallel instantiation of verifiable secret-sharing (VSS) based on Shamir secret-sharing with the addition of vector commitments and Schnorr proofs to ensure that communicated shares are consistent and that unforgeability holds even if more than half of the parties are corrupted. Furthermore, the protocol allows to detect and disqualify malicious parties during the key generation protocol. We depict the protocol in @scheme:pedpop.
-
-
-    #figure(
-      box(stroke: black, inset: 1em)[
-        #align(left)[
-          - *Round1*:
-            1. Each party $P_i$ chooses a random polynomial $f_i (Z)$ over $bb(F)_p$ of degree $t$ $ f_i(Z) = a_(i,0) + a_(i,1) Z + dots + a_(i,t) Z^t $ and computes $A_(i,k) = G^(a_(i,k))$ for $k in[t]$. Denote $x_i= a_(i,0)$ and $X_i = A_(i,0)$. Each $P_i$ computes a proof of possession of $X_i$ as a Schnorr signature as follows. They sample $r_i arrowrl bb(F)_p$ and set $R_i arrow.l G^(r_i)$. They set $c_i arrow.l H(R_i, X_i)$ and set $z_i arrow.l r_i + c_i dot x_i$. They then derive a commitment $arrow(C)_i = (A_(i,0), dots, A_(i, t-1))$ and broadcast $((R_i, z_i), arrow(C)_i)$.
-            2. After receiving the commitment from all other parties, each participant verifies the Schnorr signature by computing $c'_j arrow.l H(R_j, A_(j, 0))$ and checking that $ R_j A_(j,0)^(c'_j) = G^(z_j). $ If any checks fail, they disqualify the corresponding participant; otherwise, they continue to the next step.
-          - *Round2*:
-            3. Each $P_i$ computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and sends $x_(i,j)$ secretly to party $P_j$.
-            4. Each party $P_j$ verifies the shares they received from the other parties by checking that
-            $ G^(x_(i,j)) = product_(k=0)^(t)A_(i,k)^(serif(id)_j^k) $ If the check fails for an index $i$, then $P_j$ broadcasts a complaint against $P_i$.
-          - *Round3*:
-            5. For each of the complaining parties $P_j$ against $P_i$, $P_i$ broadcasts the share $x_(i,j)$. If any of the revealed shares fails to satisfy the equation, or should $P_i$ not broadcast anything for a complaining player, then $P_i$ is disqualified. The share of a disqualified party $P_i$ is set to $0$.
-          - *Output*:
-            6. The secret-share for each $P_j$ is $s_j = sum_(i=1)^n x_(i,j)$.
-            7 If $X_i=X_j$ for any $i != j$, then abort. Else, the output is the joint public key $serif(pk)=product_(i=1)^n X_i$.
-        ]],
-      caption: [The PedPoP key generation protocol @CritesKM21.],
-    )<scheme:pedpop>
-
-    === PedPoP Reshare Protocol
-
-    After the pair $[serif(sk)], serif(pk)$ is generated, one can use a combined version of the reshare algorithm from @ChoudhuriGGJK21 and the PedPoP protocol @CritesKM21 to reshare the key $[serif(sk)]$ to a new set of parties, while also maintaining its correctness, privacy, and the possibility to identify malicious parties. While the original PedPoP key generation protocol requires 3 communication rounds (2 rounds for the computation plus an extra round for blaming malicious parties), our PedPoP reshare protocol only requires 2 rounds. During key generation, performing the two computation rounds in parallel would allow malicious parties to potentially introduce a bias into the random key. Since during resharing the key is already fixed, one does not need to protect against this attack vector and can perform the two communication rounds in parallel. We depict our resharing protocol in @scheme:pedpop_reshare.
-
-    #figure(
-      box(stroke: black, inset: 1em)[
-        #align(left)[
-          - *Round1*:
-            1. To reshare the share $x_i$ each party $P_i$ chooses a random polynomial $f_i (Z)$ over $bb(F)_p$ $ f_i (Z) = x_i + a_(i,1) Z + dots + a_(i,t) Z^t $ and computes $A_(i, k) = G^(a_(i, k))$ for $k in[t]$. Denote $X_i = A_(i, 0) = G^(x_i)$. Each $P_i$ computes a proof of possession of $X_i$ as a Schnorr signature as follows. They sample $r_i arrowrl bb(F)_p$ and set $R_i arrow.l G^(r_i)$. They set $c_i arrow.l H(R_i, X_i)$ and set $z_i arrow.l r_i + c_i dot x_i$. They then derive a commitment $arrow(C)_i = (A_(i, 0), dots, A_(i, t-1))$ and broadcast $((R_i, z_i), arrow(C)_i)$ to the new set of parties.
-            2. After receiving the commitment from all old parties, each participant of the new set of parties verifies the Schnorr signature by computing $c'_j arrow.l H(R_j, A_(j, 0))$ and checking that $ R_j A_(j,0)^(c'_j) = G^(z_j). $ Verify, that $A_(j,0)$ is equal to the commitment one receives by interpolating the commitments from Step 4 from the previous reshare round (in the exponent). If any checks fail, they accuse the corresponding participant and remove its contribution; otherwise, they continue to the next step.
-          - *Round2* (In parallel to Round 1):
-            3. Each $P_i$ of the old set of parties computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and sends $x_(i,j)$ secretly to party $P_j$ of the new set.
-            4. Each party $P_j$ of the new set verifies the shares they received from the old parties:
-              $ G^(x_(i,j)) = product_(k=0)^(t)A_(i,k)^(serif(id)_j^k) $
-              If the check fails for an index $i$, then $P_j$ broadcasts a complaint against $P_i$ from the old set.
-          - *Round3*:
-            5. For each of the complaining parties $P_j$ against $P_i$, $P_i$ broadcasts the share $x_(i,j)$. If any of the revealed shares fails to satisfy the equation, or should $P_i$ not broadcast anything for a complaining player, then $P_i$ is disqualified. The share of a disqualified party $P_i$ is ignored.
-          - *Output*:
-            6. The secret-share for each $P_j$ is $s_j = sum_(i=1)^n x_(i,j)lambda_i$, whre $lambda_i$ is the corresponding lagrange coefficient.
-            7. Check, whether the output $product_(i=1)^n X_i^(lambda_i)$ is equal to the public key $serif(pk)$. This should always happen if there are at most $t$ cheating parties
-        ]],
-      caption: [The PedPoP reshare protocol.],
-    )<scheme:pedpop_reshare>
+    In this section we propose two protocols on how to instantiate the Shamir secret-sharing based key generation and reshare procedures.
 
     === Proposal 1
 
-    Based on @scheme:pedpop we design a blockchain-assisted key generation protocol that does not require the parties to have direct communication channels with each other. However, knowledge of their public keys is requried.
+    Based on @scheme:pedpop we design a blockchain-assisted key generation protocol that does not require the parties to have direct communication channels with each other. However, knowledge of their respective public keys is requried. We depict thsi protocol in @scheme:proposal1.
 
     #figure(
       box(stroke: black, inset: 1em)[
@@ -585,21 +581,21 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
       caption: [Proposal 1 for key generation based on PedPoP @CritesKM21.],
     )<scheme:proposal1>
 
-    @scheme:proposal1 has the following (undesired) property: If party $P_j$ files a complaint against $P_i$ (round 3) the share $(x_(i,j))$ is leaked. To prevent this, one can build the complaint round differently. If $P_j$ makes a complaint against $P_i$, then $P_i$ has to post a ZK proof that the share was derived correctly (using the commitments to the polynomials on chain) and that the encryption of the share on chain matches the correctly derived share. If that is the case, $P_j$ filed a wrong complaint and is slashed. Otherwise, or if $P_i$ fails to provide a proof in time, $P_i$ is slashed. The cost of the ZK proof is $t + 1$ BabyJubJubScalarMulFix for checking the commitments, two BabyJubJubScalarMulAny for deriving a secret key for encryption, and a Poseidon based encryption. Thus, the cost of this ZK proof is approximately $5500 + t dot 512$ #todo[Correct the numbers] constraints, which is less than $2^14$ for $t=15$.
+    @scheme:proposal1 has the following (undesired) property: If party $P_j$ files a complaint against $P_i$ (round 3) the share $x_(i,j)$ is leaked. To prevent this, one can build the complaint round differently. If $P_j$ makes a complaint against $P_i$, then $P_i$ has to post a ZK proof that the share was derived correctly (using the commitments to the polynomials on chain) and that the encryption of the share on chain matches the correctly derived share. If that is the case, $P_j$ filed a wrong complaint and is slashed. Otherwise, or if $P_i$ fails to provide a proof in time, $P_i$ is slashed.
+
+    The cost of the ZK proof is $t + 1$ BabyJubJubScalarMulFix for checking the commitments, one  BabyJubJubScalarMulFix plus one BabyJubJubScalarMulAny for deriving a secret key for encryption using Diffie-Hellman key agreement and the public keys of $P_i$ and $P_j$, a Poseidon2 based encryption, and a recomputation of the polynomial evaluation over $bb(F)_q$ for deriving the correct share. Since the polynomial evaluation is over a field which is not native to the ZK proof, this evaluation is estimated to be the most costly part of the proof. Implementing an additionModQ gadget requires an estimate of 256 constraints, whereas multiplication mod $q$ can be implemented as a double-and-add ladder since the multiplications are with small constants (the evaluation point is the party id $j$) when using Horner's polynomial evaluation technique. Furthermore, this evaluation scales linearly with the degree of the polynomial $t$.
+
     To allow this complained proof to be generic for thresholds which might change later on, the circuit can be modified to an upper bound of $t'$, and have the concrete $t$ as a public input. This requires to Cmux each random coeeficient with 0 in case its index is greater $t$ and recomputing $t'$ commitments using BabyJubJubScalarMulFix. Furthermore, it could make sense to accumulate the commitments using Poseidon2 to reduce the number of public inputs.
 
     For reshare, we modify @scheme:pedpop_reshare similar as for @scheme:proposal1, with the additional constraint that the commitments to the new shares have to produce the same public key. This should come implicitly since the smart contract has to check that the correct share was used by interpolating the commitments in the exponent anyways (step 2 in @scheme:pedpop_reshare).
 
-    Furthermore, for both the key generation and reshare, the proof of possession (i.e., the Schnorr proof in Step 1) is not strictly required and can be skipped.
+    Finally, for both the key generation and reshare, the proof of possession (i.e., the Schnorr proof in Step 1) is not strictly required and can be skipped.
 
-    Proposal 1 has the advantage that it is very simple and easy to compute and does not require a direct network channel between the computing parties. Furthermore, it is publicly verifiable that the parties keep the same secret during a reshare procedure. However, the public can not verify that all parties behaved correctly without one of the parties posting a complaint on chain.
+    To summarize, Proposal 1 has the advantage that it is very simple and easy to compute and does not require a direct network channel between the computing parties. Furthermore, it is publicly verifiable that the parties keep the same secret during a reshare procedure. However, the public can not verify that all parties behaved correctly without one of the parties posting a complaint on chain.
 
     === Proposal 2
 
-
-    #todo(position: "inline")[Correct the numbers]
-
-    The second proposal aims to achieve full verifiability with ZK proofs on chain. While the ZK proofs are more expensive compared to Proposal 1, they get rid of the complaint round and smart contracts only accept values if a ZK proof of correctness was provided.
+    The second proposal aims to achieve full verifiability with ZK proofs on chain. While the ZK proofs are more expensive compared to Proposal 1, they get rid of the complaint round and smart contracts only accept values if a ZK proof of correctness was provided. We depict the protocol in @scheme:proposal2.
 
     #figure(
       box(stroke: black, inset: 1em)[
@@ -618,21 +614,21 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
     )<scheme:proposal2>
 
     For reshare, we also have to proof that the correct share was used using the commitment $H(x_(i,j))$ from the previous round. When computing everything into one ZK proof (per party), the proof consists of the following:
+    - Deriving the $n$ shares:
+      - Requires $n$ polynomial evaluations in a non-native field
     - Recomputing the commitments:
-      - Poseidon2 commitment for $t$ inputs
-      - $n$ Poseidon2 commitments for the shares
-      - A BabyJubJubScalarMulFix for the commitment $X_i$
-      - For reshare: $n$ additional Poseidon2 commitments to verify the previous round
+      - Poseidon2 commitment for $t$ inputs.
+      - $n$ Poseidon2 commitments for the shares.
+      - A BabyJubJubScalarMulFix for the commitment $X_i$.
+      - For reshare: $n$ additional Poseidon2 commitments to verify the previous round.
     - For the Encryption:
-      - $2 dot n$ BabyJubJubScalarMulAny for deriving the secret keys
-      - $n$ Poseidon2 hashes for the encryption
-    - In total:
-      - $3 dot n + t$ Poseidon2 with 240 constraints each
-      - 1 BabyJubJubScalarMulFix with 512 constraints
-      - $2 dot n$ BabyJubJubScalarMulAny with 2310 constraints
+      - $1$ BabyJubJubScalarMulFix for showing the secret key used for the diffie hellman matches the parties public key.
+      - $n$ BabyJubJubScalarMulAny for deriving the secret keys.
+      - $n$ Poseidon2 hashes for the encryption.
 
-    This totals to approximately 165000 ($<2^18$) constraints for $n=30$ with $t=15$, where the majority with 140k constraints comes from the BabyJubJubScalarMulAny gadget.
+    Similar to the description for  @scheme:proposal1, the cost of the ZK proof is dominated by the $n$ polynomial evaluations in the non-native field $bb(F)_q$. Furthermore, constraint size scales linearly in both the degree $t$ and the number of parties $n$, making the proof very costly for larger number of parties. A first estimate for an untested implementation gives around 1.4 million R1CS constraints for $n=30$ and $t=15$.
 
-    Alternatively, one can think of producing $n$ proofs for the $n$ derived shares instead of proving everything in one large proof.
+
+    Alternatively, one can think of producing $n$ proofs for the $n$ derived shares instead of proving everything in one large proof, which comes at the disadvantage of having to pay the on-chain gas fee $n$ times.
   ],
 )
