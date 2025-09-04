@@ -9,7 +9,7 @@
   author("Roman Walch", insts: inst_taceo),
 )
 
-#let title = "A Verifiable, Threshold Oblivious Pseudorandom Function"
+#let title = "A Nullifier Protocol based on a Verifiable, Threshold OPRF"
 #let abstract = ""
 #let keywords = ("OPRF", "VOPRF", "threshold", "ZKP")
 
@@ -46,6 +46,16 @@
 
 
 = Introduction
+
+Semaphore @semaphorev4 is a zero-knowledge protocol that allows uses to cast a message (e.g., a vote) as a provable member of a predetermined group, without revealing their actual identity. Internally it also produces a nullifier, which can be stored and is used to prevent users from casting a message twice (e.g., prevent double voting). The basic workflow of Semaphore is as follows: Users first create an identity (a private/public keypair) and add a so-called identity commitment to a public Merkle tree. These Merkle trees are usually managed on-chain and define the group members, as all identities committed to in the leaves of the Merkle tree are part of a group. Finally, to send a message, a user create a zero-knowledge proof that shows: (i) they hold the secret key for a given identity, (ii) the given identity is committed to in the Merkle tree corresponding to a given public root hash and (iii) the produced nullifier is computed correctly for the given message as $H(sk, "scope")$. Since the nullifier is enforced to be computed correctly in the ZK proof, it can be used to check that a given secret key is only used once for a given scope.
+
+The Semaphore protocol is already in version 4 and audited implementations of the circuits and client SDK exist #footnote[See https://docs.semaphore.pse.dev for more details.]. However, for some especially long-running use-cases there are some drawbacks as well: First, the standard Semaphore protocol equates a group member with a single identity. This lack of account abstraction makes multi-device support as well as recovery of group membership when losing a secret key difficult. Second, since the secret key of the identity is directly hashed as part of the nullifier, leakage of this secret key allows all entities to create nullifier hashes for any scopes. This obviously allows account takeover, but additionally also allows historical analysis of this accounts behavior, linking together nullifiers from different scopes.
+
+In this document we propose a nullifier protocol that improves upon these aspects. First, as a minor change, the Merkle tree holding the accounts now has an additional layer that allows accounts to add a small number of identities in a single leaf, allowing for any of those identities to be used to create the nullifier. This introduces some problems, since now we can no longer use the secret key as part of the nullifier, since an account can now have multiple identities. To address this, we remove the secret key as part of the nullifier altogether, and use the index of the account in the Merkle tree instead. Just doing this naively breaks some privacy aspects of the nullifier, since now anyone could try and compute the nullifier hash for some given index, and therefore trace actions of a specific account.
+
+To add another secret back into the nullifier calculation, we employ an Oblivious Pseudorandom Function, where the client inputs the index into the OPRF protocol and the OPRF server holding a key $k$ returns $F_k (i)$, without learning $i$. In this setup, there is now a secret $k$ that is part of the nullifier calculation, however, it is known to the OPRF server, which could still perform the above attack. To address this, the OPRF key is secret-shared between a set of nodes, and a threshold OPRF protocol is executed instead. This protects against a malicious server, but we also need to enforce that clients cannot query arbitrary OPRF inputs, as this would allow them to calculate nullifiers of other accounts. To this end, the clients also proof in zero-knowledge that they know a secret key for a given identity in the leaf that is queried in the OPRF.
+
+Finally, an important part of the original Semaphore protocol is the zero-knowledge proof attesting the correct calculation of the nullifier. We still require this property, but have to extend it with the correct calculation of the OPRF. To this end, a verifiable variant of the OPRF is used, which allows the OPRF servers to prove the correct calculation of the OPRF against a known public key. This proof must then be verified in the zero-knowledge proof attesting the correct calculation of the nullifier.
 
 
 = Background
