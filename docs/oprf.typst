@@ -15,11 +15,6 @@
 
 
 
-#let (remark, implementation) = frames(
-  remark: ("Remark",),
-  implementation: ("Implementation Note",),
-)
-#show: frame-style(styles.hint)
 
 #show: report.with(
   title: title,
@@ -27,6 +22,25 @@
   abstract: abstract,
   keywords: keywords,
 )
+
+// Custom commands
+
+#let sk = $serif("sk")$;
+#let pk = $italic("pk")$;
+#let nonce = $italic("nonce")$;
+#let uid = $italic("id")_italic("u")$;
+#let rpid = $italic("id")_italic("rp")$;
+#let rpuid = $italic("id")_italic("rp,u")$;
+#let action = $italic("action")$
+#let epoch = $italic("epoch")$
+
+// frames, needs to be after the report import, as something breaks that otherwise
+
+#let (remark, implementation) = frames(
+  remark: ("Remark",),
+  implementation: ("Implementation Note",),
+)
+#show: frame-style(styles.hint)
 
 #outline()
 
@@ -79,10 +93,10 @@ $ p = 21888242871839275222246405745257275088548364400416034343698204186575808495
 
 ==== Twisted Edwards Form
 
-Let $E$ be the twisted Edwards elliptic curve defined over $bb(F)_p$ described by the equation $ 168700x^2 + y^2 = 1 + 168696 x^2 y^2. $ $E$ is called BabyJubJub and has order $ n = 21888242871839275222246405745257275088614511777268538073601725287587578984328, $ which factors into $n = h dot l$, where the cofactor $h = 8$ and the prime $ l = 2736030358979909402780800718157159386076813972158567259200215660948447373041. $
+Let $E$ be the twisted Edwards elliptic curve defined over $bb(F)_p$ described by the equation $ 168700x^2 + y^2 = 1 + 168696 x^2 y^2. $ $E$ is called BabyJubJub and has order $ n = 21888242871839275222246405745257275088614511777268538073601725287587578984328, $ which factors into $n = h dot q$, where the cofactor $h = 8$ and the prime $ q = 2736030358979909402780800718157159386076813972158567259200215660948447373041. $
 
 The generator point $G$ of the elliptic curve is the point of order $n$ with $ G = (995203441582195749578291179787384436505546430278305826713579947235728471134,\ 5472060717959818805561601436314318772137091100104008585924551046643952123905). $
-The base point $B$ is chosen to be $B = 8G$ and has order $l$. Let $ B = (5299619240641551281634865583518297030282874472190772894086521144482721001553, \
+The base point $B$ is chosen to be $B = 8G$ and has order $q$. Let $ B = (5299619240641551281634865583518297030282874472190772894086521144482721001553, \
   16950150798460657717958625567821834550301663161624707787222815936182638968203). $
 
 ==== Montgomery Form
@@ -99,7 +113,7 @@ $ E mapsto E_M: (x,y) -> (u,v) = ((1+y)/(1-y), (1+y)/((1-y)x)) $
 
 == EdDSA on BabyJubJub
 
-One of the main use-cases of BabyJubJub is to build a digital signature scheme from it and verify the resulting signatures in a Groth16 proof. EdDSA is somewhat standardized in RFC 8032 @rfc8032, however, concrete details are only given for the specific curves Curve25519 and Curve448. Furthermore, the default internal hash functions such as SHA-512 are not zk-SNARK friendly. We instantiate an EdDSA variant using the BabyJubJub elliptic curve using Poseidon2 as the hash function used for the Fiat-Shamir transform in @alg:eddsa. We also refer to @ChalkiasGN20 for a rigorous treatment of EdDSA variants and follow their recommendations to achieve a strongly unforgable variant. The variant below is also "cofactored", meaning it is amenable to batch verification.
+One of the main use-cases of BabyJubJub is to build a digital signature scheme from it and verify the resulting signatures in a Groth16 proof. EdDSA is somewhat standardized in RFC 8032 @rfc8032, however, concrete details are only given for the specific curves Curve25519 and Curve448. Furthermore, the default internal hash functions such as SHA-512 are not zk-SNARK friendly. We instantiate an EdDSA variant using the BabyJubJub elliptic curve using Poseidon2 @GrassiKS23 the hash function used for the Fiat-Shamir transform in @alg:eddsa. We also refer to @ChalkiasGN20 for a rigorous treatment of EdDSA variants and follow their recommendations to achieve a strongly unforgable variant. The variant below is also "cofactored", meaning it is amenable to batch verification.
 
 #show: style-algorithm
 #algorithm-figure(
@@ -117,32 +131,32 @@ One of the main use-cases of BabyJubJub is to build a digital signature scheme f
           Assign[$s$][$2^251 + h_250 dot 2^250 + dots + h_3 dot 2^3$],
           [Compute secret scalar, with specific bits chosen],
         )
-        LineComment(Assign[$A$][$s dot B$], [Compute the public key])
-        Return[$s, (h_256,...,h_511), A$]
+        LineComment(Assign[$pk$][$sk dot B$], [Compute the public key])
+        Return[$sk, (h_256,...,h_511), pk$]
       },
     )
     LineBreak
     Function(
       "Sign",
-      $M, s, (h_256,...,h_511)$,
+      $M, sk, (h_256,...,h_511)$,
       {
         LineComment(Assign[$r$][$serif("Blake3")(h_256||...||h_511||M)$], [Generate a pseudorandom nonce])
         LineComment(Assign[$R$][$r dot B$], [Interpret $r$ as a scalar and obtain a curve point ])
-        LineComment(Assign[$e$][$serif("Poseidon2")(R||A||M)$], [Compute the challenge $e$])
-        Assign[$S$][$r + e dot s mod l$]
-        Return[$R,S$]
+        LineComment(Assign[$e$][$serif("Poseidon2")(R||pk||M)$], [Compute the challenge $e$])
+        Assign[$s$][$r + e dot sk mod q$]
+        Return[$R,s$]
       },
     )
     LineBreak
     Function(
       "Verify",
-      $M, A, sigma = (R,S)$,
+      $M, pk, sigma = (R,s)$,
       {
-        LineComment(Line([Reject if $S in.not {0,..,l-1}$]), [Check for non-canonical $S$])
+        LineComment(Line([Reject if $S in.not {0,..,q-1}$]), [Check for non-canonical $s$])
         Line([Reject if $A$ is one of the small-order points on $E$.])
         Line([Reject if $A$ or $R$ are non-canonical.])
-        LineComment(Assign[$e$][$serif("Poseidon2")(R||A||M)$], [Compute the challenge $e$])
-        Line([Accept if $8(S dot B - R - e dot A) = 0$])
+        LineComment(Assign[$e$][$serif("Poseidon2")(R||pk||M)$], [Compute the challenge $e$])
+        Line([Accept if $8(s dot B - R - e dot pk) = 0$])
       },
     )
   },
@@ -182,14 +196,6 @@ In @tab:circom_constraints, we give the R1CS constraint count for various buildi
 
 === OPRF client query validity proof
 
-#let sk = $italic("sk")$;
-#let pk = $italic("pk")$;
-#let nonce = $italic("nonce")$;
-#let uid = $italic("id")_italic("u")$;
-#let rpid = $italic("id")_italic("rp")$;
-#let rpuid = $italic("id")_italic("rp,u")$;
-#let action = $italic("action")$
-#let epoch = $italic("epoch")$
 
 For the OPRF protocol, the client needs to proof the validity of the following statements:
 1. I know a secret key $sk$ for a given public key $pk$.
