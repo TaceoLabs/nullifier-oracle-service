@@ -164,6 +164,8 @@ In this paper we aim to build a distributed and verifiable OPRF service. Our mai
 )
 <fig:twohashdh>
 
+A long line of work building on the TwoHashDH OPRF exists, adding various properties such as verifiability @JareckiKK14, threshold variants @JareckiKKX17, amongst others. We refer the reader to a recent OPRF systematization of knowledge @CasacubertaHL22 for more details and references.
+
 == Mapping inputs to Curve Points
 
 The above OPRF in @fig:twohashdh requires a function $H: bb(F)_p mapsto E$ to encode the OPRF input into a curve point. We follow the recommendations in RFC 9380 @rfc9380 "Hashing to Elliptic Curves". For the BabyJubJub curve we are using, this internally boils down to hashing the input into a field element, calling the Elligator2 @BernsteinHKL13 mapping to get a point on the Montgomery curve $E_M$, mapping this point onto $E$ via the birational map, and finally clearing the cofactor. We give an overview in @alg:hash2curve and refer to more details in @rfc9380. The `encode_to_curve` function gives a point with unknown discrete logarithm on the curve, however, the returned point is not uniform, as the Elligator2 map cannot hit about $50%$ of curve points. To get a truly uniform random point, the `hash_to_curve` function can be used instead, which internally maps to two points and adds them. However, for most use cases the `encode_to_curve` functions should be enough.
@@ -213,9 +215,8 @@ The above OPRF in @fig:twohashdh requires a function $H: bb(F)_p mapsto E$ to en
 
 == Discrete Logarithm Equality Proof
 
-#todo(position: "inline")[Citation needed]
 
-Adding verifiability to @fig:twohashdh can be done by adding a discrete logarithm equality proof. In the following we describe how one can prove that two group elements $A$ and $C$ share the same discrete logarithm $k$ for their respective bases $D$ and $B$. In other words, given $A, B, C, D in bb(G)$, we show that $A=k dot D$ and $C = k dot B$ for the same $k in bb(F)_q$. The following algorithm specifies $D$ as an arbitrary group element, in practice $D$ can simply be chosen as the generator of $bb(G)$.
+Adding verifiability to @fig:twohashdh can be done by adding a discrete logarithm equality proof. The OPRF server is required to publish a public key $A = k dot D$, where $D$ is a known point (in practice, this can just be the base point). The server then proves to the client that it has used the same key $k$ in the OPRF evaluation @JareckiKK14. In the following we describe how one can prove that two group elements $A$ and $C$ share the same discrete logarithm $k$ for their respective bases $D$ and $B$. In other words, given $A, B, C, D in bb(G)$, we show that $A=k dot D$ and $C = k dot B$ for the same $k in bb(F)_q$. The following algorithm specifies $D$ as an arbitrary group element, in practice $D$ can simply be chosen as the generator of $bb(G)$.
 
 #show: style-algorithm
 #algorithm-figure(
