@@ -164,9 +164,52 @@ In this paper we aim to build a distributed and verifiable OPRF service. Our mai
 )
 <fig:twohashdh>
 
-=== Hash To Curve
+== Mapping inputs to Curve Points
 
-#todo(position: "inline")[Write]
+The above OPRF in @fig:twohashdh requires a function $H: bb(F)_p mapsto E$ to encode the OPRF input into a curve point. We follow the recommendations in RFC 9380 @rfc9380 "Hashing to Elliptic Curves". For the BabyJubJub curve we are using, this internally boils down to hashing the input into a field element, calling the Elligator2 @BernsteinHKL13 mapping to get a point on the Montgomery curve $E_M$, mapping this point onto $E$ via the birational map, and finally clearing the cofactor. We give an overview in @alg:hash2curve and refer to more details in @rfc9380. The `encode_to_curve` function gives a point with unknown discrete logarithm on the curve, however, the returned point is not uniform, as the Elligator2 map cannot hit about $50%$ of curve points. To get a truly uniform random point, the `hash_to_curve` function can be used instead, which internally maps to two points and adds them. However, for most use cases the `encode_to_curve` functions should be enough.
+
+#show: style-algorithm
+#algorithm-figure(
+  "Hashing to elliptic curves",
+  stroke: black,
+  {
+    import algorithmic: *
+    Function(
+      "encode_to_curve",
+      $x$,
+      {
+        LineComment(Assign[$u$][$H(x)$], [Hash the input $x$ into a field element])
+        LineComment(
+          Assign[$R$][$serif("elligator2_map_to_curve")(u)$],
+          [Use the Elligator2 map to get a point $R$ on $E_M$],
+        )
+        LineComment(Assign[$Q$][$serif("birational_map")(R)$], [Use the birational map to get a point on $E$])
+        LineComment(Assign[$P$][$h Q$], [Clear the cofactor by multiplication.])
+        Return[$P$]
+      },
+    )
+    LineBreak
+    Function(
+      "hash_to_curve",
+      $x$,
+      {
+        LineComment(Assign[$u_1,u_2$][$H(x)$], [Hash the input $x$ into two field elements])
+        LineComment(
+          Assign[$R_1$][$serif("elligator2_map_to_curve")(u_1)$],
+          [Use the Elligator2 map to get a point $R_1$ on $E_M$],
+        )
+        LineComment(
+          Assign[$R_2$][$serif("elligator2_map_to_curve")(u_2)$],
+          [Use the Elligator2 map to get a point $R_2$ on $E_M$],
+        )
+        Assign[$R$][$R_1 + R_2$]
+        LineComment(Assign[$Q$][$serif("birational_map")(R)$], [Use the birational map to get a point on $E$])
+        LineComment(Assign[$P$][$h Q$], [Clear the cofactor by multiplication.])
+        Return[$P$]
+      },
+    )
+  },
+)  <alg:hash2curve>
 
 == Discrete Logarithm Equality Proof
 
@@ -176,7 +219,7 @@ Adding verifiability to @fig:twohashdh can be done by adding a discrete logarith
 
 #show: style-algorithm
 #algorithm-figure(
-  "Dicrete Logarithm Equality Proof",
+  "Discrete Logarithm Equality Proof",
   stroke: black,
   {
     import algorithmic: *
