@@ -23,7 +23,7 @@ impl CryptoDevice {
             Enviroment::Dev => {
                 tracing::warn!("starting dev environment - loading key from some file");
                 // TODO load from a file
-                ark_babyjubjub::Fr::rand(&mut rand::thread_rng())
+                ark_babyjubjub::Fr::from(42)
             }
         };
         Ok(Self {

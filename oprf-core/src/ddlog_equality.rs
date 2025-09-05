@@ -1,26 +1,36 @@
 use crate::dlog_equality::DLogEqualityProof;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartialDLogEqualityCommitments {
-    pub(crate) c: Affine, // The share of the actual result C=B*x
-    pub(crate) r1: Affine,
-    pub(crate) r2: Affine,
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
+    pub c: Affine, // The share of the actual result C=B*x
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
+    pub r1: Affine,
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_affine")]
+    pub r2: Affine,
 }
 
-#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DLogEqualityChallenge {
     // The challenge hash
-    pub(crate) e: BaseField,
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_base")]
+    pub e: BaseField,
 }
 
-#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DLogEqualityProofShare {
     // The share of the response s
-    pub(crate) s: ScalarField,
+    #[serde(serialize_with = "serde_compat::serialize_babyjubjub_scalar")]
+    #[serde(deserialize_with = "serde_compat::deserialize_babyjubjub_scalar")]
+    pub s: ScalarField,
 }
 
 /// The internal storage of a party in a distributed DlogEqualityProof protocol.
@@ -35,22 +45,6 @@ type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
-
-impl PartialDLogEqualityCommitments {
-    pub fn into_bytes(self) -> Result<Vec<u8>, SerializationError> {
-        let mut bytes = vec![];
-        self.serialize_compressed(&mut bytes)?;
-        Ok(bytes)
-    }
-}
-
-impl DLogEqualityProofShare {
-    pub fn into_bytes(self) -> Result<Vec<u8>, SerializationError> {
-        let mut bytes = vec![];
-        self.serialize_compressed(&mut bytes)?;
-        Ok(bytes)
-    }
-}
 
 impl DLogEqualitySession {
     /// Computes C=B*x_share and commitments to a random value k_share, which will be the share of the randomness used in the DlogEqualityProof.

@@ -1,7 +1,5 @@
 use std::{fs::File, sync::Arc};
 
-use ark_bn254::Bn254;
-use ark_serialize::CanonicalDeserialize;
 use axum::{Router, extract::FromRef};
 use eyre::Context;
 use tokio::signal;
@@ -10,13 +8,15 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
     config::OprfConfig,
+    groth16::Groth16VerificationKey,
     services::{crypto_device::CryptoDevice, oprf::OprfService},
 };
 
-mod api;
+pub mod api;
 pub mod config;
+pub mod groth16;
 pub mod metrics;
-pub(crate) mod services;
+pub mod services;
 pub mod telemetry;
 
 #[derive(Clone)]
@@ -60,7 +60,7 @@ pub async fn start(
     );
     let vk = File::open(&config.user_verification_key_path)
         .context("while opening file to verification key")?;
-    let vk = ark_groth16::VerifyingKey::<Bn254>::deserialize_uncompressed(vk)
+    let vk: Groth16VerificationKey = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
     tracing::info!("init crypto device..");
@@ -69,7 +69,7 @@ pub async fn start(
 
     // start session-store service
     tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk);
+    let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
