@@ -949,7 +949,7 @@ dependencies = [
  "blake3",
  "num-bigint",
  "poseidon2",
- "rand 0.8.5",
+ "rand 0.9.2",
  "zeroize",
 ]
 
@@ -2142,7 +2142,7 @@ dependencies = [
  "itertools 0.14.0",
  "num-bigint",
  "poseidon2",
- "rand 0.8.5",
+ "rand 0.9.2",
  "rand_chacha 0.3.1",
  "serde",
  "serde_json",
@@ -2169,7 +2169,7 @@ dependencies = [
  "metrics-exporter-prometheus 0.17.2",
  "metrics-exporter-statsd",
  "oprf-core",
- "rand 0.8.5",
+ "rand 0.9.2",
  "rustls",
  "secrecy",
  "serde",
