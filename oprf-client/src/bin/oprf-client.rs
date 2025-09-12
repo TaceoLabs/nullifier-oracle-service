@@ -63,7 +63,7 @@ async fn main() -> eyre::Result<()> {
             pki[1] = pk_i.y;
         }
     }
-    let merkle_root = QueryProofInput::merkle_root(&pks, &siblings, mt_index);
+    let merkle_root = QueryProofInput::merkle_root_from_pks(&pks, &siblings, mt_index);
     let signal_hash = BaseField::rand(&mut rng);
     let merkle_epoch = MerkleEpoch::default();
     let nonce = BaseField::rand(&mut rng);
