@@ -144,6 +144,7 @@ pub struct OPrfClient {
 impl OPrfClient {
     const OPRF_DS: &[u8] = b"World ID Proof";
     const QUERY_DS: &[u8] = b"World ID Query";
+    const ID_COMMITMENT_DS: &[u8] = b"H(id, r)";
 
     pub fn new(public_key: Affine) -> Self {
         OPrfClient { public_key }
@@ -157,6 +158,18 @@ impl OPrfClient {
     // Returns the domain separator for the query generation as a field element
     fn get_query_ds() -> BaseField {
         BaseField::from_be_bytes_mod_order(Self::QUERY_DS)
+    }
+
+    // Returns the domain separator for the id commitment as a field element
+    fn get_id_commitment_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::ID_COMMITMENT_DS)
+    }
+
+    pub fn id_commitment(index: BaseField, r: BaseField) -> BaseField {
+        let poseidon = Poseidon2::<_, 3, 5>::default();
+        // capacity of the sponge has domain separator
+        let input = [Self::get_id_commitment_ds(), index, r];
+        poseidon.permutation(&input)[1]
     }
 
     /// Generates the query field element from the index, rp_id, and action.
