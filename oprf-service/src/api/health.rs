@@ -14,8 +14,8 @@ use super::errors::ApiError;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
-        .route("/health", get(ready))
-        .route("/health", get(live))
+        .route("/ready", get(ready))
+        .route("/live", get(live))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),

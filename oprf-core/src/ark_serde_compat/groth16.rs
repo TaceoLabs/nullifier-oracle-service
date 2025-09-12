@@ -34,6 +34,16 @@ impl From<Groth16Proof> for ark_groth16::Proof<Bn254> {
     }
 }
 
+impl From<ark_groth16::Proof<Bn254>> for Groth16Proof {
+    fn from(value: ark_groth16::Proof<Bn254>) -> Self {
+        Self {
+            a: value.a,
+            b: value.b,
+            c: value.c,
+        }
+    }
+}
+
 /// Represents a verification key in JSON format that was created by circom. Supports de/serialization using [`serde`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Groth16VerificationKey {

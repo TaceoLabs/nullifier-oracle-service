@@ -21,13 +21,17 @@ pragma circom 2.0.0;
 include "bitify.circom";
 include "binsum.circom";
 
+function bbf_inv(in) {
+    return in!=0 ? 1/in : 0;
+}
+
 template IsZero() {
     signal input in;
     signal output out;
 
     signal inv;
 
-    inv <-- in!=0 ? 1/in : 0;
+    inv <-- bbf_inv(in);
 
     out <== -in*inv +1;
     in*out === 0;

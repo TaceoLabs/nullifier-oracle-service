@@ -16,7 +16,7 @@ type ApiResult<T> = Result<T, ApiErrors>;
 /// Inits an OPRF session.
 ///
 /// Deserializes the request and forwards the parsed request to the [`OprfService`] to create the session and commit to the partial exponent.
-#[instrument(level = "debug", name = "oprf", skip_all)]
+#[instrument(level = "debug", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
     Json(request): Json<OprfRequest>,
@@ -31,6 +31,7 @@ async fn oprf_request(
     }))
 }
 
+#[instrument(level = "debug", skip_all)]
 async fn oprf_challenge(
     State(oprf_service): State<OprfService>,
     Json(request): Json<ChallengeRequest>,
