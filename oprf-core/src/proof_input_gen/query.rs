@@ -86,7 +86,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
         // Compute the Merkle root
-        let merkkle_root = Self::merkle_root(&pks, &siblings, mt_index_u64);
+        let merkkle_root = Self::merkle_root_from_pks(&pks, &siblings, mt_index_u64);
 
         let result = Self {
             pk: pks,
@@ -204,10 +204,10 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         })
     }
 
-    pub fn merkle_root(
+    pub fn merkle_root_from_pks(
         pks: &[[BaseField; 2]; MAX_PUBLIC_KEYS],
         siblings: &[BaseField; MAX_DEPTH],
-        mut index: u64,
+        index: u64,
     ) -> BaseField {
         // Hash pk
         let poseidon2_16 = Poseidon2::<_, 16, 5>::default();
@@ -217,7 +217,16 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             input[1 + i * 2] = pk[0];
             input[1 + i * 2 + 1] = pk[1];
         }
-        let mut current_hash = poseidon2_16.permutation(&input)[1];
+        let leaf = poseidon2_16.permutation(&input)[1];
+        Self::merkle_root(leaf, siblings, index)
+    }
+
+    pub(super) fn merkle_root(
+        leaf: BaseField,
+        siblings: &[BaseField; MAX_DEPTH],
+        mut index: u64,
+    ) -> BaseField {
+        let mut current_hash = leaf;
 
         // Merkle chain
         let poseidon2_2 = Poseidon2::<_, 2, 5>::default();

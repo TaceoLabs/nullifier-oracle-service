@@ -83,7 +83,7 @@ pub fn nullifier_args<R: Rng + CryptoRng>(rng: &mut R) -> NullifierArgs {
             pki[1] = pk_i.y;
         }
     }
-    let merkle_root = QueryProofInput::merkle_root(&pks, &siblings, mt_index);
+    let merkle_root = QueryProofInput::merkle_root_from_pks(&pks, &siblings, mt_index);
     let signal_hash = BaseField::rand(rng);
     let merkle_epoch = MerkleEpoch::default();
     let nonce = BaseField::rand(rng);
