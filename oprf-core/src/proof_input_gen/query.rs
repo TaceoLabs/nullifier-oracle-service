@@ -28,6 +28,7 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
     pub beta: ScalarField,
     pub rp_id: BaseField,
     pub action: BaseField,
+    pub nonce: BaseField,
     // Outputs
     pub q: [BaseField; 2],
 }
@@ -58,6 +59,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         let siblings: [BaseField; MAX_DEPTH] = array::from_fn(|_| BaseField::rand(rng));
         let pk_index_u64 = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
         let pk_index = BaseField::from(pk_index_u64);
+        let nonce = BaseField::rand(rng);
 
         // Calculate public keys
         let pk = sk.public();
@@ -95,6 +97,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             beta: blinding_factor.factor,
             rp_id,
             action,
+            nonce,
             q: [
                 blinded_request.blinded_query.x,
                 blinded_request.blinded_query.y,
@@ -131,6 +134,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         println!("beta: {}n,", self.beta);
         println!("rp_id: {}n,", self.rp_id);
         println!("action: {}n,", self.action);
+        println!("nonce: {}n,", self.nonce);
         println!("q: [{}n, {}n],", self.q[0], self.q[1]);
     }
 
