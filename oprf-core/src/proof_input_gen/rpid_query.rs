@@ -5,6 +5,7 @@ use ark_ff::{UniformRand, Zero};
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
+use uuid::Uuid;
 
 use crate::{oprf::OPrfClient, proof_input_gen::query::QueryProofInput};
 
@@ -40,6 +41,7 @@ impl<const MAX_DEPTH: usize> RpIdQueryProofInput<MAX_DEPTH> {
     // Also returns the query, since this is used in the RP-specific proof input generation
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> (Self, BaseField) {
         // Random inputs
+        let request_id = Uuid::new_v4();
         let sk = EdDSAPrivateKey::random(rng);
         let mt_index_u64 = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
         let mt_index = BaseField::from(mt_index_u64);
@@ -65,12 +67,13 @@ impl<const MAX_DEPTH: usize> RpIdQueryProofInput<MAX_DEPTH> {
 
         // Calculate OPRF
         let oprf_client = OPrfClient::new(pk.pk);
-        let (blinded_request, blinding_factor) = oprf_client.blind_query(mt_index, rng);
+        let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, mt_index, rng);
 
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
         // Compute the Merkle root
-        let merkkle_root = QueryProofInput::<MAX_DEPTH>::merkle_root(&pks, &siblings, mt_index_u64);
+        let merkkle_root =
+            QueryProofInput::<MAX_DEPTH>::merkle_root_from_pks(&pks, &siblings, mt_index_u64);
 
         let result = Self {
             pk: pks,
