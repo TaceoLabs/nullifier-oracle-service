@@ -70,7 +70,8 @@ impl<const MAX_DEPTH: usize> RpIdQueryProofInput<MAX_DEPTH> {
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
         // Compute the Merkle root
-        let merkkle_root = QueryProofInput::<MAX_DEPTH>::merkle_root(&pks, &siblings, mt_index_u64);
+        let merkkle_root =
+            QueryProofInput::<MAX_DEPTH>::merkle_root_from_pks(&pks, &siblings, mt_index_u64);
 
         let result = Self {
             pk: pks,
