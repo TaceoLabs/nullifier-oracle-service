@@ -46,6 +46,10 @@ impl From<OprfServiceError> for ApiErrors {
             OprfServiceError::InvalidProof => ApiErrors::Unauthorized,
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
             OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
+            OprfServiceError::UnknownRpKeyEpoch(key_identifier) => ApiErrors::NotFound(format!(
+                "Cannot find share for rp_id: {} , epoch: {}",
+                key_identifier.rp_id, key_identifier.key_epoch
+            )),
         }
     }
 }

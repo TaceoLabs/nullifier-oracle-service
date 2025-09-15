@@ -23,9 +23,22 @@ use crate::{
     config::OprfConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{
-        chain_watcher::MerkleEpoch, crypto_device::CryptoDevice, session_store::SessionStore,
+        chain_watcher::{KeyEpoch, MerkleEpoch},
+        crypto_device::CryptoDevice,
+        session_store::SessionStore,
     },
 };
+
+/// The id of a relying party.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RpId(u128);
+
+impl fmt::Display for RpId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0.to_string())
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OprfServiceError {
@@ -33,6 +46,8 @@ pub(crate) enum OprfServiceError {
     InvalidProof,
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
+    #[error("Cannot find share for Rp with epoch: {0:?}")]
+    UnknownRpKeyEpoch(KeyIdentifier),
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
 }
@@ -44,7 +59,14 @@ pub struct OprfRequest {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     pub point_a: ark_babyjubjub::EdwardsAffine,
-    pub epoch: MerkleEpoch,
+    pub rp_key_id: KeyIdentifier,
+    pub merkle_epoch: MerkleEpoch,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct KeyIdentifier {
+    pub rp_id: RpId,
+    pub key_epoch: KeyEpoch,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,6 +79,7 @@ pub struct OprfResponse {
 pub struct ChallengeRequest {
     pub request_id: Uuid,
     pub challenge: DLogEqualityChallenge,
+    pub rp_key_id: KeyIdentifier,
 }
 
 #[derive(Debug, Serialize)]
@@ -119,7 +142,10 @@ impl OprfService {
         // Verify the user proof
         self.verify_user_proof(request.user_proof, request.point_a)?;
         // Partial commit through the crypto device
-        let (session, comm) = self.crypto_device.partial_commit(request.point_a);
+        let (session, comm) = self
+            .crypto_device
+            .partial_commit(request.point_a, &request.rp_key_id)
+            .ok_or_else(|| OprfServiceError::UnknownRpKeyEpoch(request.rp_key_id))?;
         // Store the randomness for finalize request
         self.session_store.store(request.request_id, session);
         tracing::debug!("handled session");
@@ -138,7 +164,10 @@ impl OprfService {
             .retrieve(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self.crypto_device.challenge(session, request.challenge);
+        let proof_share = self
+            .crypto_device
+            .challenge(session, request.challenge, &request.rp_key_id)
+            .ok_or_else(|| OprfServiceError::UnknownRpKeyEpoch(request.rp_key_id))?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)

@@ -117,4 +117,12 @@ pub struct OprfConfig {
         default_value = "10"
     )]
     pub chain_epoch_max_difference: u128,
+
+    /// The name/ARN of the service's private-key.
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_PRIVATE_KEY_SECRET_ID",
+        default_value = "oprf/sk"
+    )]
+    pub private_key_secret_id: String,
 }
