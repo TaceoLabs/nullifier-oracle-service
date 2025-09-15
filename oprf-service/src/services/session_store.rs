@@ -37,7 +37,7 @@ impl From<DLogEqualitySession> for Session {
 /// When spawning a session store, the implementation will spawn an
 /// additional cleanup task.
 ///
-/// Cleanup task will periodically cleanup old sessions, as defined
+/// The cleanup task will periodically cleanup old sessions, as defined
 /// by the config.
 #[derive(Clone)]
 pub(crate) struct SessionStore {
@@ -78,7 +78,6 @@ fn start_cleanup_task(sessions: SessionsMap, interval: Duration, request_lifetim
 
 impl SessionStore {
     pub(crate) fn init(config: Arc<OprfConfig>) -> Self {
-        // capacity is fairly arbitrary
         let sessions = Arc::new(Mutex::new(HashMap::new()));
         // start the periodic tasks for cleanup
         start_cleanup_task(
@@ -119,7 +118,7 @@ impl SessionStore {
         if session.is_some() {
             metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).decrement(1);
         }
-        // We return the randomness even if we exceeded the deadline. There is no problem with old sessions, we have the deadline only to not pollute the RAM with old sessions sessions
+        // We return the randomness even if we exceeded the deadline. There is no problem with old sessions, we have the deadline only to not pollute the RAM with old sessions
         session.map(|s| s.randomness)
     }
 }

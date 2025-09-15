@@ -9,7 +9,9 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
     config::OprfConfig,
-    services::{crypto_device::CryptoDevice, oprf::OprfService},
+    services::{
+        chain_watcher::ChainWatcherService, crypto_device::CryptoDevice, oprf::OprfService,
+    },
 };
 
 mod api;
@@ -22,6 +24,7 @@ pub mod telemetry;
 pub(crate) struct AppState {
     config: Arc<OprfConfig>,
     oprf_service: OprfService,
+    chain_watcher: ChainWatcherService,
 }
 
 impl FromRef<AppState> for Arc<OprfConfig> {
@@ -36,7 +39,13 @@ impl FromRef<AppState> for OprfService {
     }
 }
 
-/// Main entry point for the OPRF-Service. Parsed the config and spins up all necessary services.
+impl FromRef<AppState> for ChainWatcherService {
+    fn from_ref(input: &AppState) -> Self {
+        Arc::clone(&input.chain_watcher)
+    }
+}
+
+/// Main entry point for the OPRF-Service.
 /// TODO better docs
 pub async fn start(
     config: config::OprfConfig,
@@ -71,11 +80,21 @@ pub async fn start(
     let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
+
+    tracing::info!("spawn chain watcher..");
+    // spawn the chain watcher
+    let chain_watcher = services::chain_watcher::spawn_mock_watcher(
+        Arc::clone(&config),
+        cancellation_token.clone(),
+    )
+    .await
+    .context("while spawning chain watcher")?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
     let app_state = AppState {
         config: Arc::clone(&config),
         oprf_service,
+        chain_watcher,
     };
 
     let axum_rest_api = Router::new()

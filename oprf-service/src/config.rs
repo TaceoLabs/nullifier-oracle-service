@@ -13,6 +13,12 @@ pub enum Enviroment {
     Dev,
 }
 
+impl Enviroment {
+    pub fn assert_is_dev(&self) {
+        assert!(matches!(self, Enviroment::Dev), "Is not dev environment")
+    }
+}
+
 /// The configuration for the OPRF service.
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
@@ -86,4 +92,29 @@ pub struct OprfConfig {
     /// Path to the verification key used to verify the proof provided by the user during session initialization.
     #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
     pub user_verification_key_path: PathBuf,
+
+    /// Chain URL.
+    /// TODO this is heavy wip, and will change. This notice
+    /// is here to be removed as soon as the design gets more clear
+    #[clap(long, env = "OPRF_SERVICE_CHAIN_URL")]
+    pub chain_url: String,
+
+    /// Interval to check the key rotation commands on the smart contract.
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CHAIN_CHECK_INTERVAL",
+        default_value = "1min",
+        value_parser = humantime::parse_duration
+
+    )]
+    pub chain_check_interval: Duration,
+
+    /// Max epoch in the future.
+    /// If an epoch is too far in the future, the service will not perform a manual check. This is defined by this value (no longer than this difference inclusive).
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CHAIN_EPOCH_MAX_LOOK_AHEAD",
+        default_value = "10"
+    )]
+    pub chain_epoch_max_difference: u128,
 }

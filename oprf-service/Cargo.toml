@@ -10,11 +10,16 @@ license.workspace = true
 publish.workspace = true
 readme.workspace = true
 
+[features]
+default = ["mock-chain-watcher"]
+mock-chain-watcher = []
+
 [dependencies]
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-bn254 = "0.5.0"
 ark-ff = "0.5.0"
 ark-groth16 = "0.5.0"
+async-trait = "0.1.89"
 axum = "0.8.4"
 clap = { version = "4.5.46", features = ["derive", "env"] }
 eyre.workspace = true

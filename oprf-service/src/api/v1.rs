@@ -1,7 +1,7 @@
 use axum::Router;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-pub mod oprf;
+pub(crate) mod oprf;
 
 use crate::{AppState, api};
 
