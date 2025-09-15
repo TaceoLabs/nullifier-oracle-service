@@ -1,6 +1,7 @@
 #[cfg(feature = "mock-chain-watcher")]
 mod http_mock;
 
+use std::fmt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -15,8 +16,10 @@ use serde::Serialize;
 pub(crate) struct MerkleEpoch(u128);
 
 /// Represents an epoch for the key share.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[expect(dead_code)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+#[serde(transparent)]
 pub(crate) struct KeyEpoch(u128);
 
 /// The type of a MerkleRoot.
@@ -73,5 +76,11 @@ impl MerkleEpoch {
             std::cmp::Ordering::Equal => Ok(()),
             std::cmp::Ordering::Greater => Err(ChainWatcherError::EpochTooOld),
         }
+    }
+}
+
+impl fmt::Display for KeyEpoch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0.to_string())
     }
 }

@@ -1,51 +1,74 @@
-use ark_ff::UniformRand as _;
+use std::collections::HashMap;
+
+use eyre::Context;
 use oprf_core::ddlog_equality::{
     DLogEqualityChallenge, DLogEqualityProofShare, DLogEqualitySession,
     PartialDLogEqualityCommitments,
 };
 
-use crate::config::{Enviroment, OprfConfig};
+use crate::{
+    config::OprfConfig,
+    services::{
+        chain_watcher::KeyEpoch,
+        oprf::{KeyIdentifier, RpId},
+        secret_manager::SecretManagerService,
+    },
+};
 
 type PrivateKey = ark_babyjubjub::Fr;
+type DLogShare = ark_babyjubjub::Fr;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 pub(crate) struct CryptoDevice {
-    private_key: PrivateKey,
+    #[expect(dead_code)]
+    private_key: secrecy::SecretBox<PrivateKey>,
+    shares: HashMap<RpId, HashMap<KeyEpoch, DLogShare>>,
+    #[expect(dead_code)]
+    secret_manager: SecretManagerService,
 }
 
 impl CryptoDevice {
-    pub(crate) fn load_key_by_environment(config: &OprfConfig) -> eyre::Result<Self> {
-        let private_key = match config.environment {
-            Enviroment::Prod => {
-                tracing::info!("starting production environment - loading key from KMS");
-                todo!("prod not yet implemented")
-            }
-            Enviroment::Dev => {
-                tracing::warn!("starting dev environment - loading key from some file");
-                // TODO load from a file
-                ark_babyjubjub::Fr::rand(&mut rand::thread_rng())
-            }
-        };
+    pub(crate) async fn init(
+        config: &OprfConfig,
+        secret_manager: SecretManagerService,
+        rp_ids: Vec<RpId>,
+    ) -> eyre::Result<Self> {
+        // load key from secret manager
+        let (private_key, shares) = secret_manager
+            .load_secrets(config, rp_ids)
+            .await
+            .context("while loading secrets from AWS")?;
         Ok(Self {
-            private_key,
-            // public_key: PublicKey::generator() * private_key,
+            private_key: secrecy::SecretBox::new(Box::new(private_key)),
+            shares,
+            secret_manager,
         })
     }
 
     pub(crate) fn partial_commit(
         &self,
         point_a: Affine,
-    ) -> (DLogEqualitySession, PartialDLogEqualityCommitments) {
+        key_identifier: &KeyIdentifier,
+    ) -> Option<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
         tracing::debug!("doing partial commit and sample randomness");
-        DLogEqualitySession::partial_commitments(point_a, self.private_key, &mut rand::thread_rng())
+        let rp = self.shares.get(&key_identifier.rp_id)?;
+        let share = rp.get(&key_identifier.key_epoch)?;
+        Some(DLogEqualitySession::partial_commitments(
+            point_a,
+            *share,
+            &mut rand::thread_rng(),
+        ))
     }
 
     pub(crate) fn challenge(
         &self,
         session: DLogEqualitySession,
         challenge: DLogEqualityChallenge,
-    ) -> DLogEqualityProofShare {
+        key_identifier: &KeyIdentifier,
+    ) -> Option<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
-        session.challenge(self.private_key, challenge)
+        let rp = self.shares.get(&key_identifier.rp_id)?;
+        let share = rp.get(&key_identifier.key_epoch)?;
+        Some(session.challenge(*share, challenge))
     }
 }

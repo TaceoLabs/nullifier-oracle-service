@@ -11,6 +11,7 @@ use crate::{
     config::OprfConfig,
     services::{
         chain_watcher::ChainWatcherService, crypto_device::CryptoDevice, oprf::OprfService,
+        secret_manager,
     },
 };
 
@@ -71,9 +72,15 @@ pub async fn start(
     let vk: Groth16VerificationKey = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
+    // Load the secret manager. For now we only support AWS. Most likely we want to load from the SC and reconstruct the secrets, but let's see if we really need this or AWS is just fine.
+    let secret_manager = secret_manager::aws::init().await;
+
+    // TODO load all RP_ids from SC
+
     tracing::info!("init crypto device..");
-    let crypto_device =
-        CryptoDevice::load_key_by_environment(&config).context("while initiating crypto-device")?;
+    let crypto_device = CryptoDevice::init(&config, secret_manager, vec![])
+        .await
+        .context("while initiating crypto-device")?;
 
     // start session-store service
     tracing::info!("init oprf-service...");

@@ -26,7 +26,7 @@ async fn oprf_request(
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
     // get the merkle root identified by the epoch
-    let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.epoch);
+    let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.merkle_epoch);
     // Init the OPRF session
     let commitments = oprf_service.init_oprf_session(request)?;
     Ok(Json(OprfResponse {

@@ -17,10 +17,15 @@ mock-chain-watcher = []
 [dependencies]
 ark-babyjubjub = { path = "../ark-babyjubjub" }
 ark-bn254 = "0.5.0"
+ark-ec = "0.5.0"
 ark-ff = "0.5.0"
 ark-groth16 = "0.5.0"
+ark-serialize = "0.5.0"
+aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = "1.88.0"
 async-trait = "0.1.89"
 axum = "0.8.4"
+base64ct = { version = "1.7.3", features = ["alloc"] }
 clap = { version = "4.5.46", features = ["derive", "env"] }
 eyre.workspace = true
 git-version = "0.3.9"
