@@ -21,6 +21,15 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
     pub pk_index: BaseField, // 0..6
     pub s: ScalarField,
     pub r: [BaseField; 2],
+    // Credential Signature
+    pub cred_type_id: BaseField,
+    pub cred_pk: [BaseField; 2],
+    pub cred_hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
+    pub cred_genesis_issued_at: BaseField,
+    pub cred_expires_at: BaseField,
+    pub cred_s: ScalarField,
+    pub cred_r: [BaseField; 2],
+    pub current_time_stamp: BaseField,
     // Merkle proof
     pub merkle_root: BaseField,
     pub mt_index: BaseField,
@@ -37,16 +46,45 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
 impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     pub const MAX_PUBLIC_KEYS: usize = MAX_PUBLIC_KEYS;
     const PK_DS: &[u8] = b"World ID PK";
+    const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ+DLBE-v1";
 
     // Returns the domain separator for the hashing of all public keys as a field element
     fn get_pk_ds() -> BaseField {
         BaseField::from_be_bytes_mod_order(Self::PK_DS)
     }
 
+    // Returns the domain separator for the hashing of the credential message as a field element
+    fn get_cred_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(Self::CRED_DS)
+    }
+
     // Also returns the query, since this is used in the nullifier proof input generation
     pub fn generate_from_seed(seed: &[u8; 32]) -> (Self, BaseField) {
         let mut rng = ChaCha12Rng::from_seed(*seed);
         Self::generate(&mut rng)
+    }
+
+    // https://www.notion.so/worldcoin/WID25-Credential-PCP-Structure-Lifecycle-2668614bdf8c805d9484d7dd8f68532b#2688614bdf8c80309e80d5a2651da87e
+    pub fn credential_message(
+        credential_type_id: BaseField,
+        user_id: BaseField,
+        genesis_issued_at: BaseField,
+        exprires_at: BaseField,
+        hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
+    ) -> BaseField {
+        let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
+        let mut input = [
+            Self::get_cred_ds(),
+            credential_type_id,
+            user_id,
+            genesis_issued_at,
+            exprires_at,
+            hashes[0],
+            hashes[1],
+            BaseField::zero(),
+        ];
+        poseidon2_8.permutation_in_place(&mut input);
+        input[1]
     }
 
     // Also returns the query, since this is used in the nullifier proof input generation
@@ -62,6 +100,25 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         let pk_index_u64 = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
         let pk_index = BaseField::from(pk_index_u64);
         let nonce = BaseField::rand(rng);
+        // For the credential signature
+        let cred_type_id = BaseField::rand(rng);
+        let cred_sk = EdDSAPrivateKey::random(rng);
+        let cred_pk = cred_sk.public();
+        let cred_hashes = [BaseField::rand(rng), BaseField::rand(rng)]; // In practice, these are 2 hashes
+        let genesis_issued_at = BaseField::from(rng.r#gen::<u64>());
+        let expired_at_u64 = rng.gen_range(1..=u64::MAX);
+        let current_time_stamp = BaseField::from(rng.gen_range(0..expired_at_u64));
+        let expired_at = BaseField::from(expired_at_u64);
+
+        // Credential signature
+        let cred_msg = Self::credential_message(
+            cred_type_id,
+            mt_index,
+            genesis_issued_at,
+            expired_at,
+            cred_hashes,
+        );
+        let cred_signature = cred_sk.sign(cred_msg);
 
         // Calculate public keys
         let pk = sk.public();
@@ -93,6 +150,14 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             pk_index,
             s: signature.s,
             r: [signature.r.x, signature.r.y],
+            cred_type_id,
+            cred_pk: [cred_pk.pk.x, cred_pk.pk.y],
+            cred_hashes,
+            cred_genesis_issued_at: genesis_issued_at,
+            cred_expires_at: expired_at,
+            cred_s: cred_signature.s,
+            cred_r: [cred_signature.r.x, cred_signature.r.y],
+            current_time_stamp,
             merkle_root: merkkle_root,
             mt_index,
             siblings,
@@ -128,6 +193,27 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         let pk_index_ = BaseField::from(pk_index);
         let mt_index_ = BaseField::from(mt_index);
 
+        // For the credential signature
+        // TODO might be moved
+        let cred_type_id = BaseField::rand(rng);
+        let cred_sk = EdDSAPrivateKey::random(rng);
+        let cred_pk = cred_sk.public();
+        let cred_hashes = [BaseField::rand(rng), BaseField::rand(rng)]; // In practice, these are 2 hashes
+        let genesis_issued_at = BaseField::from(rng.r#gen::<u64>());
+        let expired_at_u64 = rng.gen_range(1..=u64::MAX);
+        let current_time_stamp = BaseField::from(rng.gen_range(0..expired_at_u64));
+        let expired_at = BaseField::from(expired_at_u64);
+
+        // Credential signature
+        let cred_msg = Self::credential_message(
+            cred_type_id,
+            mt_index_,
+            genesis_issued_at,
+            expired_at,
+            cred_hashes,
+        );
+        let cred_signature = cred_sk.sign(cred_msg);
+
         // Calculate OPRF
         let oprf_client = OPrfClient::new(pk.pk);
         let query = OPrfClient::generate_query(mt_index_, rp_id, action);
@@ -141,6 +227,14 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             pk_index: pk_index_,
             s: signature.s,
             r: [signature.r.x, signature.r.y],
+            cred_type_id,
+            cred_pk: [cred_pk.pk.x, cred_pk.pk.y],
+            cred_hashes,
+            cred_genesis_issued_at: genesis_issued_at,
+            cred_expires_at: expired_at,
+            cred_s: cred_signature.s,
+            cred_r: [cred_signature.r.x, cred_signature.r.y],
+            current_time_stamp,
             merkle_root,
             mt_index: mt_index_,
             siblings,
@@ -170,6 +264,17 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         println!("pk_index: {}n,", self.pk_index);
         println!("s: {}n,", self.s);
         println!("r: [{}n, {}n],", self.r[0], self.r[1]);
+        println!("cred_type_id: {}n,", self.cred_type_id);
+        println!("cred_pk: [{:?}n, {:?}n],", self.cred_pk[0], self.cred_pk[1]);
+        println!(
+            "cred_hashes: [{:?}n, {:?}n],",
+            self.cred_hashes[0], self.cred_hashes[1]
+        );
+        println!("cred_genesis_issued_at: {}n,", self.cred_genesis_issued_at);
+        println!("cred_expires_at: {}n,", self.cred_expires_at);
+        println!("cred_s: {}n,", self.cred_s);
+        println!("cred_r: [{}n, {}n],", self.cred_r[0], self.cred_r[1]);
+        println!("current_time_stamp: {}n,", self.current_time_stamp);
         println!("merkle_root: {}n,", self.merkle_root);
         println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");

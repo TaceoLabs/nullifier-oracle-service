@@ -20,6 +20,15 @@ pub struct DelegateProofInput<const MAX_DEPTH: usize> {
     pub pk_index: BaseField, // 0..6
     pub query_s: ScalarField,
     pub query_r: [BaseField; 2],
+    // Credential Signature
+    pub cred_type_id: BaseField,
+    pub cred_pk: [BaseField; 2],
+    pub cred_hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
+    pub cred_genesis_issued_at: BaseField,
+    pub cred_expires_at: BaseField,
+    pub cred_s: ScalarField,
+    pub cred_r: [BaseField; 2],
+    pub current_time_stamp: BaseField,
     // Merkle proof
     pub merkle_root: BaseField,
     pub mt_index: BaseField,
@@ -215,6 +224,14 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
             pk_index: query_proof_input.pk_index,
             query_s: query_proof_input.s,
             query_r: query_proof_input.r,
+            cred_type_id: query_proof_input.cred_type_id,
+            cred_pk: query_proof_input.cred_pk,
+            cred_hashes: query_proof_input.cred_hashes,
+            cred_genesis_issued_at: query_proof_input.cred_genesis_issued_at,
+            cred_expires_at: query_proof_input.cred_expires_at,
+            cred_s: query_proof_input.cred_s,
+            cred_r: query_proof_input.cred_r,
+            current_time_stamp: query_proof_input.current_time_stamp,
             merkle_root: query_proof_input.merkle_root,
             mt_index: query_proof_input.mt_index,
             siblings: query_proof_input.siblings,
@@ -261,6 +278,17 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
         println!("pk_index: {}n,", self.pk_index);
         println!("query_s: {}n,", self.query_s);
         println!("query_r: [{}n, {}n],", self.query_r[0], self.query_r[1]);
+        println!("cred_type_id: {}n,", self.cred_type_id);
+        println!("cred_pk: [{:?}n, {:?}n],", self.cred_pk[0], self.cred_pk[1]);
+        println!(
+            "cred_hashes: [{:?}n, {:?}n],",
+            self.cred_hashes[0], self.cred_hashes[1]
+        );
+        println!("cred_genesis_issued_at: {}n,", self.cred_genesis_issued_at);
+        println!("cred_expires_at: {}n,", self.cred_expires_at);
+        println!("cred_s: {}n,", self.cred_s);
+        println!("cred_r: [{}n, {}n],", self.cred_r[0], self.cred_r[1]);
+        println!("current_time_stamp: {}n,", self.current_time_stamp);
         println!("merkle_root: {}n,", self.merkle_root);
         println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");
