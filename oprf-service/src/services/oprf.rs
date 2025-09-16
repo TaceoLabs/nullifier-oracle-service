@@ -4,41 +4,24 @@
 //! - Verify client Groth16 proofs over the provided BabyJubJub point
 //! - Produce partial discrete-log equality commitments via the [`CryptoDevice`]
 //! - Persist per-session randomness in the [`SessionStore`]
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
 use eyre::Context;
 use oprf_core::{
-    ark_serde_compat::{self, groth16::Groth16Proof},
-    ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
-    },
+    ark_serde_compat::groth16::Groth16Proof,
+    ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments},
 };
-use serde::{Deserialize, Serialize};
+use oprf_types::api::v1::{ChallengeRequest, KeyIdentifier, OprfRequest};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
     config::OprfConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
-    services::{
-        chain_watcher::{KeyEpoch, MerkleEpoch},
-        crypto_device::CryptoDevice,
-        session_store::SessionStore,
-    },
+    services::{crypto_device::CryptoDevice, session_store::SessionStore},
 };
-
-/// The id of a relying party.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct RpId(u128);
-
-impl fmt::Display for RpId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.to_string())
-    }
-}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OprfServiceError {
@@ -50,61 +33,6 @@ pub(crate) enum OprfServiceError {
     UnknownRpKeyEpoch(KeyIdentifier),
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
-}
-
-#[derive(Deserialize)]
-pub struct OprfRequest {
-    pub request_id: Uuid,
-    pub user_proof: Groth16Proof,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
-    pub point_a: ark_babyjubjub::EdwardsAffine,
-    pub rp_key_id: KeyIdentifier,
-    pub merkle_epoch: MerkleEpoch,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct KeyIdentifier {
-    pub rp_id: RpId,
-    pub key_epoch: KeyEpoch,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OprfResponse {
-    pub request_id: Uuid,
-    pub commitments: PartialDLogEqualityCommitments,
-}
-
-#[derive(Deserialize)]
-pub struct ChallengeRequest {
-    pub request_id: Uuid,
-    pub challenge: DLogEqualityChallenge,
-    pub rp_key_id: KeyIdentifier,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ChallengeResponse {
-    pub request_id: Uuid,
-    pub proof_share: DLogEqualityProofShare,
-}
-
-impl fmt::Debug for OprfRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OprfRequest")
-            .field("req_id", &self.request_id)
-            .field("A", &self.point_a.to_string())
-            .field("proof", &"omitted")
-            .finish()
-    }
-}
-
-impl fmt::Debug for ChallengeRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ChallengeRequest")
-            .field("req_id", &self.request_id)
-            .field("challenge", &"omitted")
-            .finish()
-    }
 }
 
 #[derive(Clone)]
@@ -140,11 +68,11 @@ impl OprfService {
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
         // Verify the user proof
-        self.verify_user_proof(request.user_proof, request.point_a)?;
+        self.verify_user_proof(request.user_proof, request.point_b)?;
         // Partial commit through the crypto device
         let (session, comm) = self
             .crypto_device
-            .partial_commit(request.point_a, &request.rp_key_id)
+            .partial_commit(request.point_b, &request.rp_key_id)
             .ok_or_else(|| OprfServiceError::UnknownRpKeyEpoch(request.rp_key_id))?;
         // Store the randomness for finalize request
         self.session_store.store(request.request_id, session);

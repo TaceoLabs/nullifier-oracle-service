@@ -1,42 +1,18 @@
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_trait::async_trait;
-use base64ct::{Base64, Encoding};
 use eyre::{Context, ContextCompat};
+use oprf_types::{KeyEpoch, RpId};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::{
     config::OprfConfig,
-    services::{
-        chain_watcher::KeyEpoch,
-        oprf::RpId,
-        secret_manager::{DLogShare, PrivateKey, SecretManager, SecretManagerService},
-    },
+    services::secret_manager::{DLogShare, PrivateKey, SecretManager, SecretManagerService},
 };
 
-/// Deserializes a scalar field element from babyjubjub for a base64 encoded value. Expects that the value is uncompressed.
-///
-/// Will return an Err(eyre::Report) of string is not valid base64 or cannot parse the uncompressed field element.
-macro_rules! parse_secret {
-    ($secret:expr) => {
-        ark_babyjubjub::Fr::deserialize_uncompressed_unchecked(
-            Base64::decode_vec($secret)
-                .context("Not valid Base64 in AWS")?
-                .as_slice(),
-        )
-        .context("Not a valid uncompressed babyjubjub scalar field element")?
-    };
-}
-
-macro_rules! to_secret_id {
-    ($id: expr) => {
-        format!("oprf::rp::{}", $id)
-    };
-}
-
-/// Type alias for secret manager client for ergonomic
+/// Type alias for secret manager client for ergonomics
 pub(crate) type AwsSecretManager = aws_sdk_secretsmanager::Client;
 
 /// We store the shares as Json because the secret manager API is rather clunky to use.
@@ -54,7 +30,7 @@ struct AwsSecret {
 #[derive(Clone, Serialize, Deserialize)]
 struct EpochSecret {
     epoch: KeyEpoch,
-    secret: String,
+    secret: DLogShare,
 }
 
 impl AwsSecret {
@@ -62,21 +38,15 @@ impl AwsSecret {
     /// Note on serializations:
     /// * Sets previous to `None`
     /// * Sets Current epoch to 0.
-    /// * Serializes the field element in uncompressed form
     #[expect(dead_code)]
-    fn new(rp_id: RpId, share: DLogShare) -> Self {
-        let mut buf = Vec::new();
-        share
-            .serialize_uncompressed(&mut buf)
-            .expect("can serialize");
+    fn new(rp_id: RpId, secret: DLogShare) -> Self {
         Self {
             rp_id,
-            previous: None,
-
             current: EpochSecret {
                 epoch: KeyEpoch::default(),
-                secret: Base64::encode_string(&buf),
+                secret,
             },
+            previous: None,
         }
     }
 }
@@ -112,13 +82,12 @@ impl SecretManager for AwsSecretManager {
             .secret_string()
             .ok_or_else(|| eyre::eyre!("cannot find secret with provided name"))?
             .to_owned();
-        let private_key = parse_secret!(&private_key);
+        let private_key = ark_babyjubjub::Fr::from_str(&private_key)
+            .map_err(|_| eyre::eyre!("Cannot parse private key from AWS"))?;
+        let private_key = PrivateKey::from(private_key);
         tracing::info!("loading {} RP secrets..", rp_ids.len());
         let amount_rps = rp_ids.len();
-        let rp_ids = rp_ids
-            .into_iter()
-            .map(|id| to_secret_id!(id))
-            .collect::<Vec<_>>();
+        let rp_ids = rp_ids.into_iter().map(to_secret_id).collect::<Vec<_>>();
 
         let mut shares = HashMap::with_capacity(rp_ids.len());
         let mut stream = self
@@ -156,10 +125,9 @@ impl SecretManager for AwsSecretManager {
                     aws_secret.previous.as_ref().map(|p| p.epoch.to_string())
                 );
                 let mut rp_shares = HashMap::new();
-                let current_secret = parse_secret!(&aws_secret.current.secret);
-                rp_shares.insert(aws_secret.current.epoch, current_secret);
+                rp_shares.insert(aws_secret.current.epoch, aws_secret.current.secret);
                 if let Some(previous) = aws_secret.previous {
-                    rp_shares.insert(previous.epoch, parse_secret!(&previous.secret));
+                    rp_shares.insert(previous.epoch, previous.secret);
                 }
                 shares.insert(aws_secret.rp_id, rp_shares);
             }
@@ -177,10 +145,9 @@ impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip(self, share))]
     async fn create_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()> {
         tracing::info!("creating new secret at AWS");
-        let secret_id = to_secret_id!(rp_id);
         let secret = AwsSecret::new(rp_id, share);
         self.create_secret()
-            .name(secret_id)
+            .name(to_secret_id(rp_id))
             .secret_string(serde_json::to_string(&secret).expect("can serialize"))
             .send()
             .await
@@ -197,7 +164,7 @@ impl SecretManager for AwsSecretManager {
         share: DLogShare,
     ) -> eyre::Result<()> {
         // load the old secret to obtain information to build AWSSecret
-        let secret_id = to_secret_id!(rp_id);
+        let secret_id = to_secret_id(rp_id);
         tracing::info!("loading old secret first at {secret_id}");
         let secret_value = self
             .get_secret_value()
@@ -215,13 +182,9 @@ impl SecretManager for AwsSecretManager {
         let prev_epoch = aws_secret.current.epoch;
 
         aws_secret.previous = Some(aws_secret.current.clone());
-        let mut buf = vec![];
-        share
-            .serialize_uncompressed(&mut buf)
-            .expect("can serialize");
         aws_secret.current = EpochSecret {
             epoch,
-            secret: Base64::encode_string(&buf),
+            secret: share,
         };
 
         tracing::info!("Put new secret value with current: {epoch}, previous: {prev_epoch}");
@@ -234,4 +197,9 @@ impl SecretManager for AwsSecretManager {
         tracing::debug!("success");
         Ok(())
     }
+}
+
+#[inline(always)]
+fn to_secret_id(rp: RpId) -> String {
+    format!("oprf::rp::{}", rp)
 }

@@ -4,8 +4,9 @@ members = [
     "oprf-service",
     "oprf-core",
     "poseidon2",
-    "eddsa-babyjubjub"
-]
+    "eddsa-babyjubjub",
+    "oprf-types"
+    ]
 resolver = "3"
 
 [workspace.package]

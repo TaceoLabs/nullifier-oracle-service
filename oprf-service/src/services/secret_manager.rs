@@ -1,16 +1,14 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use oprf_types::{KeyEpoch, RpId};
 
 use crate::{
     config::OprfConfig,
-    services::{chain_watcher::KeyEpoch, oprf::RpId},
+    services::crypto_device::{DLogShare, PrivateKey},
 };
 
 pub(crate) mod aws;
-
-type PrivateKey = ark_babyjubjub::Fr;
-type DLogShare = ark_babyjubjub::Fr;
 
 /// Dyn trait for the secret manager service. Must be `Send` + `Sync` to work with Axum.
 pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
