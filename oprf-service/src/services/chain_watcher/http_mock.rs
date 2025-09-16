@@ -18,9 +18,9 @@ use crate::{
 type MerkleRootStore = HashMap<MerkleEpoch, MerkleRoot>;
 
 struct HttpMockWatcher {
-    config: Arc<OprfConfig>,
+    _config: Arc<OprfConfig>,
     _chain_url: String,
-    latest_epoch: MerkleEpoch,
+    _latest_epoch: MerkleEpoch,
     cancellation_token: CancellationToken,
     merkle_root_store: Arc<Mutex<MerkleRootStore>>,
 }
@@ -36,10 +36,10 @@ pub(crate) async fn spawn_mock_watcher(
     let mut interval = tokio::time::interval(config.chain_check_interval);
     let merkle_root_store = Arc::new(Mutex::new(MerkleRootStore::new()));
     let service = Arc::new(HttpMockWatcher {
-        config: Arc::clone(&config),
+        _config: Arc::clone(&config),
         _chain_url: config.chain_url.clone(),
         cancellation_token: cancellation_token.clone(),
-        latest_epoch: MerkleEpoch(0),
+        _latest_epoch: MerkleEpoch::default(),
         merkle_root_store,
     });
     tracing::info!("initial chain even check...");
@@ -88,8 +88,8 @@ impl ChainWatcher for HttpMockWatcher {
             tracing::debug!("checking if we want to manually refresh..");
 
             // TODO this doesn't really work because latest epoch must be locked
-            self.latest_epoch
-                .should_refresh(epoch, self.config.chain_epoch_max_difference)?;
+            // self.latest_epoch
+            //     .should_refresh(epoch, self.config.chain_epoch_max_difference)?;
 
             // epoch miss - maybe need to refresh
             match self.check_chain_events().await {

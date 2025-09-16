@@ -3,13 +3,12 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     routing::post,
 };
+use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
 use tracing::instrument;
 
 use crate::{
-    AppState,
-    api::errors::ApiErrors,
-    services::chain_watcher::ChainWatcherService,
-    services::oprf::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, OprfService},
+    AppState, api::errors::ApiErrors, services::chain_watcher::ChainWatcherService,
+    services::oprf::OprfService,
 };
 
 type ApiResult<T> = Result<T, ApiErrors>;
