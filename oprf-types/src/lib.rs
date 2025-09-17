@@ -72,9 +72,19 @@ impl RpId {
 }
 
 impl MerkleRoot {
+    /// Creates a new `MerkleRoot` by wrapping a base field element of BabyJubJub (which is equivalent to BN254 scalar field)
+    pub fn new(f: ark_babyjubjub::Fq) -> Self {
+        Self::from(f)
+    }
     /// Converts the merkle-root hash to its inner value, which is an element in the base field of BabyJubJub (which is equivalent to BN254 scalar field)
     pub fn into_inner(self) -> ark_babyjubjub::Fq {
         self.0
+    }
+}
+
+impl From<ark_babyjubjub::Fq> for MerkleRoot {
+    fn from(value: ark_babyjubjub::Fq) -> Self {
+        Self(value)
     }
 }
 
