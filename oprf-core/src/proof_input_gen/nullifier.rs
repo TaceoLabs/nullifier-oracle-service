@@ -36,7 +36,11 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     pub oprf_response: [BaseField; 2],
     // SignalHash as in Semaphore
     pub signal_hash: BaseField,
+    pub nonce: BaseField,
+    // Commitment to the id
+    pub id_commitment_r: BaseField,
     // Outputs
+    pub id_commitment: BaseField,
     pub nullifier: BaseField,
 }
 
@@ -52,6 +56,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         //  Random inputs
         let sk = OPrfKey::new(ScalarField::rand(rng));
         let signal_hash = BaseField::rand(rng);
+        let id_commitment_r = BaseField::rand(rng);
 
         // Create the query proof
         let (query_proof_input, query) = QueryProofInput::<MAX_DEPTH>::generate(rng);
@@ -89,6 +94,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             .finalize_query(oprf_blinded_response.to_owned(), blinding_factor_prepared)
             .expect("IDs should match");
 
+        // lets commit to the id
+        let id_commitment = OPrfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
+
         Self {
             user_pk: query_proof_input.pk,
             pk_index: query_proof_input.pk_index,
@@ -109,6 +117,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             oprf_response: [unblinded_response.x, unblinded_response.y],
             oprf_pk: [oprf_service.public_key().x, oprf_service.public_key().y],
             signal_hash,
+            nonce: query_proof_input.nonce,
+            id_commitment_r,
+            id_commitment,
             nullifier,
         }
     }
@@ -152,6 +163,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             self.oprf_response[0], self.oprf_response[1]
         );
         println!("signal_hash: {}n,", self.signal_hash);
+        println!("nonce: {}n,", self.nonce);
+        println!("id_commitment_r: {}n,", self.id_commitment_r);
+        println!("id_commitment: {}n,", self.id_commitment);
         println!("nullifier: {}n,", self.nullifier);
     }
 }

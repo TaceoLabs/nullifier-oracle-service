@@ -123,6 +123,8 @@ template OprfQuery(MAX_DEPTH) {
     signal input beta;
     signal input rp_id; // Public
     signal input action; // Public
+    // Nonce
+    signal input nonce; // Public
     signal output q[2]; // Public
 
     // Derive the query
@@ -141,6 +143,10 @@ template OprfQuery(MAX_DEPTH) {
     inner.beta <== beta;
     inner.query <== query;
     q <== inner.q;
+
+    // Dummy square to prevent tampering nonce.
+    // Same as done in Semaphore
+    signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [merkle_root, rp_id, action]} = OprfQuery(30);
+// component main {public [merkle_root, rp_id, action, nonce]} = OprfQuery(30);

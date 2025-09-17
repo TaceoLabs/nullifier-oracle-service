@@ -26,8 +26,13 @@ template OprfNullifier(MAX_DEPTH) {
     signal input oprf_response_blinded[2];
     // Unblinded response
     signal input oprf_response[2];
-    // Nullifier computation
+    // Nonce and signal hash
     signal input signal_hash; // Public
+    signal input nonce; // Public
+    // Commitment to the id
+    signal input id_commitment_r;
+    signal output id_commitment; // Public
+    // Nullifier computation
     signal output nullifier; // Public
 
     // Derive the query
@@ -73,13 +78,20 @@ template OprfNullifier(MAX_DEPTH) {
     oprf_response_blinded[1] === unblinder.out.y;
 
     // Hash the result to get the output of the OPRF
-    var DS = 1773399373884719043551596035141478; // b"World ID Proof"
-    var poseidon_result[4] = Poseidon2(4)([DS, query, oprf_response[0], oprf_response[1]]);
-    nullifier <== poseidon_result[1];
+    var DS_N = 1773399373884719043551596035141478; // b"World ID Proof"
+    var poseidon_nullifier[4] = Poseidon2(4)([DS_N, query, oprf_response[0], oprf_response[1]]);
+    nullifier <== poseidon_nullifier[1];
+
+    // Produce the commitment to the id
+    var DS_C = 5199521648757207593; // b"H(id, r)"
+    var poseidon_comm[3] = Poseidon2(3)([DS_C, mt_index, id_commitment_r]);
+    id_commitment <== poseidon_comm[1];
 
     // Dummy square to prevent tampering signal_hash.
     // Same as done in Semaphore
     signal signal_hash_squared <== signal_hash * signal_hash;
+    // Same for the nonce
+    signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [merkle_root, rp_id, action, oprf_pk, signal_hash]} = OprfNullifier(30);
+// component main {public [merkle_root, rp_id, action, oprf_pk, signal_hash, nonce]} = OprfNullifier(30);
