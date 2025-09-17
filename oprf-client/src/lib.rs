@@ -13,9 +13,9 @@ use oprf_core::{
     proof_input_gen::{nullifier::NullifierProofInput, query::QueryProofInput},
 };
 use oprf_types::api::v1::{
-    ChallengeRequest, ChallengeResponse, KeyIdentifier, OprfRequest, OprfResponse,
+    ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
-use oprf_types::{KeyEpoch, MerkleEpoch, RpId};
+use oprf_types::{MerkleEpoch, RpId, ShareEpoch};
 use rand::seq::IteratorRandom as _;
 use rand::{CryptoRng, Rng};
 use tracing::instrument;
@@ -62,7 +62,7 @@ pub enum Error {
 // TODO docs for fields
 pub struct NullifierArgs {
     pub oprf_public_key: Affine,
-    pub key_epoch: KeyEpoch,
+    pub key_epoch: ShareEpoch,
     pub sk: EdDSAPrivateKey,
     pub pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
     pub pk_index: u64,
@@ -115,7 +115,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     } = args;
     let request_id = Uuid::new_v4();
     tracing::debug!("new request with id = {request_id}");
-
     tracing::debug!("generate query witness and proof");
     let (query_input, query) = QueryProofInput::new(
         request_id,
@@ -143,7 +142,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         request_id,
         proof,
         point_b: blinded_query,
-        rp_key_id: KeyIdentifier { rp_id, key_epoch },
+        rp_key_id: NullifierShareIdentifier { rp_id, key_epoch },
         merkle_epoch,
         merkle_root,
         action,
@@ -172,7 +171,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let req = ChallengeRequest {
         request_id,
         challenge: challenge.clone(),
-        rp_key_id: KeyIdentifier { rp_id, key_epoch },
+        rp_nullifier_share_id: NullifierShareIdentifier { rp_id, key_epoch },
     };
     let selected_oprf_services = parties
         .iter()

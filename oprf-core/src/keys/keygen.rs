@@ -43,7 +43,7 @@ impl KeyGenPoly {
         BaseField::from_bigint(s_bigint).expect("scalar field element fits in base field")
     }
 
-    fn basefield_as_sacalarfield_if_fits(s: BaseField) -> std::io::Result<ScalarField> {
+    fn basefield_as_scalarfield_if_fits(s: BaseField) -> std::io::Result<ScalarField> {
         let s_bigint = s.into_bigint();
         ScalarField::from_bigint(s_bigint).ok_or(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -95,7 +95,7 @@ impl KeyGenPoly {
         let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
         let ks = poseidon2_3.permutation(&[Self::get_t1_ds(), key, nonce]);
         let msg = ciphertext - ks[1];
-        Self::basefield_as_sacalarfield_if_fits(msg)
+        Self::basefield_as_scalarfield_if_fits(msg)
     }
 
     pub fn decrypt_share(

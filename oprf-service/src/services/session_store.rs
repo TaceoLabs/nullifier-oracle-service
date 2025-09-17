@@ -1,20 +1,35 @@
+//! Session Store
+//!
+//! This module provides an in-memory session store for the OPRF service.
+//! Each session holds a [`DLogEqualitySession`] and is identified by a UUID.
+//!
+//! Sessions are automatically cleaned up after a configured lifetime. The store
+//! exposes methods to store and retrieve sessions while updating metrics for
+//! open and deleted sessions.
+
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use oprf_core::ddlog_equality::DLogEqualitySession;
+use parking_lot::Mutex;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    config::OprfConfig,
+    config::OprfPeerConfig,
     metrics::{METRICS_KEY_DELETED_SESSION, METRICS_KEY_OPEN_SESSIONS},
 };
 
 type SessionsMap = Arc<Mutex<HashMap<Uuid, Session>>>;
 
+/// Defines a dedicated Session.
+///
+/// It holds the randomness created during initial creation and a timestamp.
+/// If the timestamp exceeds a defined amount, the session will be removed
+/// from the store.
 struct Session {
     randomness: DLogEqualitySession,
     creation: Instant,
@@ -29,21 +44,96 @@ impl From<DLogEqualitySession> for Session {
     }
 }
 
-/// The Session Store of the OPRF service. Provides an interface to the
-/// currently open sessions.
-/// In the background, the session store is a thin wrapper about a Mutex
-/// protecting a HashMap.
+/// The Session Store of the OPRF service.
 ///
-/// When spawning a session store, the implementation will spawn an
-/// additional cleanup task.
-///
-/// The cleanup task will periodically cleanup old sessions, as defined
-/// by the config.
+/// Provides an interface to manage currently open sessions. Each session
+/// holds a [`DLogEqualitySession`] and a creation timestamp.  
+/// Old sessions are periodically removed by a background cleanup task.
 #[derive(Clone)]
 pub(crate) struct SessionStore {
     sessions: SessionsMap,
 }
 
+impl SessionStore {
+    /// Initializes a new `SessionStore` and starts the background cleanup task.
+    ///
+    /// # Arguments
+    /// * `config` - The service configuration providing cleanup interval and request lifetime.
+    pub(crate) fn init(config: Arc<OprfPeerConfig>) -> Self {
+        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        // start the periodic tasks for cleanup
+        start_cleanup_task(
+            sessions.clone(),
+            config.session_cleanup_interval,
+            config.request_lifetime,
+        );
+
+        Self { sessions }
+    }
+
+    /// Stores a session with the given request ID.
+    ///
+    /// If a session with the same ID already exists, it will be replaced
+    ///
+    /// # Arguments
+    /// * `request_id` - Unique ID of the session.
+    /// * `session` - The [`DLogEqualitySession`] to store.
+    #[instrument(level = "debug", skip(self, session))]
+    pub(crate) fn store(&self, request_id: Uuid, session: DLogEqualitySession) {
+        tracing::debug!("storing session for {request_id}");
+        tracing::trace!("trying to get lock...");
+        let inc = {
+            let mut sessions = self.sessions.lock();
+            tracing::trace!("got lock");
+            let old_session = sessions.insert(request_id, Session::from(session));
+            old_session.is_some()
+        };
+        if inc {
+            metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).increment(1);
+        } else {
+            tracing::warn!("already had a session with this id - removing old session");
+        }
+    }
+
+    /// Retrieves and removes a session with the given request ID.
+    ///
+    /// If the session exists, it is removed from the store and returned.
+    /// If a session is past its lifetime, but was not cleaned up by the
+    /// cleanup task, this method will still return the session,
+    /// regardless of the lifetime.
+    ///
+    /// # Arguments
+    /// * `request_id` - Unique ID of the session.
+    ///
+    /// # Returns
+    /// Optionally returns the [`DLogEqualitySession`] if it exists.
+    #[instrument(level = "debug", skip(self))]
+    pub(crate) fn retrieve(&self, request_id: Uuid) -> Option<DLogEqualitySession> {
+        tracing::debug!("retrieving session {request_id}");
+        tracing::trace!("trying to get lock...");
+        let session = {
+            let mut sessions = self.sessions.lock();
+            tracing::trace!("got lock");
+            sessions.remove(&request_id)
+        };
+        if session.is_some() {
+            metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).decrement(1);
+        }
+        // We return the randomness even if we exceeded the deadline. There is no problem with old sessions, we have the deadline only to not pollute the RAM with old sessions
+        session.map(|s| s.randomness)
+    }
+}
+
+/// Starts the periodic cleanup task for removing old sessions.
+///
+/// The task ticks in the the provided interval. In this interval,
+/// while check for Sessions exceeding `request_lifetime` and removes
+/// them from the store.
+///
+/// # Arguments
+/// * `sessions` - Shared session map.
+/// * `interval` - How often to check for expired sessions.
+/// * `request_lifetime` - Maximum lifetime of a session.
 fn start_cleanup_task(sessions: SessionsMap, interval: Duration, request_lifetime: Duration) {
     // Start the cleanup interval task
     let mut cleanup_interval = tokio::time::interval(interval);
@@ -54,7 +144,7 @@ fn start_cleanup_task(sessions: SessionsMap, interval: Duration, request_lifetim
             cleanup_interval.tick().await;
 
             let deleted = {
-                let mut sessions = sessions.lock().expect("not poisoned");
+                let mut sessions = sessions.lock();
                 let _guard = tracing::debug_span!("cleanup task").entered();
                 let cutoff_time = Instant::now();
                 tracing::debug!("starting cleanup");
@@ -74,51 +164,4 @@ fn start_cleanup_task(sessions: SessionsMap, interval: Duration, request_lifetim
             metrics::counter!(METRICS_KEY_DELETED_SESSION).increment(deleted as u64);
         }
     });
-}
-
-impl SessionStore {
-    pub(crate) fn init(config: Arc<OprfConfig>) -> Self {
-        let sessions = Arc::new(Mutex::new(HashMap::new()));
-        // start the periodic tasks for cleanup
-        start_cleanup_task(
-            sessions.clone(),
-            config.session_cleanup_interval,
-            config.request_lifetime,
-        );
-
-        Self { sessions }
-    }
-
-    #[instrument(level = "debug", skip(self, session))]
-    pub(crate) fn store(&self, request_id: Uuid, session: DLogEqualitySession) {
-        tracing::debug!("storing session for {request_id}");
-        tracing::trace!("trying to get lock...");
-        let inc = {
-            let mut sessions = self.sessions.lock().expect("not poisoned");
-            tracing::trace!("got lock");
-            let old_session = sessions.insert(request_id, Session::from(session));
-            old_session.is_some()
-        };
-        if inc {
-            metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).increment(1);
-        } else {
-            tracing::warn!("already had a session with this id - removing old session");
-        }
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    pub(crate) fn retrieve(&self, request_id: Uuid) -> Option<DLogEqualitySession> {
-        tracing::debug!("retrieving session {request_id}");
-        tracing::trace!("trying to get lock...");
-        let session = {
-            let mut sessions = self.sessions.lock().expect("not poisoned");
-            tracing::trace!("got lock");
-            sessions.remove(&request_id)
-        };
-        if session.is_some() {
-            metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).decrement(1);
-        }
-        // We return the randomness even if we exceeded the deadline. There is no problem with old sessions, we have the deadline only to not pollute the RAM with old sessions
-        session.map(|s| s.randomness)
-    }
 }

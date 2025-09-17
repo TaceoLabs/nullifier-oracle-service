@@ -14,7 +14,8 @@ use crate::{
 pub(crate) struct LocalSecretManager;
 
 /// Creates a new instance of the AWS secret manager. Loads the aws config from the environment with defaults from latest version.
-pub(crate) fn init() -> eyre::Result<SecretManagerService> {
+pub(crate) fn init(config: &OprfConfig) -> eyre::Result<SecretManagerService> {
+    config.environment.assert_is_dev();
     Ok(Arc::new(LocalSecretManager))
 }
 
@@ -27,7 +28,7 @@ impl SecretManager for LocalSecretManager {
         _rp_ids: Vec<RpId>,
     ) -> eyre::Result<(PrivateKey, HashMap<RpId, HashMap<KeyEpoch, DLogShare>>)> {
         let key_share =
-            serde_json::from_reader::<_, DLogShare>(File::open(&config.private_key_share_path)?)?;
+            serde_json::from_reader::<_, DLogShare>(File::open(&config.private_key_secret_id)?)?;
         let private_key = PrivateKey::from(ark_babyjubjub::Fr::default());
         let key_shares = HashMap::from([(KeyEpoch::default(), key_share)]);
         let rp_key_shares = HashMap::from([(RpId::new(0), key_shares)]);

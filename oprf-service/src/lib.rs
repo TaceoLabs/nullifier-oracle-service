@@ -1,3 +1,23 @@
+#![deny(missing_docs)]
+//! OPRF Peer Service
+//!
+//! This crate implements the main entry point, configuration, metrics, telemetry,
+//! and service components for an OPRF peer.
+//!
+//! TODO TOP LEVEL DOCUMENTATION
+//!
+//! # Key Components
+//! - `AppState`: Holds shared state for Axum, including OPRF service and chain watcher.
+//! - `start()`: Main async entry point to start the service, initialize crypto, secret manager, and spawn Axum server and background tasks.
+//! - `spawn_shutdown_task()`: Helper to create a `CancellationToken` for coordinated shutdown.
+//! - `default_shutdown_signal()`: Default shutdown signal using CTRL+C or UNIX terminate signals.
+//!
+//! # Modules
+//! - `config`: Configuration via environment variables or CLI.
+//! - `metrics`: Metrics keys and helpers.
+//! - `telemetry`: Logging and tracing initialization.
+//! - `services`: Core services like OPRF evaluation, chain watcher, and secret management.
+//! - `api`: REST API routes.
 use std::{fs::File, sync::Arc};
 
 use ark_serde_compat::groth16::Groth16VerificationKey;
@@ -7,27 +27,31 @@ use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::{Enviroment, OprfConfig},
+    config::OprfPeerConfig,
     services::{
-        chain_watcher::ChainWatcherService, crypto_device::CryptoDevice, oprf::OprfService,
-        secret_manager,
+        chain_watcher::ChainWatcherService, crypto_device::CryptoDevice,
+        event_handler::ChainEventHandler, oprf::OprfService, secret_manager,
     },
 };
 
-pub mod api;
+pub(crate) mod api;
 pub mod config;
 pub mod metrics;
-pub mod services;
+pub(crate) mod services;
 pub mod telemetry;
 
+/// Main application state for the OPRF-Peer used for Axum.
+///
+/// If Axum should be able to extract services, it should be added to
+/// the `AppState`.
 #[derive(Clone)]
 pub(crate) struct AppState {
-    config: Arc<OprfConfig>,
+    config: Arc<OprfPeerConfig>,
     oprf_service: OprfService,
     chain_watcher: ChainWatcherService,
 }
 
-impl FromRef<AppState> for Arc<OprfConfig> {
+impl FromRef<AppState> for Arc<OprfPeerConfig> {
     fn from_ref(input: &AppState) -> Self {
         Arc::clone(&input.config)
     }
@@ -48,7 +72,7 @@ impl FromRef<AppState> for ChainWatcherService {
 /// Main entry point for the OPRF-Service.
 /// TODO better docs
 pub async fn start(
-    config: config::OprfConfig,
+    config: config::OprfPeerConfig,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
@@ -71,33 +95,46 @@ pub async fn start(
     let vk: Groth16VerificationKey = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
-    // Load the secret manager. For now we only support AWS. Most likely we want to load from the SC and reconstruct the secrets, but let's see if we really need this or AWS is just fine.
-    let secret_manager = match config.environment {
-        Enviroment::Prod => secret_manager::aws::init().await,
-        Enviroment::Dev => secret_manager::local::init()?,
-    };
+    // Load the secret manager. For now we only support AWS.
+    // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
+    #[cfg(feature = "file-secret-manager")]
+    let secret_manager = secret_manager::local::init().await;
+    #[cfg(not(feature = "file-secret-manager"))]
+    let secret_manager = secret_manager::aws::init(Arc::clone(&config)).await;
 
     // TODO load all RP_ids from SC
 
     tracing::info!("init crypto device..");
-    let crypto_device = CryptoDevice::init(&config, secret_manager, vec![])
-        .await
-        .context("while initiating crypto-device")?;
+    let crypto_device = Arc::new(
+        CryptoDevice::init(secret_manager, vec![])
+            .await
+            .context("while initiating crypto-device")?,
+    );
 
-    // start session-store service
+    // start oprf-service service
     tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
+    let oprf_service =
+        OprfService::init(Arc::clone(&config), Arc::clone(&crypto_device), vk.into());
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
     tracing::info!("spawn chain watcher..");
     // spawn the chain watcher
-    let chain_watcher = services::chain_watcher::spawn_mock_watcher(
+    let chain_watcher = services::chain_watcher::init(
         Arc::clone(&config),
+        Arc::clone(&crypto_device),
         cancellation_token.clone(),
-    )
-    .await
-    .context("while spawning chain watcher")?;
+    );
+
+    tracing::info!("spawning chain event handler..");
+    // spawn the periodic task
+    let event_handler = ChainEventHandler::spawn(
+        config.chain_check_interval,
+        chain_watcher.clone(),
+        Arc::clone(&crypto_device),
+        cancellation_token.clone(),
+    );
+
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
     let axum_rest_api = api::new_app(Arc::clone(&config), oprf_service, chain_watcher);
@@ -126,9 +163,13 @@ pub async fn start(
     cancellation_token.cancelled().await;
     tracing::info!(
         "waiting for shutdown of services (max wait time {} as secs)..",
-        config.max_wait_time_shutdown.as_secs()
+        humantime::format_duration(config.max_wait_time_shutdown)
     );
-    match tokio::time::timeout(config.max_wait_time_shutdown, server).await {
+    match tokio::time::timeout(config.max_wait_time_shutdown, async move {
+        tokio::join!(server, event_handler.wait())
+    })
+    .await
+    {
         Ok(_) => tracing::info!("successfully finished shutdown in time"),
         Err(_) => tracing::warn!("could not finish shutdown in time"),
     }
@@ -184,20 +225,18 @@ pub async fn default_shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, path::PathBuf, time::Duration};
+    use std::{path::PathBuf, time::Duration};
 
-    use ark_serde_compat::groth16::Groth16VerificationKey;
     use axum_test::TestServer;
-    use tokio_util::sync::CancellationToken;
 
-    use crate::services::crypto_device::CryptoDevice;
+    use crate::config::Environment;
 
     use super::*;
 
     async fn test_server() -> eyre::Result<TestServer> {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let config = OprfConfig {
-            environment: Enviroment::Dev,
+        let config = OprfPeerConfig {
+            environment: Environment::Dev,
             bind_addr: "0.0.0.0:10000".to_string().parse().unwrap(),
             input_max_body_limit: 32768,
             request_lifetime: Duration::from_secs(5 * 60),
@@ -210,21 +249,23 @@ mod tests {
             chain_check_interval: Duration::from_secs(60),
             chain_epoch_max_difference: 10,
             private_key_secret_id: "orpf/sk".to_string(),
-            private_key_share_path: dir.join("../data/pk0"),
+            dlog_share_secret_id_suffix: "oprf/shares/".to_string(),
         };
-        let config = Arc::new(config);
-        let secret_manager = secret_manager::local::init()?;
-        let crypto_device = CryptoDevice::init(&config, secret_manager, Vec::new()).await?;
-        let vk = File::open(&config.user_verification_key_path)?;
-        let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
-        let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
-        let chain_watcher = crate::services::chain_watcher::spawn_mock_watcher(
-            Arc::clone(&config),
-            CancellationToken::new(),
-        )
-        .await?;
-        let server = api::new_test_app(config, oprf_service, chain_watcher);
-        Ok(server)
+        let _config = Arc::new(config);
+        todo!()
+        // let secret_manager = secret_manager::local::init()?;
+        // let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+        // let vk = File::open(&config.user_verification_key_path)?;
+        // let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+        // let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
+
+        // let chain_watcher = crate::services::chain_watcher::init(
+        //     Arc::clone(&config),
+        //     Arc::clone(&crypto_device),
+        //     CancellationToken::new(),
+        // );
+        // let server = api::new_test_app(config, oprf_service, chain_watcher);
+        // Ok(server)
     }
 
     fn init_req() -> serde_json::Value {

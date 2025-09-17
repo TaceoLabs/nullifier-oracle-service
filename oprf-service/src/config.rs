@@ -1,32 +1,48 @@
+//! Configuration types and CLI/environment parsing for the OPRF service.
+//!
+//! This module centralizes all runtime configuration of an OPRF peer.
+//! It defines:
+//!
+//! * [`Environment`] — the deployment environment (`prod` or `dev`) with a helper to assert dev-only code.
+//! * [`OprfPeerConfig`] — the full configuration for an OPRF peer, parsed from command-line flags
+//!   or environment variables using [`clap`].  
+//!
+//! By keeping all parameters here, startup code can simply call
+//! `OprfPeerConfig::parse()` to get a ready-to-use config struct.
+
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use clap::{Parser, ValueEnum};
 
 /// The environment the service is running in.
 ///
-/// TODO: explain differences between environments.
+/// Main usage for the `Environment` is to call
+/// [`Environment::assert_is_dev`]. Services that are intended
+/// for `dev` only (like SC mock watcher, local secret-manager,...)
+/// shall assert that they are called from the `dev` environment.
 #[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum Enviroment {
+pub enum Environment {
     /// Production environment.
     Prod,
     /// Development environment.
     Dev,
 }
 
-impl Enviroment {
+impl Environment {
+    /// Asserts that `Environment` is `dev`. Panics if not the case.
     pub fn assert_is_dev(&self) {
-        assert!(matches!(self, Enviroment::Dev), "Is not dev environment")
+        assert!(matches!(self, Environment::Dev), "Is not dev environment")
     }
 }
 
-/// The configuration for the OPRF service.
+/// The configuration for the OPRF peer.
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]
-pub struct OprfConfig {
-    /// S3 bucket for file storage/sharing
-    #[clap(long, env = "OPRF_SERVICE_ENVIRONMENT", default_value = "dev")]
-    pub environment: Enviroment,
+pub struct OprfPeerConfig {
+    /// The environment of OPRF-service (either `prod` or `dev`).
+    #[clap(long, env = "OPRF_SERVICE_ENVIRONMENT", default_value = "prod")]
+    pub environment: Environment,
 
     /// The bind addr of the AXUM server
     #[clap(long, env = "OPRF_SERVICE_BIND_ADDR", default_value = "0.0.0.0:4321")]
@@ -103,7 +119,7 @@ pub struct OprfConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_CHAIN_CHECK_INTERVAL",
-        default_value = "1min",
+        default_value = "2s",
         value_parser = humantime::parse_duration
 
     )]
@@ -126,7 +142,12 @@ pub struct OprfConfig {
     )]
     pub private_key_secret_id: String,
 
-    /// Path to the private key shamir share.
-    #[clap(long, env = "OPRF_SERVICE_PRIVATE_KEY_SHARE")]
-    pub private_key_share_path: PathBuf,
+    /// Suffix for secret name to store DLogShares in secret-manager.
+    /// The implementation will call `format!("{dlog_share_secret_id_suffix}/{rp_id}")`
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_PRIVATE_KEY_SECRET_ID",
+        default_value = "oprf/share/"
+    )]
+    pub dlog_share_secret_id_suffix: String,
 }

@@ -10,7 +10,7 @@ use oprf_client::{
     config::OprfClientConfig,
 };
 use oprf_core::proof_input_gen::query::QueryProofInput;
-use oprf_types::{KeyEpoch, MerkleEpoch, RpId};
+use oprf_types::{MerkleEpoch, RpId, ShareEpoch};
 use rand::Rng as _;
 
 const MAX_DEPTH: usize = 30;
@@ -41,7 +41,7 @@ async fn main() -> eyre::Result<()> {
 
     let degree = 1;
     let oprf_public_key = (Projective::generator() * ScalarField::from(42)).into_affine();
-    let key_epoch = KeyEpoch::default();
+    let key_epoch = ShareEpoch::default();
     let sk = EdDSAPrivateKey::random(&mut rng);
     let rp_sk = EdDSAPrivateKey::random(&mut rng); // TODO remove, not known
     let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;

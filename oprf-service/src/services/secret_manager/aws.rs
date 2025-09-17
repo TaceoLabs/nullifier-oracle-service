@@ -3,20 +3,28 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use eyre::{Context, ContextCompat};
-use oprf_types::{KeyEpoch, RpId};
+use oprf_types::{RpId, ShareEpoch};
 use serde::{Deserialize, Serialize};
+use tokio::runtime::{self, Handle};
 use tracing::instrument;
 
 use crate::{
-    config::OprfConfig,
-    services::secret_manager::{DLogShare, PrivateKey, SecretManager, SecretManagerService},
+    config::OprfPeerConfig,
+    services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager, SecretManagerService},
 };
 
-/// Type alias for secret manager client for ergonomics
-pub(crate) type AwsSecretManager = aws_sdk_secretsmanager::Client;
+/// AWS Secret Manager client wrapper.
+#[derive(Debug, Clone)]
+pub(crate) struct AwsSecretManager {
+    client: aws_sdk_secretsmanager::Client,
+    config: Arc<OprfPeerConfig>,
+    // holds a handle of the runtime to have the store/update be sync interface.
+    runtime: runtime::Handle,
+}
 
-/// We store the shares as Json because the secret manager API is rather clunky to use.
-/// If someone has the patience to build the AWS secret manager with only native API support remove this struct, but for now we simply use this struct at application level to retrieve current and previous epoch.
+/// JSON structure used to serialize secrets in AWS.
+///
+/// Stores the current and optionally previous epoch.
 #[derive(Serialize, Deserialize)]
 struct AwsSecret {
     rp_id: RpId,
@@ -26,24 +34,22 @@ struct AwsSecret {
     previous: Option<EpochSecret>,
 }
 
-/// The secret associated with an epoch
+/// Secret associated with a single epoch.
 #[derive(Clone, Serialize, Deserialize)]
 struct EpochSecret {
-    epoch: KeyEpoch,
+    epoch: ShareEpoch,
     secret: DLogShare,
 }
 
 impl AwsSecret {
-    /// Creates a new secret to serialize and send to AWS Secret Manager.
-    /// Note on serializations:
-    /// * Sets previous to `None`
-    /// * Sets Current epoch to 0.
-    #[allow(dead_code)]
+    /// Creates a new secret for a given `RpId`.
+    ///
+    /// Current epoch is set to 0, previous is `None`.
     fn new(rp_id: RpId, secret: DLogShare) -> Self {
         Self {
             rp_id,
             current: EpochSecret {
-                epoch: KeyEpoch::default(),
+                epoch: ShareEpoch::default(),
                 secret,
             },
             previous: None,
@@ -51,14 +57,20 @@ impl AwsSecret {
     }
 }
 
-/// Creates a new instance of the AWS secret manager. Loads the aws config from the environment with defaults from latest version.
-pub(crate) async fn init() -> SecretManagerService {
+/// Initializes an AWS secret manager client.
+///
+/// Loads AWS configuration from the environment and wraps the client
+/// in a `SecretManagerService`.
+pub(crate) async fn init(config: Arc<OprfPeerConfig>) -> SecretManagerService {
     // loads the latest defaults for aws
     tracing::info!("initializing AWS secret manager from env...");
-    let config = aws_config::load_from_env().await;
-    let client = aws_sdk_secretsmanager::Client::new(&config);
-    // this internally has another Arc but it is what it is
-    Arc::new(client)
+    let aws_config = aws_config::load_from_env().await;
+    let client = aws_sdk_secretsmanager::Client::new(&aws_config);
+    Arc::new(AwsSecretManager {
+        client,
+        config,
+        runtime: Handle::current(),
+    })
 }
 
 #[async_trait]
@@ -66,16 +78,19 @@ impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip_all)]
     async fn load_secrets(
         &self,
-        config: &OprfConfig,
         rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(PrivateKey, HashMap<RpId, HashMap<KeyEpoch, DLogShare>>)> {
+    ) -> eyre::Result<(
+        PeerPrivateKey,
+        HashMap<RpId, HashMap<ShareEpoch, DLogShare>>,
+    )> {
         tracing::info!(
             "loading secret key from AWS with name {}...",
-            config.private_key_secret_id
+            self.config.private_key_secret_id
         );
         let private_key = self
+            .client
             .get_secret_value()
-            .secret_id(config.private_key_secret_id.clone())
+            .secret_id(self.config.private_key_secret_id.clone())
             .send()
             .await
             .context("while retrieving secret key")?
@@ -84,13 +99,17 @@ impl SecretManager for AwsSecretManager {
             .to_owned();
         let private_key = ark_babyjubjub::Fr::from_str(&private_key)
             .map_err(|_| eyre::eyre!("Cannot parse private key from AWS"))?;
-        let private_key = PrivateKey::from(private_key);
+        let private_key = PeerPrivateKey::from(private_key);
         tracing::info!("loading {} RP secrets..", rp_ids.len());
         let amount_rps = rp_ids.len();
-        let rp_ids = rp_ids.into_iter().map(to_secret_id).collect::<Vec<_>>();
+        let rp_ids = rp_ids
+            .into_iter()
+            .map(|rp_id| to_secret_id(&self.config, rp_id))
+            .collect::<Vec<_>>();
 
         let mut shares = HashMap::with_capacity(rp_ids.len());
         let mut stream = self
+            .client
             .batch_get_secret_value()
             .set_secret_id_list(Some(rp_ids))
             .into_paginator()
@@ -99,7 +118,7 @@ impl SecretManager for AwsSecretManager {
         while let Some(batch_result) = stream.next().await {
             tracing::debug!("got batch..");
             let batch_result = batch_result.context("while loading DLog shares")?;
-            if batch_result.errors.is_some() {
+            if batch_result.errors.as_ref().is_some_and(|e| !e.is_empty()) {
                 let error = batch_result
                     .errors()
                     .first()
@@ -143,34 +162,41 @@ impl SecretManager for AwsSecretManager {
     }
 
     #[instrument(level = "info", skip(self, share))]
-    async fn create_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()> {
-        tracing::info!("creating new secret at AWS");
+    fn store_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()> {
+        let secret_id = to_secret_id(&self.config, rp_id);
+        tracing::info!("creating new secret at AWS: {secret_id}");
         let secret = AwsSecret::new(rp_id, share);
-        self.create_secret()
-            .name(to_secret_id(rp_id))
+        let create_fut = self
+            .client
+            .create_secret()
+            .name(secret_id)
             .secret_string(serde_json::to_string(&secret).expect("can serialize"))
-            .send()
-            .await
+            .send();
+        self.runtime
+            .block_on(create_fut)
             .context("while creating secret")?;
         tracing::debug!("success");
         Ok(())
     }
 
     #[instrument(level = "info", skip(self, share))]
-    async fn store_dlog_share(
+    fn update_dlog_share(
         &self,
         rp_id: RpId,
-        epoch: KeyEpoch,
+        epoch: ShareEpoch,
         share: DLogShare,
     ) -> eyre::Result<()> {
-        // load the old secret to obtain information to build AWSSecret
-        let secret_id = to_secret_id(rp_id);
+        // Load old secret to preserve previous epoch
+        let secret_id = to_secret_id(&self.config, rp_id);
         tracing::info!("loading old secret first at {secret_id}");
-        let secret_value = self
+        let send_fut = self
+            .client
             .get_secret_value()
             .secret_id(secret_id.clone())
-            .send()
-            .await
+            .send();
+        let secret_value = self
+            .runtime
+            .block_on(send_fut)
             .context("while loading old secret")?
             .secret_string()
             .ok_or_else(|| eyre::eyre!("cannot find secret with provided name"))?
@@ -188,11 +214,14 @@ impl SecretManager for AwsSecretManager {
         };
 
         tracing::info!("Put new secret value with current: {epoch}, previous: {prev_epoch}");
-        self.put_secret_value()
+        let put_fut = self
+            .client
+            .put_secret_value()
             .secret_id(secret_id)
             .secret_string(serde_json::to_string(&aws_secret).expect("can serialize"))
-            .send()
-            .await
+            .send();
+        self.runtime
+            .block_on(put_fut)
             .context("while storing new secret")?;
         tracing::debug!("success");
         Ok(())
@@ -200,6 +229,6 @@ impl SecretManager for AwsSecretManager {
 }
 
 #[inline(always)]
-fn to_secret_id(rp: RpId) -> String {
-    format!("oprf::rp::{}", rp)
+fn to_secret_id(config: &OprfPeerConfig, rp: RpId) -> String {
+    format!("{}/{}", config.dlog_share_secret_id_suffix, rp.into_inner())
 }

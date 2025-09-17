@@ -1,0 +1,223 @@
+//! Common cryptographic types used in the OPRF-nullifier service.
+//!
+//! This module defines the public keys, identifiers, commitments and
+//! ciphertext structures exchanged between participants in the OPRF-
+//! nullifier service.
+//!
+//! Main types:
+//! * [`PeerPublicKey`]
+//! * [`PeerIdentifier`]
+//! * [`PeerPublicKeyList`]
+//! * [`RpNullifierKey`]
+//! * [`RpSecretGenCommitment`]
+//! * [`RpSecretGenCiphertexts`] / [`RpSecretGenCiphertext`]
+
+use std::{collections::HashMap, fmt};
+
+use poseidon2::Poseidon2;
+use serde::{Deserialize, Serialize};
+
+/// The public key of an OPRF peer.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct PeerPublicKey(
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    ark_babyjubjub::EdwardsAffine,
+);
+
+/// Identifier for a peer holding a share of the OPRF secret.  
+/// It is computed as a Poseidon2 hash of the affine x- and y-coordinates of the [`PeerPublicKey`].
+///
+/// Adding a public key directly (e.g. as a JSON key or query parameter) is problematic,
+/// so this identifier is used instead.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct PeerIdentifier(
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    ark_babyjubjub::Fq,
+);
+
+/// A list of [`PeerPublicKey`]s.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PeerPublicKeyList(Vec<PeerPublicKey>);
+
+/// The public key of a relying party, used to verify computed nullifiers.
+///
+/// Constructed by multiplying the BabyJubJub generator with the secret shared among the OPRF peers.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct RpNullifierKey(
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    ark_babyjubjub::EdwardsAffine,
+);
+
+/// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
+///
+/// Contains the [`PeerPublicKey`] of the peer that created this contribution,
+/// along with the public commitments to the random share and the polynomial.
+///
+/// See [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf)
+/// for more information about the OPRF-nullifier generation protocol.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpSecretGenCommitment {
+    /// The OPRF peer that created this contribution.
+    pub sender: PeerPublicKey,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    /// The commitment to the random value sampled by the peer.
+    pub comm_share: ark_babyjubjub::EdwardsAffine,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    /// The commitment to the polynomial used to hide the sampled secret.
+    pub comm_coeffs: ark_babyjubjub::Fq,
+}
+
+/// The public contribution of one OPRF peer for the second round of the OPRF-nullifier generation protocol.
+///
+/// Contains ciphertexts for all OPRF peers (including the peer itself) with the evaluations
+/// of the polynomial generated in the first round.  
+/// Wraps a `HashMap` mapping each [`PeerIdentifier`] to its [`RpSecretGenCiphertext`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RpSecretGenCiphertexts(HashMap<PeerIdentifier, RpSecretGenCiphertext>);
+
+/// A ciphertext for an OPRF peer used in round 2 of the OPRF-nullifier generation protocol.
+///
+/// Contains the [`PeerPublicKey`] of the sender, the ciphertext itself, and a nonce.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpSecretGenCiphertext {
+    /// The peer that created the ciphertext.
+    pub sender: PeerPublicKey,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    /// The nonce used during encryption.
+    pub nonce: ark_babyjubjub::Fq,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    /// The ciphertext.
+    pub cipher: ark_babyjubjub::Fq,
+}
+
+impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {
+    fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ark_babyjubjub::EdwardsAffine> for PeerPublicKey {
+    fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
+        Self(value)
+    }
+}
+
+impl RpNullifierKey {
+    /// Create a new `RpNullifierKey` by wrapping an BabyJubJub Point.
+    pub fn new(value: ark_babyjubjub::EdwardsAffine) -> Self {
+        Self::from(value)
+    }
+
+    /// Gets the inner value (a BabyJubJub point in Affine representation).
+    pub fn inner(self) -> ark_babyjubjub::EdwardsAffine {
+        self.0
+    }
+}
+
+impl PeerPublicKey {
+    /// Create a new `PeerPublicKey` by wrapping an BabyJubJub Point.
+    pub fn new(value: ark_babyjubjub::EdwardsAffine) -> Self {
+        Self::from(value)
+    }
+
+    /// Gets the inner value (a BabyJubJub point in Affine representation).
+    pub fn inner(self) -> ark_babyjubjub::EdwardsAffine {
+        self.0
+    }
+
+    /// Computes the [`PeerIdentifier`] associated with this public-key.
+    ///
+    /// This method is deterministic by hashing the affine x- and y-coordinates with Poseidon2.
+    pub fn to_identifier(self) -> PeerIdentifier {
+        PeerIdentifier::from(self)
+    }
+}
+
+impl fmt::Display for RpNullifierKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!("NullifierPublicKey({})", self.0))
+    }
+}
+
+impl fmt::Display for PeerPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!("PeerPublicKey({})", self.0))
+    }
+}
+
+impl From<Vec<PeerPublicKey>> for PeerPublicKeyList {
+    fn from(value: Vec<PeerPublicKey>) -> Self {
+        Self(value)
+    }
+}
+
+impl IntoIterator for PeerPublicKeyList {
+    type Item = PeerPublicKey;
+    type IntoIter = std::vec::IntoIter<PeerPublicKey>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl PeerPublicKeyList {
+    /// Creates a new public key list by wrapping a `Vec` of [`PeerPublicKeys`](PeerPublicKey).
+    pub fn new(values: Vec<PeerPublicKey>) -> Self {
+        Self::from(values)
+    }
+
+    /// Returns the len of this list.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` iff the list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl RpSecretGenCiphertexts {
+    /// Returns the [`RpSecretGenCiphertext`] associated with the [`PeerIdentifier`]. Iff there is no ciphertext associated with this identifier, returns `None`.
+    pub fn get_cipher_text(&self, filter: PeerIdentifier) -> Option<RpSecretGenCiphertext> {
+        self.0.get(&filter).cloned()
+    }
+}
+
+impl RpSecretGenCiphertexts {
+    /// Creates a new instance by wrapping the provided value.
+    pub fn new(value: HashMap<PeerIdentifier, RpSecretGenCiphertext>) -> Self {
+        Self::from(value)
+    }
+}
+
+impl From<HashMap<PeerIdentifier, RpSecretGenCiphertext>> for RpSecretGenCiphertexts {
+    fn from(value: HashMap<PeerIdentifier, RpSecretGenCiphertext>) -> Self {
+        Self(value)
+    }
+}
+
+impl fmt::Display for PeerIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!("PeerId({})", self.0))
+    }
+}
+
+impl From<PeerPublicKey> for PeerIdentifier {
+    fn from(value: PeerPublicKey) -> Self {
+        let inner = value.inner();
+        let poseidon2_2 = Poseidon2::<_, 2, 5>::default();
+        Self(poseidon2_2.permutation(&[inner.x, inner.y])[0])
+    }
+}

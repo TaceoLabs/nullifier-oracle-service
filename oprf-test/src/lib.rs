@@ -8,15 +8,15 @@ use oprf_client::{
     ScalarField,
 };
 use oprf_core::proof_input_gen::query::QueryProofInput;
-use oprf_service::config::{Enviroment, OprfConfig};
-use oprf_types::{KeyEpoch, MerkleEpoch, RpId};
+use oprf_service::config::{Environment, OprfPeerConfig};
+use oprf_types::{MerkleEpoch, RpId, ShareEpoch};
 use rand::{CryptoRng, Rng};
 
 async fn start_service(id: usize) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
-    let config = OprfConfig {
-        environment: Enviroment::Dev,
+    let config = OprfPeerConfig {
+        environment: Environment::Dev,
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
         input_max_body_limit: 32768,
         request_lifetime: Duration::from_secs(5 * 60),
@@ -29,7 +29,7 @@ async fn start_service(id: usize) -> String {
         chain_check_interval: Duration::from_secs(60),
         chain_epoch_max_difference: 10,
         private_key_secret_id: "orpf/sk".to_string(),
-        private_key_share_path: dir.join(format!("../data/pk{id}")),
+        dlog_share_secret_id_suffix: "oprf/share/".to_string(),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
@@ -61,7 +61,7 @@ pub fn nullifier_args<R: Rng + CryptoRng>(rng: &mut R) -> NullifierArgs {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let degree = 1;
     let oprf_public_key = (Projective::generator() * ScalarField::from(42)).into_affine();
-    let key_epoch = KeyEpoch::default();
+    let key_epoch = ShareEpoch::default();
     let sk = EdDSAPrivateKey::random(rng);
     let rp_sk = EdDSAPrivateKey::random(rng); // TODO remove, not known
     let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
