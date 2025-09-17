@@ -2,6 +2,7 @@ pragma circom 2.0.0;
 
 include "babyjubjub/babyjubjub.circom";
 include "poseidon2/poseidon2.circom";
+include "circomlib/mux1.circom";
 
 // calculates (a + b) % p, where a, b < p and p = BabyJubJub ScalarField
 template AddModP() {
@@ -100,7 +101,7 @@ template MulModP(B) {
     component dbladd[B_NUM_BITS-1];
     for(var i = 0; i < B_NUM_BITS - 1; i++) {
         var tmp = 0;
-        if (b_bits[B_NUM_BITS - 2 - i] == 1 ){
+        if (b_bits[B_NUM_BITS - 2 - i] == 1){
             // double and add
             dbladd[i] = Add3ModP();
             dbladd[i].a <== result[i];
@@ -117,6 +118,66 @@ template MulModP(B) {
         result[i + 1] <== tmp;
     }
     out <== result[B_NUM_BITS - 1];
+}
+
+// Implement a * B mod P (= BabyJubJub ScalarField) via a double-add-ladder.
+template MulModPVar(B_NUM_BITS) {
+    assert(B_NUM_BITS > 0);
+
+    signal input a;
+    signal input b;
+    signal output out;
+
+    var b_bits[B_NUM_BITS] = Num2Bits(B_NUM_BITS)(b);
+
+    signal result[B_NUM_BITS];
+    result[0] <== Mux1()([0, 8], b_bits[B_NUM_BITS - 1]);
+
+    component dbl[B_NUM_BITS-1];
+    component dbladd[B_NUM_BITS-1];
+    for(var i = 0; i < B_NUM_BITS - 1; i++) {
+        // double and add
+        dbladd[i] = Add3ModP();
+        dbladd[i].a <== result[i];
+        dbladd[i].b <== result[i];
+        dbladd[i].c <== a;
+
+        // only double
+        dbl[i] = AddModP();
+        dbl[i].a <== result[i];
+        dbl[i].b <== result[i];
+
+        result[i + 1] <== Mux1()([dbl[i].out, dbladd[i].out], b_bits[B_NUM_BITS - 2 - i]);
+    }
+    out <== result[B_NUM_BITS - 1];
+}
+
+// Evaluates a polynomial mod P (= BabyJubJub ScalarField) at an index
+template EvalPolyModPVar(DEGREE, INDEX_NUM_BITS) {
+    input BabyJubJubScalarField() poly[DEGREE + 1];
+    signal input index;
+    signal output out;
+
+    // Use Horners rule
+    component adder_modp[DEGREE];
+    component mult_modp[DEGREE];
+
+    mult_modp[0] = MulModPVar(INDEX_NUM_BITS);
+    mult_modp[0].a <== poly[DEGREE].f;
+    mult_modp[0].b <== index;
+    adder_modp[0] = AddModP();
+    adder_modp[0].a <== mult_modp[0].out;
+    adder_modp[0].b <== poly[DEGREE-1].f;
+
+    for(var i = 1; i < DEGREE; i++) {
+        mult_modp[i] = MulModPVar(INDEX_NUM_BITS);
+        mult_modp[i].a <== adder_modp[i-1].out;
+        mult_modp[i].b <== index;
+        adder_modp[i] = AddModP();
+        adder_modp[i].a <== mult_modp[i].out;
+        adder_modp[i].b <== poly[DEGREE-1-i].f;
+    }
+    out <== adder_modp[DEGREE-1].out;
 }
 
 // Evaluates a polynomial mod P (= BabyJubJub ScalarField) at an index
@@ -162,28 +223,18 @@ template EvalPolyModP(DEGREE, INDEX) {
     }
 }
 
-
-// Checks outside of the ZK proof: The public keys pks need to be valid BabyJubJub points in the correct subgroup.
-
-template KeyGen(DEGREE, NUM_PARTIES) {
-    assert(DEGREE < NUM_PARTIES);
-    assert(DEGREE >= 1);
-    assert(NUM_PARTIES >= 3);
+template KeyGenCommmit(DEGREE) {
     // My secret key and public key
     signal input my_sk;
     signal output my_pk[2]; // Public
-    // All parties' public keys
-    signal input pks[NUM_PARTIES][2]; // Public
     // Coefficients of the sharing polynomial
     signal input poly[DEGREE + 1];
-    // Nonces used in the encryption of the shares
-    signal input nonces[NUM_PARTIES]; // Public
     // Commitments to the poly
     signal output comm_input_share[2]; // Public
     signal output comm_coeffs; // Public
-    // Outputs are all the ciphertexts and the commitments to the shares
-    signal output ciphertexts[NUM_PARTIES]; // Public
-    signal output comm_shares[NUM_PARTIES]; // Public
+    // Byproducts
+    output BabyJubJubScalarField() poly_checked[DEGREE + 1];
+    output BabyJubJubScalarField() sk_checked;
 
     ////////////////////////////////////////////////////////////////////////////
     // Range check the secret inputs
@@ -192,6 +243,7 @@ template KeyGen(DEGREE, NUM_PARTIES) {
     // Range check my sk
     component sk_f = BabyJubJubIsInFr();
     sk_f.in <== my_sk;
+    sk_checked <== sk_f.out;
 
     // Range check the coefficients
     // TODO Do i need this range checks for all the coefficients?
@@ -199,6 +251,7 @@ template KeyGen(DEGREE, NUM_PARTIES) {
     for (var i=0; i<DEGREE+1; i++) {
         poly_f[i] = BabyJubJubIsInFr();
         poly_f[i].in <== poly[i];
+        poly_checked[i] <== poly_f[i].out;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -248,58 +301,106 @@ template KeyGen(DEGREE, NUM_PARTIES) {
         poseidon2_sponge[i].in[3] <== poseidon2_sponge[i-1].out[3] + poseidon_inputs[i][2];
     }
     comm_coeffs <== poseidon2_sponge[NUM_POSEIDONS - 1].out[1];
+}
+
+template EncryptAndCommit() {
+    // My secret key
+    input BabyJubJubScalarField() my_sk;
+    // The share to encrypt
+    signal input share;
+    // The other party's public key
+    signal input pk[2]; // Public
+    // Nonce used in the encryption of the shares
+    signal input nonce; // Public
+    // Outputs are the ciphertext and the commitment to the shares
+    signal output ciphertext; // Public
+    signal output comm_share; // Public
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Encrypt the share
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Derive the symmetric keys for encryption
+    BabyJubJubPoint() { twisted_edwards } pk_p;
+    pk_p.x <== pk[0];
+    pk_p.y <== pk[1];
+    component sym_key = BabyJubJubScalarMul();
+    sym_key.p <== pk_p;
+    sym_key.e <== my_sk;
+
+    // Encrypt the shares with the derived symmetric keys
+    var T1_DS = 0x80000002000000014142;
+    var poseidon2_cipher_state[3] = Poseidon2(3)([T1_DS, sym_key.out.x, nonce]);
+    ciphertext <== poseidon2_cipher_state[1] + share;
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Commit to the share
+    ////////////////////////////////////////////////////////////////////////////
+    var poseidon2_commit_state[2] = Poseidon2(2)([391480396463803266015599334567015013, share]); // Domain separator in capacity b"KeyGenPolyShare"
+    comm_share <== poseidon2_commit_state[1];
+}
+
+
+// Checks outside of the ZK proof: The public keys pks need to be valid BabyJubJub points in the correct subgroup.
+
+template KeyGen(DEGREE, NUM_PARTIES) {
+    assert(DEGREE < NUM_PARTIES);
+    assert(DEGREE >= 1);
+    assert(NUM_PARTIES >= 3);
+    // My secret key and public key
+    signal input my_sk;
+    signal output my_pk[2]; // Public
+    // All parties' public keys
+    signal input pks[NUM_PARTIES][2]; // Public
+    // Coefficients of the sharing polynomial
+    signal input poly[DEGREE + 1];
+    // Nonces used in the encryption of the shares
+    signal input nonces[NUM_PARTIES]; // Public
+    // Commitments to the poly
+    signal output comm_input_share[2]; // Public
+    signal output comm_coeffs; // Public
+    // Outputs are all the ciphertexts and the commitments to the shares
+    signal output ciphertexts[NUM_PARTIES]; // Public
+    signal output comm_shares[NUM_PARTIES]; // Public
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Commit to the polynomial and my public key
+    ////////////////////////////////////////////////////////////////////////////
+
+    component keygen_commit = KeyGenCommmit(DEGREE);
+    keygen_commit.my_sk <== my_sk;
+    keygen_commit.poly <== poly;
+    my_pk <== keygen_commit.my_pk;
+    comm_input_share <== keygen_commit.comm_input_share;
+    comm_coeffs <== keygen_commit.comm_coeffs;
 
     ////////////////////////////////////////////////////////////////////////////
     // Derive the shares
     ////////////////////////////////////////////////////////////////////////////
 
-    signal shares[NUM_PARTIES];
-    component eval_poly[NUM_PARTIES];
+    component derive_share[NUM_PARTIES];
     for (var i=0; i<NUM_PARTIES; i++) {
-        eval_poly[i] = EvalPolyModP(DEGREE, i+1);
-        for (var j=0; j<DEGREE+1; j++) {
-            eval_poly[i].poly[j] <== poly_f[j].out;
-        }
-        shares[i] <== eval_poly[i].out;
+        derive_share[i] = EvalPolyModP(DEGREE, i + 1);
+        // derive_share[i] = EvalPolyModPVar(DEGREE, 7);
+        derive_share[i].poly <== keygen_commit.poly_checked;
+        // derive_share[i].index <== i + 1;
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // Encrypt the shares
+    // Encrypt all the shares
     ////////////////////////////////////////////////////////////////////////////
 
-    // Derive the symmetric keys for encryption
-    component sym_keys[NUM_PARTIES];
-    BabyJubJubPoint() { twisted_edwards } pk_p[NUM_PARTIES];
+    component derive_encrypt[NUM_PARTIES];
     for (var i=0; i<NUM_PARTIES; i++) {
-        pk_p[i].x <== pks[i][0];
-        pk_p[i].y <== pks[i][1];
-        sym_keys[i] = BabyJubJubScalarMul();
-        sym_keys[i].p <== pk_p[i];
-        sym_keys[i].e <== sk_f.out;
-    }
-
-    // Encrypt the shares with the derived symmetric keys
-    var T1_DS = 0x80000002000000014142;
-    component poseidon2_encrypt[NUM_PARTIES];
-    for (var i=0; i<NUM_PARTIES; i++) {
-        poseidon2_encrypt[i] = Poseidon2(3);
-        poseidon2_encrypt[i].in[0] <== T1_DS; // Domain separator in the capacity
-        poseidon2_encrypt[i].in[1] <== sym_keys[i].out.x;
-        poseidon2_encrypt[i].in[2] <== nonces[i];
-        ciphertexts[i] <== poseidon2_encrypt[i].out[1] + shares[i];
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Commit to the shares
-    ////////////////////////////////////////////////////////////////////////////
-    component poseidon2_commit[NUM_PARTIES];
-    for (var i=0; i<NUM_PARTIES; i++) {
-        poseidon2_commit[i] = Poseidon2(2);
-        poseidon2_commit[i].in[0] <== 391480396463803266015599334567015013; // Domain separator in capacity b"KeyGenPolyShare"
-        poseidon2_commit[i].in[1] <== shares[i];
-        comm_shares[i] <== poseidon2_commit[i].out[1];
+        derive_encrypt[i] = EncryptAndCommit();
+        derive_encrypt[i].my_sk <== keygen_commit.sk_checked;
+        derive_encrypt[i].share <== derive_share[i].out;
+        derive_encrypt[i].pk <== pks[i];
+        derive_encrypt[i].nonce <== nonces[i];
+        ciphertexts[i] <== derive_encrypt[i].ciphertext;
+        comm_shares[i] <== derive_encrypt[i].comm_share;
     }
 }
 
-// component main {public [pks, nonces]}  = KeyGen(1, 3);
+// component main {public [pks, nonces]} = KeyGen(1, 3);
 // component main {public [pks, nonces]} = KeyGen(15, 30);
