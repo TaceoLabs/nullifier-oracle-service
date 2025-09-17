@@ -17,7 +17,7 @@ use oprf_core::ddlog_equality::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{KeyEpoch, MerkleEpoch, RpId};
+use crate::{MerkleEpoch, RpId, ShareEpoch};
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Serialize, Deserialize)]
@@ -31,7 +31,7 @@ pub struct OprfRequest {
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     pub point_b: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s key for this request.
-    pub rp_key_id: KeyIdentifier,
+    pub rp_key_id: NullifierShareIdentifier,
     /// The Merkle epoch associated with this request.
     pub merkle_epoch: MerkleEpoch,
     /// The Merkle root
@@ -52,13 +52,13 @@ pub struct OprfRequest {
     pub rp_pk: EdDSAPublicKey, // TODO remove
 }
 
-/// Identifies a relying party’s key by party and epoch.
+/// Identifies the nullifier share to use for the OPRF computation by relying party ([`RpId`]) and [`ShareEpoch`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KeyIdentifier {
+pub struct NullifierShareIdentifier {
     /// ID of the relying party.
     pub rp_id: RpId,
     /// Epoch of the key.
-    pub key_epoch: KeyEpoch,
+    pub key_epoch: ShareEpoch,
 }
 
 /// Server response to an [`OprfRequest`].
@@ -78,7 +78,7 @@ pub struct ChallengeRequest {
     /// The challenge to respond to.
     pub challenge: DLogEqualityChallenge,
     /// Identifies the relying party’s key for this challenge.
-    pub rp_key_id: KeyIdentifier,
+    pub rp_nullifier_share_id: NullifierShareIdentifier,
 }
 
 /// Server response to a [`ChallengeRequest`].

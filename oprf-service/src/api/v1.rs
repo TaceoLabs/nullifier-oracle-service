@@ -1,3 +1,9 @@
+//! Version 1 (v1) API Routes
+//!
+//! This module defines the v1 API routes for the OPRF peer service.
+//! Currently, all endpoints are unauthenticated. Routes are structured under `/oprf`.
+//!
+//! It also applies a restrictive CORS policy suitable for JSON-based POST requests.
 use axum::Router;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -5,17 +11,24 @@ pub(crate) mod oprf;
 
 use crate::AppState;
 
-/// Builds the unauthenticated routes. At the moment all requests are unauthenticated.
+/// Builds unauthenticated routes for the service.
+///
+/// Currently all requests are unauthenticated. The routes are defined in the `oprf` module.
 fn unauthenticated_routes(input_max_body_limit: usize) -> Router<AppState> {
     oprf::router(input_max_body_limit)
 }
 
-// Builds the axum router for v1. Limits the max body limit to provided value.
+/// Build the v1 API router.
+///
+/// This sets up:
+/// - `/oprf` routes
+/// - health endpoints (`/health`, `/ready`, `/live`)
+/// - a restrictive CORS layer allowing JSON POST requests and OPTIONS preflight and a wildcard origin.
+///
+/// # Arguments
+///
+/// * `input_max_body_limit` - maximum allowed size of request bodies in bytes.
 pub(crate) fn build(input_max_body_limit: usize) -> Router<AppState> {
-    // Setup a restrictive CORS layer for the v1 api. We only want to consume json, therefore
-    // we allow the content-type header (and user-agent header). As we only have POST request,
-    // we prohibit all other, expect for OPTION preflight.
-    //
     // We setup a wildcard as we are a public API and everyone can access the service.
     let cors = CorsLayer::new()
         .allow_credentials(false)

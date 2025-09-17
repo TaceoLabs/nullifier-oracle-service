@@ -1,3 +1,13 @@
+//! v1 OPRF Routes
+//!
+//! This module defines the OPRF endpoints for version 1 of the API.
+//!
+//! # Endpoints
+//!
+//! - `POST /init` – Initializes an OPRF session and commits to the partial exponent.
+//! - `POST /finish` – Completes the OPRF session and returns the proof share.
+//!
+//! Both endpoints interact with the [`OprfService`] and use the [`ChainWatcherService`] to verify merkle roots.
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, State},
@@ -7,15 +17,15 @@ use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, Oprf
 use tracing::instrument;
 
 use crate::{
-    AppState, api::errors::ApiErrors, services::chain_watcher::ChainWatcherService,
-    services::oprf::OprfService,
+    AppState,
+    api::errors::{ApiErrors, ApiResult},
+    services::{chain_watcher::ChainWatcherService, oprf::OprfService},
 };
 
-type ApiResult<T> = Result<T, ApiErrors>;
-
-/// Inits an OPRF session.
+/// Handles `POST /init`.
 ///
-/// Deserializes the request and forwards the parsed request to the [`OprfService`] to create the session and commit to the partial exponent.
+/// Validates the nonce signature, retrieves the relevant merkle root for the requested epoch,
+/// and initializes a new OPRF session via [`OprfService`].
 #[instrument(level = "debug", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
@@ -43,6 +53,9 @@ async fn oprf_request(
     }))
 }
 
+/// Handles `POST /finish`.
+///
+/// Finalizes the OPRF session for the given request and returns the resulting proof share.
 #[instrument(level = "debug", skip_all)]
 async fn oprf_challenge(
     State(oprf_service): State<OprfService>,
@@ -58,6 +71,11 @@ async fn oprf_challenge(
     }))
 }
 
+/// Builds the router for v1 OPRF endpoints.
+///
+/// # Arguments
+///
+/// * `input_max_body_limit` - Maximum allowed body size for requests in bytes.
 pub(crate) fn router(input_max_body_limit: usize) -> Router<AppState> {
     Router::new()
         .route("/init", post(oprf_request))

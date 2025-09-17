@@ -1,7 +1,20 @@
+//! Telemetry setup for the OPRF service.
+//!
+//! This module centralizes configuration and initialization of observability:
+//!
+//! * Reading service name, tracing endpoint and metrics exporter settings
+//!   from environment variables into [`ServiceConfig`], [`MetricsConfig`] and
+//!   related structs.
+//! * Setting up logging/tracing (Datadog or a default `tracing-subscriber`).
+//! * Installing metrics exporters (Datadog, StatsD or Prometheus) based on
+//!   the chosen [`MetricsConfig`].
+//!
+//! Call [`initialize_tracing`] once at startup to configure tracing and metrics.
+
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::time::Duration;
-use std::{backtrace::Backtrace, collections::HashMap, panic};
+use std::{backtrace::Backtrace, panic};
 
 use eyre::Context;
 use metrics_exporter_dogstatsd::DogStatsDBuilder;
@@ -9,6 +22,10 @@ use secrecy::{ExposeSecret, SecretString};
 use telemetry_batteries::tracing::{TracingShutdownHandle, datadog::DatadogBattery};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Configuration for telemetry (tracing + metrics) of the service.
+///
+/// Typically constructed from environment variables via [`ServiceConfig::try_from_env`]
+/// and passed to [`initialize_tracing`] during startup.
 #[derive(Debug, Clone)]
 pub struct ServiceConfig {
     /// Service name - used for logging, Datadog metrics and tracing
@@ -20,6 +37,13 @@ pub struct ServiceConfig {
 }
 
 impl ServiceConfig {
+    /// Build a [`ServiceConfig`] from environment variables.
+    ///
+    /// Looks for:
+    /// * `TRACING_SERVICE_NAME`
+    /// * `TRACING_ENDPOINT`
+    ///
+    /// plus metrics-related variables for [`MetricsConfig`].
     pub fn try_from_env() -> eyre::Result<Self> {
         let service_name = match std::env::var("TRACING_SERVICE_NAME") {
             Ok(name) => Some(name),
@@ -46,14 +70,24 @@ impl ServiceConfig {
     }
 }
 
+/// Metrics exporter configuration.
+///
+/// Decides which backend (Datadog, StatsD or Prometheus) to use.
 #[derive(Debug, Clone)]
 pub enum MetricsConfig {
+    /// Datadog config
     Datadog(DatadogMetricsConfig),
+    /// StatsD config
     StatsD(StatsDMetricsConfig),
+    /// Prometheus config
     Prometheus(PrometheusMetricsConfig),
 }
 
 impl MetricsConfig {
+    /// Build a [`MetricsConfig`] from environment variables.
+    ///
+    /// Reads `METRICS_EXPORTER` to decide the backend and delegates to the
+    /// corresponding `try_from_env` for the chosen type.
     pub fn try_from_env() -> eyre::Result<Option<Self>> {
         match std::env::var("METRICS_EXPORTER") {
             Ok(choice) => match choice.trim().to_lowercase().as_str() {
@@ -83,14 +117,19 @@ impl MetricsConfig {
     }
 }
 
+/// Datadog metrics exporter configuration (DogStatsD).
 #[derive(Debug, Clone)]
 pub struct DatadogMetricsConfig {
-    pub host: String,
-    pub port: u16,
-    pub prefix: Option<String>,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) prefix: Option<String>,
 }
 
 impl DatadogMetricsConfig {
+    /// Build a [`DatadogMetricsConfig`] from environment variables:
+    /// * `METRICS_DATADOG_HOST`
+    /// * `METRICS_DATADOG_PORT` (optional, defaults to 8125)
+    /// * `METRICS_DATADOG_PREFIX` (optional)
     pub fn try_from_env() -> eyre::Result<Self> {
         let host = match std::env::var("METRICS_DATADOG_HOST") {
             Ok(host) => host,
@@ -130,16 +169,20 @@ impl DatadogMetricsConfig {
     }
 }
 
+/// StatsD metrics exporter configuration.
 #[derive(Debug, Clone)]
 pub struct StatsDMetricsConfig {
-    pub host: String,
-    pub port: u16,
-    pub prefix: Option<String>,
-    pub queue_size: Option<usize>,
-    pub buffer_size: Option<usize>,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) prefix: Option<String>,
+    pub(crate) queue_size: Option<usize>,
+    pub(crate) buffer_size: Option<usize>,
 }
 
 impl StatsDMetricsConfig {
+    /// Build a [`StatsDMetricsConfig`] from environment variables:
+    /// * `METRICS_STATSD_HOST` / `PORT` (port defaults to 8125)
+    /// * Optional `PREFIX`, `QUEUE_SIZE`, `BUFFER_SIZE`
     pub fn try_from_env() -> eyre::Result<Self> {
         let host = match std::env::var("METRICS_STATSD_HOST") {
             Ok(host) => host,
@@ -207,13 +250,20 @@ impl StatsDMetricsConfig {
     }
 }
 
+/// Prometheus metrics exporter configuration.
 #[derive(Debug, Clone)]
 pub enum PrometheusMetricsConfig {
+    /// Prometheus scrape endpoint (the service exposes metrics over HTTP).
     Scrape(ScrapePrometheusMetricsConfig),
+    /// Push mode (service pushes metrics to a gateway).
     Push(PushPrometheusMetricsConfig),
 }
 
 impl PrometheusMetricsConfig {
+    /// Build a [`PrometheusMetricsConfig`] from environment variables:
+    /// * `METRICS_PROMETHEUS_MODE` (must be `scrape` or `push`)
+    ///
+    /// plus mode-specific variables.
     pub fn try_from_env() -> eyre::Result<Self> {
         match std::env::var("METRICS_PROMETHEUS_MODE") {
             Ok(choice) => match choice.trim().to_lowercase().as_str() {
@@ -234,12 +284,15 @@ impl PrometheusMetricsConfig {
     }
 }
 
+/// Scrape mode Prometheus metrics configuration.
 #[derive(Debug, Clone)]
 pub struct ScrapePrometheusMetricsConfig {
-    pub bind_addr: Option<SocketAddr>,
+    pub(crate) bind_addr: Option<SocketAddr>,
 }
 
 impl ScrapePrometheusMetricsConfig {
+    /// Build a [`ScrapePrometheusMetricsConfig`] from environment variable
+    /// `METRICS_PROMETHEUS_BIND_ADDR` (optional).
     pub fn try_from_env() -> eyre::Result<Self> {
         match std::env::var("METRICS_PROMETHEUS_BIND_ADDR") {
             Ok(bind_addr) => Ok(ScrapePrometheusMetricsConfig {
@@ -262,15 +315,19 @@ impl ScrapePrometheusMetricsConfig {
     }
 }
 
+/// Push mode Prometheus metrics configuration.
 #[derive(Debug, Clone)]
 pub struct PushPrometheusMetricsConfig {
-    pub endpoint: String,
-    pub interval: Duration,
-    pub username: Option<SecretString>,
-    pub password: Option<SecretString>,
-    pub use_http_post_method: bool,
+    pub(crate) endpoint: String,
+    pub(crate) interval: Duration,
+    pub(crate) username: Option<SecretString>,
+    pub(crate) password: Option<SecretString>,
+    pub(crate) use_http_post_method: bool,
 }
 impl PushPrometheusMetricsConfig {
+    /// Build a [`PushPrometheusMetricsConfig`] from environment variables:
+    /// `METRICS_PROMETHEUS_ENDPOINT`, `INTERVAL`, `USERNAME`, `PASSWORD`,
+    /// `USE_HTTP_POST_METHOD`.
     pub fn try_from_env() -> eyre::Result<Self> {
         let endpoint = match std::env::var("METRICS_PROMETHEUS_ENDPOINT") {
             Ok(endpoint) => endpoint,
@@ -337,7 +394,10 @@ impl PushPrometheusMetricsConfig {
     }
 }
 
-fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
+/// Initialize metrics exporter according to [`MetricsConfig`].
+///
+/// Called internally by [`initialize_tracing`] once configuration is loaded.
+pub fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
     match config {
         MetricsConfig::Datadog(datadog_conf) => {
             tracing::debug!("Setting up Datadog metrics exporter ..");
@@ -415,6 +475,26 @@ fn initialize_metrics(config: &MetricsConfig) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Initializes structured logging/tracing for the service.
+///
+/// Depending on the [`ServiceConfig`]:
+///
+/// * If a `service_name` is set, Datadog tracing is initialized and a custom
+///   panic hook is installed. The hook logs panic messages and their backtraces
+///   as a single line to make them easier to ingest by log aggregators.
+/// * Otherwise, a default `tracing-subscriber` registry with human-readable
+///   formatting and an environment-based filter is installed.
+///
+/// If the configuration also contains metrics settings, [`initialize_metrics`]
+/// is called automatically.
+///
+/// # Returns
+/// - `Ok(Some(handle))` if Datadog tracing was started. The [`TracingShutdownHandle`]
+///   can be used to flush/stop traces on shutdown.
+/// - `Ok(None)` if only the default `tracing` subscriber was set up.
+/// - An error if tracing or metrics initialization failed.
+///
+/// This is intended as a one-time setup call during service startup.
 pub fn initialize_tracing(config: &ServiceConfig) -> eyre::Result<Option<TracingShutdownHandle>> {
     let handle = {
         if let Some(service_name) = config.service_name.as_deref() {
@@ -461,7 +541,7 @@ pub fn initialize_tracing(config: &ServiceConfig) -> eyre::Result<Option<Tracing
                 )
                 .with(
                     tracing_subscriber::EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| "info".into()),
+                        .unwrap_or_else(|_| "oprf_service=trace,warn".into()),
                 )
                 .init();
 
@@ -474,37 +554,4 @@ pub fn initialize_tracing(config: &ServiceConfig) -> eyre::Result<Option<Tracing
     }
 
     handle
-}
-
-pub fn get_trace_header() -> HashMap<String, String> {
-    let mut http_header = http::HeaderMap::new();
-    telemetry_batteries::tracing::trace_to_headers(&mut http_header);
-    http_header
-        .iter()
-        .map(|(name, value)| {
-            (
-                name.to_string(),
-                value
-                    .to_str()
-                    .expect("can convert http::HeaderValue to &str")
-                    .to_owned(),
-            )
-        })
-        .collect()
-}
-
-pub fn set_trace_parent(trace_header: &HashMap<String, String>) {
-    telemetry_batteries::tracing::trace_from_headers(
-        &trace_header
-            .iter()
-            .map(|(key, val)| {
-                (
-                    http::header::HeaderName::from_str(key)
-                        .expect("can convert &str to http::header::HeaderName"),
-                    http::header::HeaderValue::from_str(val)
-                        .expect("can convert &str to http::header::HeaderValue"),
-                )
-            })
-            .collect(),
-    );
 }

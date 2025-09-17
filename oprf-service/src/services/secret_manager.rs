@@ -1,51 +1,69 @@
+//! Secret manager interface for OPRF peers.
+//!
+//! This module defines the [`SecretManager`] trait, which is used to
+//! persist and retrieve cryptographic material such as
+//! [`PeerPrivateKey`]s and [`DLogShare`]s.
+//!
+//! Current implementations:
+//! - AWS (cloud storage)
+//! - Local file storage (optional, behind `file-secret-manager` feature)
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use oprf_types::{KeyEpoch, RpId};
+use oprf_types::{RpId, ShareEpoch};
 
-use crate::{
-    config::OprfConfig,
-    services::crypto_device::{DLogShare, PrivateKey},
-};
+use crate::services::crypto_device::{DLogShare, PeerPrivateKey};
 
 pub(crate) mod aws;
+#[cfg(feature = "file-secret-manager")]
 pub(crate) mod local;
 
-/// Dyn trait for the secret manager service. Must be `Send` + `Sync` to work with Axum.
+/// Dynamic trait object for secret manager service.
+///
+/// Must be `Send + Sync` to work with async contexts (e.g., Axum).
 pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
 
-/// Trait that implementations of secret managers need to implement. Currently, we support the following secret managers:
-/// - AWS
+/// Trait that implementations of secret managers must provide.
+///
+/// Handles persistence of [`PeerPrivateKey`]s and [`DLogShare`]s.
 #[async_trait]
 pub(crate) trait SecretManager {
-    /// Initial call that loads the private key and all shares from the provided [`RpIds`](RpId).
+    /// Loads the private key and all DLog shares for the provided [`RpId`]s.
     ///
-    /// The private key is used to compute Diffie-Hellman with the Smart Contract.
-    /// Every Rp has a dedicated DLog share and its share in turn has a dedicated epoch (how old it is). We load for every Rp provided as parameter at least the current epoch (current in the latest stored in the secret manager).
-    ///
-    /// Implementations should check that there is a share for every Rp and return error if not possible.
+    /// The private key is used for Diffie-Hellman with the smart contract.
+    /// Each RP has a dedicated share per epoch. Implementations must return
+    /// an error if any required share is missing.
     async fn load_secrets(
         &self,
-        config: &OprfConfig,
         rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(PrivateKey, HashMap<RpId, HashMap<KeyEpoch, DLogShare>>)>;
+    ) -> eyre::Result<(
+        PeerPrivateKey,
+        HashMap<RpId, HashMap<ShareEpoch, DLogShare>>,
+    )>;
 
-    /// Creates a new DLog share for the provided [`RpId`] with epoch 0.
+    /// Stores the provided [`DLogShare`] for the given [`RpId`] at epoch 0.
     ///
-    /// This method should only be called the first time an [`RpId`] creates a key. If you want to rotate the shares, use [`SecretManager::store_dlog_share`] instead.
-    #[expect(dead_code)]
-    async fn create_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()>;
+    /// This method is intended **only** for initializing a new RP. For updating
+    /// existing shares, use [`Self::update_dlog_share`].
+    ///
+    /// This method is synchronous on purpose: [`crate::services::event_handler::handle_chain_events`]
+    /// is CPU-bound, and we bridge into sync code for quick secret storage to
+    /// avoid complicating the async CPU-intensive path.
+    fn store_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()>;
 
-    /// Updates a DLog share of [`RpId`] with the provided [`KeyEpoch`].
+    /// Updates the [`DLogShare`] of an existing [`RpId`] to a new epoch.
     ///
-    /// Implementations may fail if the key epoch is already used. Check whether this is a valid epoch should be done at callsite.
+    /// Use this method for updating existing shares. For creating a new share,
+    /// use [`Self::store_dlog_share`].
     ///
-    /// This method is used for updating existing key shares. Use [`SecretManager::create_dlog_share`] if you want to create a new secret.
+    /// This method is synchronous by design: [`crate::services::event_handler::handle_chain_events`]
+    /// is CPU-bound, and we bridge into sync code to avoid blocking the async
+    /// CPU-intensive path.
     #[expect(dead_code)]
-    async fn store_dlog_share(
+    fn update_dlog_share(
         &self,
         rp_id: RpId,
-        epoch: KeyEpoch,
+        epoch: ShareEpoch,
         share: DLogShare,
     ) -> eyre::Result<()>;
 }

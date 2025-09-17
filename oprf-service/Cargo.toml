@@ -12,7 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["mock-chain-watcher"]
-mock-chain-watcher = []
+mock-chain-watcher = ["oprf-types/mock-chain-watcher"]
+file-secret-manager = []
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
@@ -20,9 +21,10 @@ ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-groth16.workspace = true
+ark-serde-compat = { workspace = true }
+async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
-async-trait = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
@@ -33,7 +35,11 @@ metrics = { workspace = true }
 metrics-exporter-dogstatsd = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
 metrics-exporter-statsd = { workspace = true }
+oprf-core = { workspace = true }
+oprf-types = { workspace = true }
+parking_lot = { workspace = true }
 rand.workspace = true
+reqwest = { version = "0.12.23", features = ["json"] }
 rustls = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -46,9 +52,6 @@ tower-http = { workspace = true, features = ["set-header", "cors", "trace"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
-oprf-core = { workspace = true }
-oprf-types = { workspace = true }
-ark-serde-compat = { workspace = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }

@@ -11,12 +11,12 @@ use ark_groth16::Groth16;
 use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
-use oprf_types::api::v1::{ChallengeRequest, KeyIdentifier, OprfRequest};
+use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    config::OprfConfig,
+    config::OprfPeerConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{crypto_device::CryptoDevice, session_store::SessionStore},
 };
@@ -28,7 +28,7 @@ pub(crate) enum OprfServiceError {
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
     #[error("Cannot find share for Rp with epoch: {0:?}")]
-    UnknownRpKeyEpoch(KeyIdentifier),
+    UnknownRpShareEpoch(NullifierShareIdentifier),
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
 }
@@ -41,14 +41,14 @@ pub(crate) struct OprfService {
 }
 
 impl OprfService {
-    /// Builds an `OprfService` from configuration, the device's secret share, and a Groth16 verifying key.
+    /// Builds an `OprfService` from configuration, a [`CryptoDevice`], and a Groth16 verifying key.
     pub(crate) fn init(
-        config: Arc<OprfConfig>,
-        crypto_device: CryptoDevice,
+        config: Arc<OprfPeerConfig>,
+        crypto_device: Arc<CryptoDevice>,
         vk: ark_groth16::VerifyingKey<Bn254>,
     ) -> Self {
         Self {
-            crypto_device: Arc::new(crypto_device),
+            crypto_device,
             session_store: SessionStore::init(config),
             vk: Arc::new(ark_groth16::prepare_verifying_key(&vk)),
         }
@@ -79,7 +79,7 @@ impl OprfService {
         let (session, comm) = self
             .crypto_device
             .partial_commit(request.point_b, &request.rp_key_id)
-            .ok_or_else(|| OprfServiceError::UnknownRpKeyEpoch(request.rp_key_id))?;
+            .ok_or_else(|| OprfServiceError::UnknownRpShareEpoch(request.rp_key_id))?;
         // Store the randomness for finalize request
         self.session_store.store(request.request_id, session);
         tracing::debug!("handled session");
@@ -100,8 +100,8 @@ impl OprfService {
         // Consume the randomness, produce the final proof share
         let proof_share = self
             .crypto_device
-            .challenge(session, request.challenge, &request.rp_key_id)
-            .ok_or_else(|| OprfServiceError::UnknownRpKeyEpoch(request.rp_key_id))?;
+            .challenge(session, request.challenge, &request.rp_nullifier_share_id)
+            .ok_or_else(|| OprfServiceError::UnknownRpShareEpoch(request.rp_nullifier_share_id))?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)
