@@ -21,8 +21,8 @@ rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
-tokio-util = "0.7.16"
+tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tokio-util = { version = "0.7.16", optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
@@ -44,7 +44,7 @@ tempfile = "3.22.0"
 default = ["bin"]
 
 # enables the binary client example
-bin = ["dep:clap"]
+bin = ["dep:clap", "dep:tokio", "dep:tokio-util"]
 
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
