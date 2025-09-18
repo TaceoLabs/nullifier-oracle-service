@@ -38,7 +38,6 @@ impl AwsSecret {
     /// Note on serializations:
     /// * Sets previous to `None`
     /// * Sets Current epoch to 0.
-    #[expect(dead_code)]
     fn new(rp_id: RpId, secret: DLogShare) -> Self {
         Self {
             rp_id,
