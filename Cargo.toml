@@ -36,6 +36,7 @@ serde_json = { version = "1" }
 tokio = { version = "1.47" }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
+uuid = { version = "1.18.0" }
 
 [profile.profiling]
 inherits = "bench"
