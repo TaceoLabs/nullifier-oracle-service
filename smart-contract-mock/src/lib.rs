@@ -9,7 +9,9 @@ use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use crate::services::pk_registry::PublicKeyRegistry;
+use crate::services::{
+    pk_registry::PublicKeyRegistry, rp_key_gen::RpKeyGenService, rp_registry::RpRegistry,
+};
 
 mod api;
 pub mod config;
@@ -19,6 +21,8 @@ mod services;
 #[derive(Clone)]
 pub(crate) struct AppState {
     pk_registry: PublicKeyRegistry,
+    rp_registry: RpRegistry,
+    key_gen_service: RpKeyGenService,
 }
 
 impl FromRef<AppState> for PublicKeyRegistry {
@@ -27,9 +31,21 @@ impl FromRef<AppState> for PublicKeyRegistry {
     }
 }
 
+impl FromRef<AppState> for RpRegistry {
+    fn from_ref(input: &AppState) -> Self {
+        input.rp_registry.clone()
+    }
+}
+
 impl FromRef<AppState> for broadcast::Receiver<MerkleRoot> {
     fn from_ref(input: &AppState) -> Self {
         input.pk_registry.subscribe_updates()
+    }
+}
+
+impl FromRef<AppState> for RpKeyGenService {
+    fn from_ref(input: &AppState) -> Self {
+        input.key_gen_service.clone()
     }
 }
 
@@ -62,7 +78,17 @@ pub async fn start(
     );
     pk_registry.start_add_pk_task(config.add_pk_interval);
 
-    let app_state = AppState { pk_registry };
+    tracing::info!("spawning rp registry..");
+    let rp_registry = RpRegistry::init();
+
+    tracing::info!("spawning key gen service..");
+    let key_gen_service = RpKeyGenService::init(Arc::clone(&config), rp_registry.clone());
+
+    let app_state = AppState {
+        pk_registry,
+        rp_registry,
+        key_gen_service,
+    };
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 

@@ -1,5 +1,5 @@
 use axum::{
-    Router,
+    Json, Router,
     extract::{
         Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
@@ -64,12 +64,9 @@ struct FetchRootsRequest {
 async fn fetch_roots(
     State(pk_registry): State<PublicKeyRegistry>,
     Query(req): Query<FetchRootsRequest>,
-) -> impl IntoResponse {
+) -> Json<Vec<MerkleRoot>> {
     tracing::debug!("fetch request for {} roots", req.amount);
-    (
-        StatusCode::OK,
-        serde_json::to_string(&pk_registry.fetch_roots(req.amount)).expect("can serialize"),
-    )
+    Json(pk_registry.fetch_roots(req.amount))
 }
 
 /// Route that allows the OPRF-Service to check whether a given root is actually a valid merkle root.
@@ -79,7 +76,7 @@ async fn fetch_roots(
 async fn is_valid_root(
     State(pk_registry): State<PublicKeyRegistry>,
     Path(root): Path<MerkleRoot>,
-) -> impl IntoResponse {
+) -> StatusCode {
     if pk_registry.is_valid_root(root) {
         tracing::debug!("{root} is a valid root");
         StatusCode::OK
@@ -94,7 +91,7 @@ async fn is_valid_root(
 /// This is the logic that acts as the Smart Contract (SC) Mock for the OPRF-Service. This is heavy subject-to-change when we get more information how the interface to the SC looks in the future.
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/merkle/subscribe", get(subscribe_merkle_updates))
-        .route("/merkle/valid", get(is_valid_root))
-        .route("/merkle/fetch/", get(fetch_roots))
+        .route("/subscribe", get(subscribe_merkle_updates))
+        .route("/valid", get(is_valid_root))
+        .route("/fetch/", get(fetch_roots))
 }

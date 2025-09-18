@@ -26,4 +26,8 @@ pub struct SmartContractMockConfig {
     /// The bind addr of the AXUM server
     #[clap(long, env = "OPRF_SC_SEED_FOR_REGISTRY", default_value = "42")]
     pub seed: u64,
+
+    /// The amount of OPRF-Services
+    #[clap(long, env = "OPRF_SC_OPRF_SERVICES")]
+    pub oprf_services: usize,
 }

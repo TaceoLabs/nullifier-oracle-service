@@ -13,6 +13,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
+pub mod crypto;
 
 /// Represents an epoch of a merkle-root. Users will provide a `MrEpoch` and retrieve the associated [`MerkleRoot`].
 #[derive(
@@ -61,13 +62,14 @@ impl KeyEpoch {
 }
 
 impl RpId {
-    pub fn new(value: u128) -> Self {
-        Self(value)
-    }
-
     /// Converts the RP id to an u128
     pub fn into_inner(self) -> u128 {
         self.0
+    }
+
+    /// Creates a new `RpId` by wrapping a `u128`
+    pub fn new(value: u128) -> Self {
+        Self::from(value)
     }
 }
 
@@ -79,6 +81,12 @@ impl MerkleRoot {
     /// Converts the merkle-root hash to its inner value, which is an element in the base field of BabyJubJub (which is equivalent to BN254 scalar field)
     pub fn into_inner(self) -> ark_babyjubjub::Fq {
         self.0
+    }
+}
+
+impl From<u128> for RpId {
+    fn from(value: u128) -> Self {
+        Self(value)
     }
 }
 

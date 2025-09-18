@@ -1,7 +1,10 @@
-use std::str::FromStr;
+use std::{collections::HashMap, marker::PhantomData, str::FromStr};
 
 use ark_ec::{AffineRepr as _, CurveGroup as _};
-use serde::{Serializer, de, ser::SerializeSeq as _};
+use serde::{
+    Deserialize, Serialize, Serializer, de,
+    ser::{SerializeMap, SerializeSeq as _},
+};
 
 pub mod groth16;
 
@@ -60,6 +63,17 @@ pub fn serialize_babyjubjub_base<S: Serializer>(
     ser: S,
 ) -> Result<S::Ok, S::Error> {
     ser.serialize_str(&p.to_string())
+}
+
+pub fn serialize_dict_g1<S: Serializer, V: Serialize>(
+    dict: &HashMap<ark_babyjubjub::EdwardsAffine, V>,
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    let mut map = ser.serialize_map(Some(dict.len()))?;
+    for (k, v) in dict {
+        map.serialize_entry(&[k.x.to_string(), k.y.to_string()], &v)?;
+    }
+    map.end()
 }
 
 pub fn serialize_bn254_gt<S: Serializer>(p: &ark_bn254::Fq12, ser: S) -> Result<S::Ok, S::Error> {
@@ -146,6 +160,16 @@ where
     D: de::Deserializer<'de>,
 {
     deserializer.deserialize_str(BabyJubJubBaseVisitor)
+}
+
+pub fn deserialize_dict_g1<'de, D, V>(
+    deserializer: D,
+) -> Result<HashMap<ark_babyjubjub::EdwardsAffine, V>, D::Error>
+where
+    D: de::Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    deserializer.deserialize_map(BabyJubJubBaseDictVisitor::<V>(PhantomData))
 }
 
 pub fn deserialize_bn254_gt<'de, D>(deserializer: D) -> Result<ark_bn254::Fq12, D::Error>
@@ -393,6 +417,35 @@ impl<'de> de::Visitor<'de> for BabyJubJubAffineVisitor {
             babyjubjub_affine_from_strings(&x, &y)
                 .map_err(|_| de::Error::custom("Invalid affine point on babyjubjub.".to_owned()))
         }
+    }
+}
+
+struct BabyJubJubBaseDictVisitor<V>(PhantomData<V>);
+
+impl<'de, V> de::Visitor<'de> for BabyJubJubBaseDictVisitor<V>
+where
+    V: Deserialize<'de>,
+{
+    type Value = HashMap<ark_babyjubjub::EdwardsAffine, V>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("A dictionary that maps BabyJubJub::Fq -> V")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut dict = HashMap::with_capacity(map.size_hint().unwrap_or(4));
+        while let Some((k, v)) = map.next_entry::<[String; 2], V>()? {
+            dict.insert(
+                babyjubjub_affine_from_strings(&k[0], &k[1]).map_err(|_| {
+                    de::Error::custom("Invalid affine point on babyjubjub.".to_owned())
+                })?,
+                v,
+            );
+        }
+        Ok(dict)
     }
 }
 
