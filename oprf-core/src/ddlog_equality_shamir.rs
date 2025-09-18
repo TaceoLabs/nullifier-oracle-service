@@ -94,7 +94,7 @@ mod tests {
         let public_key = (Affine::generator() * x).into_affine();
         let public_key_shares = x_shares
             .iter()
-            .map(|x| (Affine::generator() * x))
+            .map(|x| Affine::generator() * x)
             .collect::<Vec<_>>();
         let public_key_ =
             shamir::reconstruct_random_pointshares(&public_key_shares, degree, &mut rng);
