@@ -47,3 +47,4 @@ default = ["bin"]
 bin = ["dep:clap"]
 
 rustls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
