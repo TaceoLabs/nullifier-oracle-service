@@ -12,11 +12,11 @@ readme.workspace = true
 
 [dependencies]
 ark-babyjubjub = { path = "../ark-babyjubjub" }
-ark-ff = "0.5.0"
-ark-ec = "0.5.0"
+ark-ff = { workspace = true}
+ark-ec = { workspace = true}
 blake3 = "1.8"
 num-bigint = "0.4.3"
-rand = "0.8"
+rand = { workspace = true}
 poseidon2 = { path = "../poseidon2" }
 zeroize = "1"
 serde = { workspace = true, features = ["derive"] }

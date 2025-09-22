@@ -11,19 +11,19 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-ec = "0.5.0"
+ark-ec = { workspace = true }
 ark-babyjubjub = { path = "../ark-babyjubjub" }
-ark-ff = "0.5.0"
+ark-ff = { workspace = true }
 rand_chacha.workspace = true
 itertools = "0.14"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 rand.workspace = true
-uuid = { version = "1.18.0", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 poseidon2 = { path = "../poseidon2" }
 eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
 ark-serde-compat = { path = "../ark-serde-compat" }
-thiserror = "2.0.16"
+thiserror = { workspace = true }
 num-bigint = "0.4.3"
 
 [dev-dependencies]
