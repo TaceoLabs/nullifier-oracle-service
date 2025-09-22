@@ -314,7 +314,7 @@ template EncryptAndCommit() {
     signal input nonce; // Public
     // Outputs are the ciphertext and the commitment to the shares
     signal output ciphertext; // Public
-    signal output comm_share; // Public
+    signal output comm_share[2]; // Public
 
     ////////////////////////////////////////////////////////////////////////////
     // Encrypt the share
@@ -336,8 +336,14 @@ template EncryptAndCommit() {
     ////////////////////////////////////////////////////////////////////////////
     // Commit to the share
     ////////////////////////////////////////////////////////////////////////////
-    var poseidon2_commit_state[2] = Poseidon2(2)([391480396463803266015599334567015013, share]); // Domain separator in capacity b"KeyGenPolyShare"
-    comm_share <== poseidon2_commit_state[1];
+
+    // No range check needed as share is computed to be in the prime field
+    BabyJubJubScalarField() share_f;
+    share_f.f <== share;
+    component commit_comp = BabyJubJubScalarGenerator();
+    commit_comp.e <== share_f;
+    comm_share[0] <== commit_comp.out.x;
+    comm_share[1] <== commit_comp.out.y;
 }
 
 
@@ -361,7 +367,7 @@ template KeyGen(DEGREE, NUM_PARTIES) {
     signal output comm_coeffs; // Public
     // Outputs are all the ciphertexts and the commitments to the shares
     signal output ciphertexts[NUM_PARTIES]; // Public
-    signal output comm_shares[NUM_PARTIES]; // Public
+    signal output comm_shares[NUM_PARTIES][2]; // Public
 
     ////////////////////////////////////////////////////////////////////////////
     // Commit to the polynomial and my public key

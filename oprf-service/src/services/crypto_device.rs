@@ -1,12 +1,12 @@
 //! Crypto-device for OPRF peers.
 //!
 //! This module defines the [`CryptoDevice`] and related types used to hold
-//! and manage the cryptographic material of an OPRF peer.  
+//! and manage the cryptographic material of an OPRF peer.
 //!
 //! The device stores private keys and secret shares securely, never exposing
 //! them outside the device. It provides functions to compute public keys,
 //! evaluate polynomials, generate partial commitments, and decrypt received
-//! ciphertexts.  
+//! ciphertexts.
 //!
 //! All secret material is persisted using the [`SecretManagerService`] and
 //! the device ensures type-safe and consistent handling of cryptographic
@@ -41,14 +41,14 @@ mod dlog_storage;
 
 /// The private key of an OPRF peer.
 ///
-/// Used internally to compute Diffie-Hellman and key-generation operations.  
+/// Used internally to compute Diffie-Hellman and key-generation operations.
 /// Not `Debug`/`Display` to avoid accidental leaks.
 #[derive(Copy, Clone)]
 pub(crate) struct PeerPrivateKey(ark_babyjubjub::Fr);
 
 /// Secret-share of an OPRF nullifier secret.
 ///
-/// Serializable so it can be persisted via a secret manager.  
+/// Serializable so it can be persisted via a secret manager.
 /// Not `Debug`/`Display` to avoid accidental leaks.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -201,7 +201,7 @@ impl CryptoDevice {
         poly: &KeyGenPoly,
         their_pk: PeerPublicKey,
         nonce: ark_babyjubjub::Fq,
-    ) -> (ark_babyjubjub::Fq, ark_babyjubjub::Fq) {
+    ) -> (Affine, ark_babyjubjub::Fq) {
         poly.gen_share(id, self.private_key.inner(), their_pk.inner(), nonce)
     }
 

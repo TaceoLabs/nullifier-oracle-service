@@ -645,7 +645,7 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
           - *Round1*:
             1. Each party $P_i$ chooses a random polynomial $f_i (Z)$ over $bb(F)_p$ of degree $t$ $ f_i (Z) = a_(i,0) + a_(i,1) Z + dots + a_(i,t) Z^t, $ computes $X_i = G^(a_(i,0))$ and $c = H(a_(i,1), dots, a_(i, t))$, and posts $X_i$ and $c$ on chain.
           - *Round2*:
-            2. Each $P_i$ computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and posts a commitment $H(x_(i,j))$ and an encryption of $x_(i,j)$ using $P_j$'s public key on chain, alongside a ZK proof verifying correctness.
+            2. Each $P_i$ computes secret-shares $x_(i,j) = f_i (serif(id)_j)$ for $j = 1, dots, n$, where $serif(id)_j$ is the participant identifier, and posts a commitment $X_(i,j) = G^(x_(i,j))$ and an encryption of $x_(i,j)$ using $P_j$'s public key on chain, alongside a ZK proof verifying correctness.
             3. The smart contract verifies the ZK proof and accepts the encryptions of the shares if the proof is correct.
             4. Each party $P_j$ reads the shares from the other parties from the chain.
           - *Output*:
@@ -655,14 +655,13 @@ We implemented the zero-knowledge proofs $pi_1$ and $pi_2$ from @sec:ZK in Circo
       caption: [Proposal 2 for key generation using ZK proofs.],
     )<scheme:proposal2>
 
-    For reshare, we also have to proof that the correct share was used using the commitment $H(x_(i,j))$ from the previous round. When computing everything into one ZK proof (per party), the proof consists of the following:
+    For reshare, we also have to proof that the correct share was used using the commitments $X_(i,j)$ from the previous round. However, since these commitments are public anyway, this check can be done outside of the ZK proof, e.g., in the smart contract. When computing everything into one ZK proof (per party), the proof consists of the following:
     - Deriving the $n$ shares:
       - Requires $n$ polynomial evaluations in a non-native field
     - Recomputing the commitments:
       - Poseidon2 commitment for $t$ inputs.
-      - $n$ Poseidon2 commitments for the shares.
       - A BabyJubJubScalarMulFix for the commitment $X_i$.
-      - For reshare: $n$ additional Poseidon2 commitments to verify the previous round.
+      - $n$ BabyJubJubScalarMulFix for the commitments $X_(i,j)$.
     - For the Encryption:
       - $1$ BabyJubJubScalarMulFix for showing the secret key used for the diffie hellman matches the parties public key.
       - $n$ BabyJubJubScalarMulAny for deriving the secret keys.

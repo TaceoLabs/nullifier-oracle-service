@@ -20,8 +20,7 @@ template KeyGenSingleParty(DEGREE, INDEX) {
     signal output comm_coeffs; // Public
     // Outputs are the ciphertext and the commitment to the share
     signal output ciphertext; // Public
-    signal output comm_share; // Public
-
+    signal output comm_share[2]; // Public
 
     ////////////////////////////////////////////////////////////////////////////
     // Commit to the polynomial and my public key
@@ -49,9 +48,6 @@ template KeyGenSingleParty(DEGREE, INDEX) {
     comm_share <== derive_encrypt.comm_share;
 }
 
-// component main {public [pk, nonce]} = KeyGenSingleParty(1, 2);
-// component main {public [pk, nonce]} = KeyGenSingleParty(15, 29);
-
 template KeyGenSinglePartyVar(DEGREE, MAX_INDEX_BITS) {
     assert(DEGREE >= 1);
     // The index of the party who is receiving the share
@@ -70,8 +66,7 @@ template KeyGenSinglePartyVar(DEGREE, MAX_INDEX_BITS) {
     signal output comm_coeffs; // Public
     // Outputs are the ciphertext and the commitment to the share
     signal output ciphertext; // Public
-    signal output comm_share; // Public
-
+    signal output comm_share[2]; // Public
 
     ////////////////////////////////////////////////////////////////////////////
     // Commit to the polynomial and my public key
@@ -98,6 +93,9 @@ template KeyGenSinglePartyVar(DEGREE, MAX_INDEX_BITS) {
     ciphertext <== derive_encrypt.ciphertext;
     comm_share <== derive_encrypt.comm_share;
 }
+
+// component main {public [pk, nonce]} = KeyGenSingleParty(1, 2);
+// component main {public [pk, nonce]} = KeyGenSingleParty(15, 29);
 
 // component main {public [pk, nonce]} = KeyGenSinglePartyVar(1, 7);
 // component main {public [pk, nonce]} = KeyGenSinglePartyVar(15, 7);
