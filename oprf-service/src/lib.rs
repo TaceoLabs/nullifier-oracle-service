@@ -1,11 +1,10 @@
 use std::{fs::File, sync::Arc};
 
 use ark_serde_compat::groth16::Groth16VerificationKey;
-use axum::{Router, extract::FromRef};
+use axum::extract::FromRef;
 use eyre::Context;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
-use tower_http::trace::TraceLayer;
 
 use crate::{
     config::{Enviroment, OprfConfig},
@@ -101,17 +100,7 @@ pub async fn start(
     .context("while spawning chain watcher")?;
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
-    let app_state = AppState {
-        config: Arc::clone(&config),
-        oprf_service,
-        chain_watcher,
-    };
-
-    let axum_rest_api = Router::new()
-        .nest("/api/v1", api::v1::build(config.input_max_body_limit))
-        .merge(api::health::routes())
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state);
+    let axum_rest_api = api::new_app(Arc::clone(&config), oprf_service, chain_watcher);
 
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {
@@ -190,5 +179,208 @@ pub async fn default_shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = terminate => {},
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, path::PathBuf, time::Duration};
+
+    use ark_serde_compat::groth16::Groth16VerificationKey;
+    use axum_test::TestServer;
+    use tokio_util::sync::CancellationToken;
+
+    use crate::services::crypto_device::CryptoDevice;
+
+    use super::*;
+
+    async fn test_server() -> eyre::Result<TestServer> {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let config = OprfConfig {
+            environment: Enviroment::Dev,
+            bind_addr: "0.0.0.0:10000".to_string().parse().unwrap(),
+            input_max_body_limit: 32768,
+            request_lifetime: Duration::from_secs(5 * 60),
+            session_cleanup_interval: Duration::from_micros(10),
+            max_concurrent_jobs: 100000,
+            max_wait_time_shutdown: Duration::from_secs(10),
+            session_store_mailbox: 4096,
+            user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
+            chain_url: "foo".to_string(),
+            chain_check_interval: Duration::from_secs(60),
+            chain_epoch_max_difference: 10,
+            private_key_secret_id: "orpf/sk".to_string(),
+            private_key_share_path: dir.join("../data/pk0"),
+        };
+        let config = Arc::new(config);
+        let secret_manager = secret_manager::local::init()?;
+        let crypto_device = CryptoDevice::init(&config, secret_manager, Vec::new()).await?;
+        let vk = File::open(&config.user_verification_key_path)?;
+        let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+        let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
+        let chain_watcher = crate::services::chain_watcher::spawn_mock_watcher(
+            Arc::clone(&config),
+            CancellationToken::new(),
+        )
+        .await?;
+        let server = api::new_test_app(config, oprf_service, chain_watcher);
+        Ok(server)
+    }
+
+    fn init_req() -> serde_json::Value {
+        serde_json::json!({
+            "request_id": "e70268aa-fa9a-4e9e-b76c-c41fff40f6f4",
+            "proof": {
+              "pi_a": [
+                "6349570088365552239612347468351610627195030363513293827443377303359660823669",
+                "6753883411263494317944303627097592155325952374143787573092555378760696609897",
+                "1"
+              ],
+              "pi_b": [
+                [
+                  "1029525447704954470968997867751954950530344967964073379148935357546227680429",
+                  "871118679697810306823762821446145694919635208444599225201223171537142303434"
+                ],
+                [
+                  "17386501546121704623661895573517623371232645240102206072482573194074052902929",
+                  "9162154086687477089722341440812693001637734641073250904213144361349375807542"
+                ],
+                [
+                  "1",
+                  "0"
+                ]
+              ],
+              "pi_c": [
+                "4290638307091560008359938510617691693837093003791342827618304777208210686605",
+                "11122274897539367157049285256126542704142033744794859131294844414789776803491",
+                "1"
+              ]
+            },
+            "point_b": [
+              "18237229852531934280679321339995874890383597479740627110845247919555047357510",
+              "3668425390394053707146876594874500621838710739979860432809555286424756824931"
+            ],
+            "rp_key_id": {
+              "rp_id": 0,
+              "key_epoch": 0
+            },
+            "merkle_epoch": 0,
+            "merkle_root": "18113525670981476624162220635029909626458587036860423708002025726733198978273",
+            "action": "4780594342984269312659834610742751871778649094924684591207098796086938056455",
+            "nonce": "16526427576321170906618500040054521043441986479477002208590768728741775635002",
+            "signature": {
+              "r": [
+                "1051127582116816098464922787683501458236668706209853015557519330864147549639",
+                "16375937591535146361037884689273654078836000169295135357191197962801711293702"
+              ],
+              "s": "2367218161840642687877915404264974575293885020472239903684633479580936117917"
+            },
+            "rp_pk": {
+              "pk": [
+                "10265072520302061766783430308667681143731174197023564349371614639508988107811",
+                "9343021272028152424050964465457090846274804108161787027537058016585155190409"
+              ]
+            }
+        })
+    }
+
+    fn finish_req() -> serde_json::Value {
+        serde_json::json!({
+            "request_id": "e70268aa-fa9a-4e9e-b76c-c41fff40f6f4",
+            "challenge": {
+              "e": "16620368534569496780871678850089758319969215860113286164642302138248101420004"
+            },
+            "rp_key_id": {
+              "rp_id": 0,
+              "key_epoch": 0
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn test_init() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let req = init_req();
+        server
+            .post("/api/v1/init")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_bad_proof() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let mut req = init_req();
+        req["proof"]["pi_a"] = req["proof"]["pi_c"].clone();
+        let res = server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text("invalid proof");
+        res.assert_status_bad_request();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_bad_signature() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let mut req = init_req();
+        req["signature"]["s"] = serde_json::json!("1234");
+        let res = server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text("failed to verify nonce signature");
+        res.assert_status_bad_request();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_invalid_point() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let mut req = init_req();
+        req["point_b"] = serde_json::json!("0");
+        server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await
+            .assert_status_unprocessable_entity();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_finish() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let req = init_req();
+        server
+            .post("/api/v1/init")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        let req = finish_req();
+        server
+            .post("/api/v1/finish")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_finish_without_init() -> eyre::Result<()> {
+        let server = test_server().await?;
+        let req = finish_req();
+        server
+            .post("/api/v1/finish")
+            .json(&req)
+            .expect_failure()
+            .await
+            .assert_status_not_found();
+        Ok(())
     }
 }

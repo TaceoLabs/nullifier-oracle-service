@@ -6,7 +6,6 @@ use ark_bn254::{Bn254, Fr};
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
 use ark_serde_compat::groth16::Groth16Proof;
-use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use oprf_core::shamir;
 use oprf_core::{
@@ -23,6 +22,9 @@ use tracing::instrument;
 use uuid::Uuid;
 use witness::{BlackBoxFunction, ruint::aliases::U256};
 
+pub use circom_types;
+pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
+pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
 pub mod config;
@@ -57,33 +59,60 @@ pub enum Error {
     InvalidDLogProof,
 }
 
+// TODO docs for fields
+pub struct NullifierArgs {
+    pub oprf_public_key: Affine,
+    pub key_epoch: KeyEpoch,
+    pub sk: EdDSAPrivateKey,
+    pub pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
+    pub pk_index: u64,
+    pub merkle_root: BaseField,
+    pub mt_index: u64,
+    pub siblings: [BaseField; MAX_DEPTH],
+    pub rp_id: RpId,
+    pub rp_pk: EdDSAPublicKey, // TODO remove, will be fetched from somewhere by client and service
+    pub action: BaseField,
+    pub signal_hash: BaseField,
+    pub merkle_epoch: MerkleEpoch,
+    pub nonce: BaseField,
+    pub signature: EdDSASignature,
+    pub id_commitment_r: BaseField,
+    pub degree: usize,
+    pub query_pk: Arc<ProvingKey<Bn254>>,
+    pub query_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
+    pub nullifier_pk: Arc<ProvingKey<Bn254>>,
+    pub nullifier_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
+}
+
 #[instrument(level = "debug", skip_all)]
-#[expect(clippy::too_many_arguments)]
 pub async fn nullifier<R: Rng + CryptoRng>(
     oprf_services: &[String],
-    oprf_public_key: Affine,
-    key_epoch: KeyEpoch,
-    sk: EdDSAPrivateKey,
-    pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
-    pk_index: u64,
-    merkle_root: BaseField,
-    mt_index: u64,
-    siblings: [BaseField; MAX_DEPTH],
-    rp_id: RpId,
-    rp_pk: EdDSAPublicKey, // TODO remove, will be fetched from somewhere by client and service
-    action: BaseField,
-    signal_hash: BaseField,
-    merkle_epoch: MerkleEpoch,
-    nonce: BaseField,
-    signature: EdDSASignature,
-    id_commitment_r: BaseField,
-    degree: usize,
-    query_pk: &ProvingKey<Bn254>,
-    query_matrices: &ConstraintMatrices<ark_bn254::Fr>,
-    nullifier_pk: &ProvingKey<Bn254>,
-    nullifier_matrices: &ConstraintMatrices<ark_bn254::Fr>,
+    args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(Groth16Proof, BaseField)> {
+    let NullifierArgs {
+        oprf_public_key,
+        key_epoch,
+        sk,
+        pks,
+        pk_index,
+        merkle_root,
+        mt_index,
+        siblings,
+        rp_id,
+        rp_pk,
+        action,
+        signal_hash,
+        merkle_epoch,
+        nonce,
+        signature,
+        id_commitment_r,
+        degree,
+        query_pk,
+        query_matrices,
+        nullifier_pk,
+        nullifier_matrices,
+    } = args;
     let request_id = Uuid::new_v4();
     tracing::debug!("new request with id = {request_id}");
 
@@ -102,7 +131,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         rng,
     );
     let blinded_query = Affine::new(query_input.q[0], query_input.q[1]);
-    let (proof, public) = generate_query_proof(&query_input, query_pk, query_matrices, rng)?;
+    let (proof, public) = generate_query_proof(&query_input, &query_pk, &query_matrices, rng)?;
     assert_eq!(
         blinded_query,
         Affine::new(public[0], public[1]),
@@ -180,7 +209,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 
     tracing::debug!("generate nullifier witness and proof");
     let (proof, public) =
-        generate_nullifier_proof(&nullifier_input, nullifier_pk, nullifier_matrices, rng)?;
+        generate_nullifier_proof(&nullifier_input, &nullifier_pk, &nullifier_matrices, rng)?;
     assert_eq!(
         nullifier_input.nullifier, public[1],
         "nullifier does not match"
@@ -196,7 +225,7 @@ async fn oprf_request(oprf_services: &[String], req: &OprfRequest) -> Vec<(usize
     let mut responses = Vec::with_capacity(oprf_services.len());
     for (id, url) in oprf_services.iter().enumerate() {
         let res = client
-            .post(format!("{url}/api/v1/oprf/init"))
+            .post(format!("{url}/api/v1/init"))
             .json(req)
             .send()
             .await;
@@ -230,7 +259,7 @@ async fn challenge_request(
     let mut responses = Vec::with_capacity(oprf_services.len());
     for url in oprf_services {
         let res = client
-            .post(format!("{url}/api/v1/oprf/finish"))
+            .post(format!("{url}/api/v1/finish"))
             .json(req)
             .send()
             .await?

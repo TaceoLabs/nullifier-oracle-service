@@ -7,7 +7,8 @@ members = [
     "eddsa-babyjubjub",
     "oprf-types",
     "oprf-client",
-    "ark-serde-compat"
+    "ark-serde-compat",
+    "oprf-test"
 ]
 resolver = "3"
 

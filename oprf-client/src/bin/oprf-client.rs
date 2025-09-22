@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::{fs::File, sync::Arc};
 
 use ark_ec::{AffineRepr as _, CurveGroup as _, PrimeGroup as _};
 use ark_ff::{UniformRand, Zero};
@@ -6,7 +6,8 @@ use circom_types::{groth16::ZKey, traits::CheckElement};
 use clap::Parser;
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use oprf_client::{
-    Affine, BaseField, MAX_PUBLIC_KEYS, Projective, ScalarField, config::OprfClientConfig,
+    Affine, BaseField, MAX_PUBLIC_KEYS, NullifierArgs, Projective, ScalarField,
+    config::OprfClientConfig,
 };
 use oprf_core::proof_input_gen::query::QueryProofInput;
 use oprf_types::{KeyEpoch, MerkleEpoch, RpId};
@@ -76,27 +77,29 @@ async fn main() -> eyre::Result<()> {
 
     let (_proof, _nullifier) = oprf_client::nullifier(
         &config.services,
-        oprf_public_key,
-        key_epoch,
-        sk,
-        pks,
-        pk_index,
-        merkle_root,
-        mt_index,
-        siblings,
-        rp_id,
-        rp_pk,
-        action,
-        signal_hash,
-        merkle_epoch,
-        nonce,
-        signature,
-        id_commitment_r,
-        degree,
-        &query_pk,
-        &query_matrices,
-        &nullifier_pk,
-        &nullifier_matrices,
+        NullifierArgs {
+            oprf_public_key,
+            key_epoch,
+            sk,
+            pks,
+            pk_index,
+            merkle_root,
+            mt_index,
+            siblings,
+            rp_id,
+            rp_pk,
+            action,
+            signal_hash,
+            merkle_epoch,
+            nonce,
+            signature,
+            id_commitment_r,
+            degree,
+            query_pk: Arc::new(query_pk),
+            query_matrices: Arc::new(query_matrices),
+            nullifier_pk: Arc::new(nullifier_pk),
+            nullifier_matrices: Arc::new(nullifier_matrices),
+        },
         &mut rng,
     )
     .await?;

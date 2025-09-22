@@ -1,0 +1,26 @@
+[package]
+name = "oprf-test"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-ff.workspace = true
+ark-ec.workspace = true
+eyre.workspace = true
+rand.workspace = true
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+reqwest = { version = "0.12.23", features = ["json"] }
+futures = "0.3.31"
+
+oprf-core = { path = "../oprf-core" }
+oprf-client = { path = "../oprf-client" }
+oprf-service = { path = "../oprf-service" }
+oprf-types = { path = "../oprf-types" }
+circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
