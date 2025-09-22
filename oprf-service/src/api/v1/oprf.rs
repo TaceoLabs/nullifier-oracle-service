@@ -28,7 +28,9 @@ async fn oprf_request(
     tracing::debug!("verify nonce signature");
     if !request.rp_pk.verify(request.nonce, &request.signature) {
         tracing::debug!("failed to verify nonce signature");
-        return Err(ApiErrors::Unauthorized);
+        return Err(ApiErrors::BadRequest(
+            "failed to verify nonce signature".to_string(),
+        ));
     }
     // get the merkle root identified by the epoch
     let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.merkle_epoch);

@@ -28,6 +28,8 @@ pub enum ApiErrors {
     Unauthorized,
     #[error("Cannot find resource: \"{0}\"")]
     NotFound(String),
+    #[error("Bad request: \"{0}\"")]
+    BadRequest(String),
     #[error(transparent)]
     InternalSeverError(#[from] eyre::Report),
 }
@@ -42,7 +44,7 @@ impl From<OprfServiceError> for ApiErrors {
     fn from(value: OprfServiceError) -> Self {
         tracing::debug!("{value:?}");
         match value {
-            OprfServiceError::InvalidProof => ApiErrors::Unauthorized,
+            OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
             OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
             OprfServiceError::UnknownRpKeyEpoch(key_identifier) => ApiErrors::NotFound(format!(
@@ -68,6 +70,7 @@ impl IntoResponse for ApiErrors {
             )
                 .into_response(),
             ApiErrors::NotFound(message) => (StatusCode::NOT_FOUND, message).into_response(),
+            ApiErrors::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
         }
     }
 }

@@ -50,3 +50,6 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 oprf-core = { path = "../oprf-core" }
 oprf-types = { path = "../oprf-types" }
 ark-serde-compat = { path = "../ark-serde-compat" }
+
+[dev-dependencies]
+axum-test = "18.1.0"

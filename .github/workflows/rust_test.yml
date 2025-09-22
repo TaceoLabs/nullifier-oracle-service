@@ -27,4 +27,4 @@ jobs:
       - run: sudo apt-get install lld protobuf-compiler
       # - uses: Swatinem/rust-cache@v2
       - name: Unit & Integration Tests
-        run: cargo test --workspace --profile ci-dev --all-features
+        run: cargo test --workspace --profile ci-dev --all-features --lib
