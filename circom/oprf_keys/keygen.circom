@@ -346,20 +346,45 @@ template EncryptAndCommit() {
     comm_share[1] <== commit_comp.out.y;
 }
 
+template CheckDegree(MAX_DEGREE) {
+    assert(MAX_DEGREE >= 1);
+    signal input degree;
+    // Coefficients of the sharing polynomial
+    signal input poly[MAX_DEGREE + 1];
+
+    // Enforce degree to be in 1..=MAX_DEGREE
+    var MAX_DEGREE_NUM_BITS = log_ceil(MAX_DEGREE + 1);
+    var geq = GreaterEqThan(MAX_DEGREE_NUM_BITS)([degree, 1]);
+    var leq = LessEqThan(MAX_DEGREE_NUM_BITS)([degree, MAX_DEGREE]);
+    geq + leq === 2;
+
+    // enforce: if degree < i then poly[i] == 0
+    component cmp[MAX_DEGREE + 1];
+    for (var i = 0; i < MAX_DEGREE + 1; i++) {
+        // Comparators
+        cmp[i] = LessThan(MAX_DEGREE_NUM_BITS);
+        cmp[i].in[0] <== degree;
+        cmp[i].in[1] <== i;
+        // Constraint
+        // if cmp[i].out == 1 then poly[i] must be 0
+        // if cmp[i].out == 0 then poly[i] can be anything
+        poly[i] * cmp[i].out === 0;
+    }
+}
 
 // Checks outside of the ZK proof: The public keys pks need to be valid BabyJubJub points in the correct subgroup.
 
-template KeyGen(DEGREE, NUM_PARTIES) {
-    assert(DEGREE < NUM_PARTIES);
-    assert(DEGREE >= 1);
+template KeyGen(MAX_DEGREE, NUM_PARTIES) {
     assert(NUM_PARTIES >= 3);
+    // The actual degree
+    signal input degree; // Public
     // My secret key and public key
     signal input my_sk;
     signal output my_pk[2]; // Public
     // All parties' public keys
     signal input pks[NUM_PARTIES][2]; // Public
     // Coefficients of the sharing polynomial
-    signal input poly[DEGREE + 1];
+    signal input poly[MAX_DEGREE + 1];
     // Nonces used in the encryption of the shares
     signal input nonces[NUM_PARTIES]; // Public
     // Commitments to the poly
@@ -369,11 +394,14 @@ template KeyGen(DEGREE, NUM_PARTIES) {
     signal output ciphertexts[NUM_PARTIES]; // Public
     signal output comm_shares[NUM_PARTIES][2]; // Public
 
+    // Check that the coefficients beyond 'degree' are zero
+    CheckDegree(MAX_DEGREE)(degree, poly);
+
     ////////////////////////////////////////////////////////////////////////////
     // Commit to the polynomial and my public key
     ////////////////////////////////////////////////////////////////////////////
 
-    component keygen_commit = KeyGenCommmit(DEGREE);
+    component keygen_commit = KeyGenCommmit(MAX_DEGREE);
     keygen_commit.my_sk <== my_sk;
     keygen_commit.poly <== poly;
     my_pk <== keygen_commit.my_pk;
@@ -386,8 +414,8 @@ template KeyGen(DEGREE, NUM_PARTIES) {
 
     component derive_share[NUM_PARTIES];
     for (var i=0; i<NUM_PARTIES; i++) {
-        derive_share[i] = EvalPolyModP(DEGREE, i + 1);
-        // derive_share[i] = EvalPolyModPVar(DEGREE, 7);
+        derive_share[i] = EvalPolyModP(MAX_DEGREE, i + 1);
+        // derive_share[i] = EvalPolyModPVar(MAX_DEGREE, 7);
         derive_share[i].poly <== keygen_commit.poly_checked;
         // derive_share[i].index <== i + 1;
     }
@@ -408,5 +436,5 @@ template KeyGen(DEGREE, NUM_PARTIES) {
     }
 }
 
-// component main {public [pks, nonces]} = KeyGen(1, 3);
-// component main {public [pks, nonces]} = KeyGen(15, 30);
+// component main {public [degree, pks, nonces]} = KeyGen(1, 3);
+// component main {public [degree, pks, nonces]} = KeyGen(15, 30);
