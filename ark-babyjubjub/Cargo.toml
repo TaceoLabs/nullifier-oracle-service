@@ -12,17 +12,17 @@ readme.workspace = true
 description = "A Twisted Edwards curve defined over the scalar field of the BN254 curve, compatible with the Baby Jubjub impl in Circom."
 
 [dependencies]
-ark-ff = { workspace = true }
-ark-ec = { workspace = true }
-ark-std = { workspace = true }
-ark-r1cs-std = { workspace = true, optional = true }
 ark-bn254 = { workspace = true, features = ["scalar_field"] }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-r1cs-std = { workspace = true, optional = true }
+ark-std = { workspace = true }
 
 [dev-dependencies]
-ark-relations = { version = "0.5" }
-ark-serialize = { version = "0.5" }
-ark-algebra-test-templates = { version = "0.5" }
-ark-curve-constraint-tests = { version = "0.5" }
+ark-algebra-test-templates = { workspace = true }
+ark-curve-constraint-tests = { workspace = true }
+ark-relations = { workspace = true }
+ark-serialize = { workspace = true }
 
 [features]
 default = []

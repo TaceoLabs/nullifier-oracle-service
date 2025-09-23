@@ -11,13 +11,13 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-babyjubjub = { path = "../ark-babyjubjub" }
-ark-ff = { workspace = true}
+ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true}
-blake3 = "1.8"
-num-bigint = "0.4.3"
+ark-ff = { workspace = true}
+ark-serde-compat = { workspace = true }
+blake3 = { workspace = true }
+num-bigint.workspace = true
+poseidon2 = { workspace = true }
 rand = { workspace = true}
-poseidon2 = { path = "../poseidon2" }
-zeroize = "1"
 serde = { workspace = true, features = ["derive"] }
-ark-serde-compat = { path = "../ark-serde-compat" }
+zeroize = { workspace = true }
