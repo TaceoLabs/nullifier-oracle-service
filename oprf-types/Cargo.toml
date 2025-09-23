@@ -11,10 +11,10 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-babyjubjub = { path = "../ark-babyjubjub" }
-eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
-ark-serde-compat = { path = "../ark-serde-compat" }
-oprf-core = { path = "../oprf-core" }
-serde = { workspace = true, features = ["derive"] }
+ark-babyjubjub = { workspace = true }
+ark-serde-compat = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
+oprf-core = { workspace = true }
 serde_json.workspace = true
+serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

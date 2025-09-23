@@ -11,10 +11,10 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-ec = "0.5.0"
-ark-babyjubjub = { path = "../ark-babyjubjub" }
-ark-bn254 = "0.5.0"
-ark-groth16 = "0.5.0"
-serde = { workspace = true, features = ["derive"] }
+ark-babyjubjub = { workspace = true }
+ark-bn254.workspace = true
+ark-ec.workspace = true
+ark-groth16.workspace = true
 serde_json.workspace = true
-thiserror = "2.0.16"
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true

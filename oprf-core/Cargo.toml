@@ -12,22 +12,22 @@ readme.workspace = true
 
 [dependencies]
 ark-ec = { workspace = true }
-ark-babyjubjub = { path = "../ark-babyjubjub" }
+ark-babyjubjub = { workspace = true }
 ark-ff = { workspace = true }
 rand_chacha.workspace = true
-itertools = "0.14"
+itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 rand.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-poseidon2 = { path = "../poseidon2" }
-eddsa-babyjubjub = { path = "../eddsa-babyjubjub" }
-ark-serde-compat = { path = "../ark-serde-compat" }
+poseidon2 = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
+ark-serde-compat = { workspace = true }
 thiserror = { workspace = true }
-num-bigint = "0.4.3"
+num-bigint.workspace = true
 
 [dev-dependencies]
-criterion = "0.7.0"
+criterion = { workspace = true }
 
 [[bench]]
 name = "oprf"

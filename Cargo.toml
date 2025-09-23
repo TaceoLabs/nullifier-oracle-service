@@ -23,21 +23,64 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
-ark-ff = "0.5.0"
-ark-ec = "0.5.0"
-ark-std = "0.5.0"
-ark-r1cs-std = { version = "0.5.0" }
+ark-algebra-test-templates = "0.5"
+ark-babyjubjub = { path = "ark-babyjubjub" }
 ark-bn254 = { version = "0.5.0" }
+ark-curve-constraint-tests = "0.5"
+ark-ec = "0.5.0"
+ark-ff = "0.5.0"
+ark-groth16 = "0.5.0"
+ark-r1cs-std = { version = "0.5.0" }
+ark-relations = "0.5"
+ark-serde-compat = { path = "ark-serde-compat" }
+ark-serialize = "0.5"
+ark-std = "0.5.0"
+async-trait = "0.1.89"
+aws-config = "1.8.6"
+aws-sdk-secretsmanager = "1.88.0"
+axum = "0.8.4"
+axum-test = "18.1.0"
+blake3 = "1.8"
+circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
+clap = "4.5.48"
+criterion = "0.7.0"
+eddsa-babyjubjub = { path = "eddsa-babyjubjub" }
 eyre = { version = "0.6" }
-rand = { version = "0.8" }
+futures = "0.3.31"
+git-version = "0.3.9"
+groth16 = { git = "https://github.com/TaceoLabs/groth16.git" }
+http = "1.3.1"
+humantime = "2.2.0"
+itertools = "0.14"
+metrics = "0.24.2"
+metrics-exporter-dogstatsd = "0.9.6"
+metrics-exporter-prometheus = "0.17.2"
+metrics-exporter-statsd = "0.9.0"
+num-bigint = "0.4.5"
+num-traits = "0.2.18"
+oprf-client = { path = "oprf-client" }
+oprf-core = { path = "oprf-core" }
+oprf-service = { path = "oprf-service" }
+oprf-types = { path = "oprf-types" }
+poseidon2 = { path = "poseidon2" }
 rand_chacha = { version = "0.3" }
-thiserror = { version = "2" }
-serde = { version = "1" }
+rand = { version = "0.8" }
+reqwest = { version = "0.12" }
+rustls = "0.23.31"
+secrecy = "0.10.3"
 serde_json = { version = "1" }
+serde = { version = "1" }
+telemetry-batteries = { git = "https://github.com/worldcoin/telemetry-batteries.git", rev = "737bb0fc543214191e0448963b5a1ab279119f98" }
+tempfile = "3.22.0"
+thiserror = { version = "2" }
+tokio-util = "0.7.16"
 tokio = { version = "1.47" }
-tracing = { version = "0.1" }
+tower-http = "0.6.6"
 tracing-subscriber = { version = "0.3" }
+tracing = { version = "0.1" }
 uuid = { version = "1.18.0" }
+witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", branch = "dev" }
+zeroize = "1"
 
 [profile.profiling]
 inherits = "bench"

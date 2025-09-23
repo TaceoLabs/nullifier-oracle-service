@@ -11,16 +11,15 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-ff.workspace = true
 ark-ec.workspace = true
+ark-ff.workspace = true
+circom-types.workspace = true
 eyre.workspace = true
+futures.workspace = true
+oprf-client = { workspace = true }
+oprf-core = { workspace = true }
+oprf-service = { workspace = true }
+oprf-types = { workspace = true }
 rand.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
-reqwest = { version = "0.12.23", features = ["json"] }
-futures = "0.3.31"
-
-oprf-core = { path = "../oprf-core" }
-oprf-client = { path = "../oprf-client" }
-oprf-service = { path = "../oprf-service" }
-oprf-types = { path = "../oprf-types" }
-circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
