@@ -15,7 +15,7 @@ pub struct KeyGenConfig {
     pub amount_parties: usize,
 
     /// Whether old keys should be overwritten
-    #[clap(long, env = "OVERWRITE", default_value = "true")]
+    #[clap(long, env = "OVERWRITE", default_value = "false")]
     pub overwrite_old_keys: bool,
 }
 
