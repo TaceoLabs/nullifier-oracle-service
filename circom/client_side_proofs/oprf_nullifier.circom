@@ -11,6 +11,15 @@ template OprfNullifier(MAX_DEPTH) {
     signal input pk_index; // 0..6
     signal input query_s;
     signal input query_r[2];
+   // Credential Signature
+    signal input cred_type_id;
+    signal input cred_pk[2]; // Public
+    signal input cred_hashes[2]; // [claims_hash, associated_data_hash]
+    signal input cred_genesis_issued_at;
+    signal input cred_expires_at;
+    signal input cred_s;
+    signal input cred_r[2];
+    signal input current_time_stamp; // Public
     // Merkle proof
     signal input merkle_root; // Public
     signal input mt_index;
@@ -46,6 +55,14 @@ template OprfNullifier(MAX_DEPTH) {
     oprf_query.pk_index <== pk_index;
     oprf_query.s <== query_s;
     oprf_query.r <== query_r;
+    oprf_query.cred_type_id <== cred_type_id;
+    oprf_query.cred_pk <== cred_pk;
+    oprf_query.cred_hashes <== cred_hashes;
+    oprf_query.cred_genesis_issued_at <== cred_genesis_issued_at;
+    oprf_query.cred_expires_at <== cred_expires_at;
+    oprf_query.cred_s <== cred_s;
+    oprf_query.cred_r <== cred_r;
+    oprf_query.current_time_stamp <== current_time_stamp;
     oprf_query.merkle_root <== merkle_root;
     oprf_query.mt_index <== mt_index;
     oprf_query.siblings <== siblings;
@@ -94,4 +111,4 @@ template OprfNullifier(MAX_DEPTH) {
     signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [merkle_root, rp_id, action, oprf_pk, signal_hash, nonce]} = OprfNullifier(30);
+// component main {public [cred_pk, current_time_stamp, merkle_root, rp_id, action, oprf_pk, signal_hash, nonce]} = OprfNullifier(30);
