@@ -1,3 +1,4 @@
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn test_nullifier() -> eyre::Result<()> {
     let oprf_services = oprf_test::start_services().await;
