@@ -5,6 +5,7 @@ include "verify_dlog/verify_dlog.circom";
 
 // Checks outside of the ZK proof: The public key oprf_pk needs to be a valid BabyJubJub point in the correct subgroup.
 
+// Implements encryption following Algorithm 7 from the SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
 template AuthenticatedEncryption() {
     signal input key;
     signal input plaintext[3];
@@ -147,18 +148,18 @@ template OprfDelegate(MAX_DEPTH) {
     }
 
     // Encrypt the shares
-    component aes[3];
+    component authenticated_encryptions[3];
     for (var i=0; i<3; i++) {
-        aes[i] = AuthenticatedEncryption();
-        aes[i].key <== sym_keys[i].out.x;
-        aes[i].plaintext[0] <== map_id_share[i];
-        aes[i].plaintext[1] <== r_share[i];
-        aes[i].plaintext[2] <== expiration;
-        aes[i].nonce <== 0; // We don't use a nonce since it is a one-time encryption with a fresh key
+        authenticated_encryptions[i] = AuthenticatedEncryption();
+        authenticated_encryptions[i].key <== sym_keys[i].out.x;
+        authenticated_encryptions[i].plaintext[0] <== map_id_share[i];
+        authenticated_encryptions[i].plaintext[1] <== r_share[i];
+        authenticated_encryptions[i].plaintext[2] <== expiration;
+        authenticated_encryptions[i].nonce <== 0; // We don't use a nonce since it is a one-time encryption with a fresh key
         for (var j=0; j<3; j++) {
-            ciphertexts[i][j] <== aes[i].ciphertext[j];
+            ciphertexts[i][j] <== authenticated_encryptions[i].ciphertext[j];
         }
-        ciphertexts[i][3] <== aes[i].tag;
+        ciphertexts[i][3] <== authenticated_encryptions[i].tag;
     }
 
     // Dummy square to prevent tampering nonce.
