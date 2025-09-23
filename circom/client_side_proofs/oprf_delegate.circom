@@ -25,7 +25,7 @@ template AuthenticatedEncryption() {
     tag <== poseidon2_tag.out[1];
 }
 
-template OprfDelegate(MAX_DEPTH) {
+template OprfDelegate(MAX_DEPTH, RP_MAX_DEPTH) {
     // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
     signal input user_pk[7][2];
     signal input pk_index; // 0..6
@@ -42,6 +42,7 @@ template OprfDelegate(MAX_DEPTH) {
     signal input current_time_stamp; // Public
     // Merkle proof
     signal input merkle_root; // Public
+    signal input depth; // Public
     signal input mt_index;
     signal input siblings[MAX_DEPTH];
     // Oprf query
@@ -62,8 +63,9 @@ template OprfDelegate(MAX_DEPTH) {
     signal input mpc_public_keys[3][2]; // Public
     // Merkle proof for the RP registry
     signal input rp_merkle_root; // Public
+    signal input rp_depth; // Public
     signal input rp_mt_index;
-    signal input rp_siblings[MAX_DEPTH];
+    signal input rp_siblings[RP_MAX_DEPTH];
     // secret shares
     signal input map_id_share[3];
     signal input r_share[3];
@@ -89,6 +91,7 @@ template OprfDelegate(MAX_DEPTH) {
     oprf_query.cred_r <== cred_r;
     oprf_query.current_time_stamp <== current_time_stamp;
     oprf_query.merkle_root <== merkle_root;
+    oprf_query.depth <== depth;
     oprf_query.mt_index <== mt_index;
     oprf_query.siblings <== siblings;
     oprf_query.beta <== beta;
@@ -138,9 +141,9 @@ template OprfDelegate(MAX_DEPTH) {
     map_id_commitment <== poseidon_comm_map[1];
 
     // Check the Merkle root of the RP registry (maps the rp_specific_id to the map_id)
-    component merkle_proof = BinaryMerkleRoot(MAX_DEPTH);
+    component merkle_proof = BinaryMerkleRoot(RP_MAX_DEPTH);
     merkle_proof.leaf <== rp_specific_id;
-    merkle_proof.depth <== MAX_DEPTH;
+    merkle_proof.depth <== rp_depth;
     merkle_proof.index <== rp_mt_index;
     merkle_proof.siblings <== rp_siblings;
     merkle_proof.out === rp_merkle_root;
@@ -184,4 +187,4 @@ template OprfDelegate(MAX_DEPTH) {
     signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [cred_pk, current_time_stamp, merkle_root, oprf_pk, nonce, mpc_public_keys, rp_merkle_root, expiration]} = OprfDelegate(30);
+// component main {public [cred_pk, current_time_stamp, merkle_root, depth, oprf_pk, nonce, mpc_public_keys, rp_merkle_root, rp_depth, expiration]} = OprfDelegate(30, 30);

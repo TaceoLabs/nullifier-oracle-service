@@ -14,7 +14,7 @@ type ScalarField = ark_babyjubjub::Fr;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 #[derive(Debug, Clone)]
-pub struct DelegateProofInput<const MAX_DEPTH: usize> {
+pub struct DelegateProofInput<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize> {
     // Signature
     pub user_pk: [[BaseField; 2]; super::query::MAX_PUBLIC_KEYS],
     pub pk_index: BaseField, // 0..6
@@ -31,6 +31,7 @@ pub struct DelegateProofInput<const MAX_DEPTH: usize> {
     pub current_time_stamp: BaseField,
     // Merkle proof
     pub merkle_root: BaseField,
+    pub depth: BaseField,
     pub mt_index: BaseField,
     pub siblings: [BaseField; MAX_DEPTH],
     // OPRF query
@@ -51,8 +52,9 @@ pub struct DelegateProofInput<const MAX_DEPTH: usize> {
     pub mpc_public_keys: [[BaseField; 2]; 3],
     // Merkle proof for the RP registry
     pub rp_merkle_root: BaseField,
+    pub rp_depth: BaseField,
     pub rp_mt_index: BaseField,
-    pub rp_siblings: [BaseField; MAX_DEPTH],
+    pub rp_siblings: [BaseField; RP_MAX_DEPTH],
     // secret shares
     pub map_id_share: [BaseField; 3],
     pub r_share: [BaseField; 3],
@@ -64,7 +66,9 @@ pub struct DelegateProofInput<const MAX_DEPTH: usize> {
     pub ciphertexts: [[BaseField; 4]; 3],
 }
 
-impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
+impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
+    DelegateProofInput<MAX_DEPTH, RP_MAX_DEPTH>
+{
     pub const MAX_PUBLIC_KEYS: usize = RpIdQueryProofInput::<MAX_DEPTH>::MAX_PUBLIC_KEYS;
 
     // Absorb 2, squeeze 3, absorb 3, squeeze 1, domainsep = 0x4142
@@ -129,7 +133,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
         let sk = OPrfKey::new(ScalarField::rand(rng));
         let id_commitment_r = BaseField::rand(rng);
         let encryption_sk = ScalarField::rand(rng);
-        let rp_mt_index_u64 = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
+        let rp_mt_index_u64 = rng.gen_range(0..(1 << RP_MAX_DEPTH)) as u64;
         let rp_mt_index = BaseField::from(rp_mt_index_u64);
         let r_share = [
             BaseField::rand(rng),
@@ -143,7 +147,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
             BaseField::zero(),
         ];
         map_id_share[2] = rp_mt_index - map_id_share[0] - map_id_share[1];
-        let rp_siblings: [BaseField; MAX_DEPTH] = array::from_fn(|_| BaseField::rand(rng));
+        let rp_siblings: [BaseField; RP_MAX_DEPTH] = array::from_fn(|_| BaseField::rand(rng));
         let expiration = BaseField::rand(rng);
 
         // Create the query proof
@@ -190,7 +194,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
         let map_id_commitment = OPrfClient::id_commitment(rp_mt_index, map_id_commitment_r);
 
         // Compute the Merkle root
-        let rp_merkle_root = QueryProofInput::<MAX_DEPTH>::merkle_root(
+        let rp_merkle_root = QueryProofInput::<RP_MAX_DEPTH>::merkle_root(
             rp_specific_id,
             &rp_siblings,
             rp_mt_index_u64,
@@ -233,6 +237,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
             cred_r: query_proof_input.cred_r,
             current_time_stamp: query_proof_input.current_time_stamp,
             merkle_root: query_proof_input.merkle_root,
+            depth: query_proof_input.depth,
             mt_index: query_proof_input.mt_index,
             siblings: query_proof_input.siblings,
             beta: query_proof_input.beta,
@@ -250,6 +255,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
             encryption_sk,
             mpc_public_keys,
             rp_merkle_root,
+            rp_depth: BaseField::from(RP_MAX_DEPTH as u64),
             rp_mt_index,
             rp_siblings,
             map_id_share,
@@ -290,6 +296,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
         println!("cred_r: [{}n, {}n],", self.cred_r[0], self.cred_r[1]);
         println!("current_time_stamp: {}n,", self.current_time_stamp);
         println!("merkle_root: {}n,", self.merkle_root);
+        println!("depth: {}n,", self.depth);
         println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");
         for (i, s) in self.siblings.iter().enumerate() {
@@ -325,6 +332,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
         }
         println!("],");
         println!("rp_merkle_root: {}n,", self.rp_merkle_root);
+        println!("rp_depth: {}n,", self.rp_depth);
         println!("rp_mt_index: {}n,", self.rp_mt_index);
         println!("rp_siblings: [");
         for (i, s) in self.rp_siblings.iter().enumerate() {
@@ -386,7 +394,7 @@ mod tests {
     #[test]
     fn test_delegate_proof_input_10() {
         let seed = array::from_fn(|i| i as u8);
-        let input1 = DelegateProofInput::<10>::generate_from_seed(&seed);
+        let input1 = DelegateProofInput::<10, 10>::generate_from_seed(&seed);
         input1.print();
     }
 }

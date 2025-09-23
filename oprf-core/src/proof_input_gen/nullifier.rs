@@ -34,6 +34,7 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     pub current_time_stamp: BaseField,
     // Merkle proof
     pub merkle_root: BaseField,
+    pub depth: BaseField,
     pub mt_index: BaseField,
     pub siblings: [BaseField; MAX_DEPTH],
     // OPRF query
@@ -124,6 +125,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             cred_r: query_proof_input.cred_r,
             current_time_stamp: query_proof_input.current_time_stamp,
             merkle_root: query_proof_input.merkle_root,
+            depth: query_proof_input.depth,
             mt_index: query_proof_input.mt_index,
             siblings: query_proof_input.siblings,
             beta: query_proof_input.beta,
@@ -201,6 +203,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             cred_r: query_proof_input.cred_r,
             current_time_stamp: query_proof_input.current_time_stamp,
             merkle_root: query_proof_input.merkle_root,
+            depth: query_proof_input.depth,
             mt_index: query_proof_input.mt_index,
             siblings: query_proof_input.siblings,
             beta: query_proof_input.beta,
@@ -247,6 +250,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         println!("cred_r: [{}n, {}n],", self.cred_r[0], self.cred_r[1]);
         println!("current_time_stamp: {}n,", self.current_time_stamp);
         println!("merkle_root: {}n,", self.merkle_root);
+        println!("depth: {}n,", self.depth);
         println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");
         for (i, s) in self.siblings.iter().enumerate() {
@@ -285,6 +289,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             "query_s": self.query_s.to_string(),
             "query_r": [self.query_r[0].to_string(), self.query_r[1].to_string()],
             "merkle_root": self.merkle_root.to_string(),
+            "depth": self.depth.to_string(),
             "mt_index": self.mt_index.to_string(),
             "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
             "beta": self.beta.to_string(),

@@ -21,6 +21,7 @@ template OprfRpIdQuery(MAX_DEPTH) {
     signal input current_time_stamp; // Public
     // Merkle proof
     signal input merkle_root; // Public
+    signal input depth; // Public
     signal input mt_index;
     signal input siblings[MAX_DEPTH];
     // Oprf query
@@ -43,6 +44,7 @@ template OprfRpIdQuery(MAX_DEPTH) {
     inner.cred_r <== cred_r;
     inner.current_time_stamp <== current_time_stamp;
     inner.merkle_root <== merkle_root;
+    inner.depth <== depth;
     inner.mt_index <== mt_index;
     inner.siblings <== siblings;
     inner.beta <== beta;
@@ -54,4 +56,4 @@ template OprfRpIdQuery(MAX_DEPTH) {
     signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [cred_pk, current_time_stamp, merkle_root, nonce]} = OprfRpIdQuery(30);
+// component main {public [cred_pk, current_time_stamp, merkle_root, depth, nonce]} = OprfRpIdQuery(30);
