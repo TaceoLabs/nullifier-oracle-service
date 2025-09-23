@@ -23,6 +23,7 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
+
 ark-algebra-test-templates = "0.5"
 ark-babyjubjub = { path = "ark-babyjubjub" }
 ark-bn254 = { version = "0.5.0" }

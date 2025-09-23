@@ -25,11 +25,11 @@ oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
-serde_json.workspace = true
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 thiserror.workspace = true
-tokio-util = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tokio-util = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }

@@ -12,8 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["mock-chain-watcher"]
-mock-chain-watcher = ["oprf-types/mock-chain-watcher"]
 file-secret-manager = []
+mock-chain-watcher = ["oprf-types/mock-chain-watcher"]
 
 [dependencies]
 ark-babyjubjub = { workspace = true }

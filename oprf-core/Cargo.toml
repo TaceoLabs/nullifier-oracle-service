@@ -11,20 +11,20 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-ec = { workspace = true }
 ark-babyjubjub = { workspace = true }
+ark-ec = { workspace = true }
 ark-ff = { workspace = true }
-rand_chacha.workspace = true
+ark-serde-compat = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
 itertools = { workspace = true }
+num-bigint.workspace = true
+poseidon2 = { workspace = true }
+rand_chacha.workspace = true
+rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-rand.workspace = true
-uuid = { workspace = true, features = ["v4"] }
-poseidon2 = { workspace = true }
-eddsa-babyjubjub = { workspace = true }
-ark-serde-compat = { workspace = true }
 thiserror = { workspace = true }
-num-bigint.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 criterion = { workspace = true }
