@@ -72,6 +72,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
     }
 
     #[expect(clippy::manual_memcpy)]
+    // Implements encryption following Algorithm 7 from the SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
     fn ae_encrypt(
         key: BaseField,
         mut ptxt: [BaseField; 3],
@@ -89,6 +90,7 @@ impl<const MAX_DEPTH: usize> DelegateProofInput<MAX_DEPTH> {
     }
 
     #[expect(unused)]
+    // Implements decryption following Algorithm 7 from the SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
     fn ae_decrypt(
         key: BaseField,
         mut ctxt: [BaseField; 3],
