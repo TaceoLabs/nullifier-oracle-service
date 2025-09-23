@@ -22,6 +22,7 @@ template OprfNullifier(MAX_DEPTH) {
     signal input current_time_stamp; // Public
     // Merkle proof
     signal input merkle_root; // Public
+    signal input depth; // Public
     signal input mt_index;
     signal input siblings[MAX_DEPTH];
     // Oprf query
@@ -64,6 +65,7 @@ template OprfNullifier(MAX_DEPTH) {
     oprf_query.cred_r <== cred_r;
     oprf_query.current_time_stamp <== current_time_stamp;
     oprf_query.merkle_root <== merkle_root;
+    oprf_query.depth <== depth;
     oprf_query.mt_index <== mt_index;
     oprf_query.siblings <== siblings;
     oprf_query.beta <== beta;
@@ -111,4 +113,4 @@ template OprfNullifier(MAX_DEPTH) {
     signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [cred_pk, current_time_stamp, merkle_root, rp_id, action, oprf_pk, signal_hash, nonce]} = OprfNullifier(30);
+// component main {public [cred_pk, current_time_stamp, merkle_root, depth, rp_id, action, oprf_pk, signal_hash, nonce]} = OprfNullifier(30);

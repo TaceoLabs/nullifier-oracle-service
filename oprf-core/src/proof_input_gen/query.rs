@@ -32,6 +32,7 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
     pub current_time_stamp: BaseField,
     // Merkle proof
     pub merkle_root: BaseField,
+    pub depth: BaseField,
     pub mt_index: BaseField,
     pub siblings: [BaseField; MAX_DEPTH],
     // OPRF query
@@ -159,6 +160,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             cred_r: [cred_signature.r.x, cred_signature.r.y],
             current_time_stamp,
             merkle_root: merkkle_root,
+            depth: BaseField::from(MAX_DEPTH as u64),
             mt_index,
             siblings,
             beta: blinding_factor.factor,
@@ -236,6 +238,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             cred_r: [cred_signature.r.x, cred_signature.r.y],
             current_time_stamp,
             merkle_root,
+            depth: BaseField::from(MAX_DEPTH as u64),
             mt_index: mt_index_,
             siblings,
             beta: blinding_factor.factor,
@@ -276,6 +279,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         println!("cred_r: [{}n, {}n],", self.cred_r[0], self.cred_r[1]);
         println!("current_time_stamp: {}n,", self.current_time_stamp);
         println!("merkle_root: {}n,", self.merkle_root);
+        println!("depth: {}n,", self.depth);
         println!("mt_index: {}n,", self.mt_index);
         println!("siblings: [");
         for (i, s) in self.siblings.iter().enumerate() {
@@ -300,6 +304,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             "s": self.s.to_string(),
             "r": [self.r[0].to_string(), self.r[1].to_string()],
             "merkle_root": self.merkle_root.to_string(),
+            "depth": self.depth.to_string(),
             "mt_index": self.mt_index.to_string(),
             "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
             "beta": self.beta.to_string(),
