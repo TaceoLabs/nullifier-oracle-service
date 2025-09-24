@@ -352,24 +352,36 @@ template CheckDegree(MAX_DEGREE) {
     // Coefficients of the sharing polynomial
     signal input poly[MAX_DEGREE + 1];
 
-    // Enforce degree to be in 1..=MAX_DEGREE
-    var MAX_DEGREE_NUM_BITS = log_ceil(MAX_DEGREE + 1);
-    var geq = GreaterEqThan(MAX_DEGREE_NUM_BITS)([degree, 1]);
-    var leq = LessEqThan(MAX_DEGREE_NUM_BITS)([degree, MAX_DEGREE]);
-    geq + leq === 2;
-
     // enforce: if degree < i then poly[i] == 0
-    component cmp[MAX_DEGREE + 1];
-    for (var i = 0; i < MAX_DEGREE + 1; i++) {
+    // We do this by constructing a signal should_be_zeros[i] which is 0 for i <= degree and 1 for i > degree
+    // This is done by creating a one-hot vector of the degree (e.g., [0,0,1,0,0]) and translating it (e.g., to [0,0,0,1,1])
+    component eq[MAX_DEGREE];
+    signal equal[MAX_DEGREE + 1];
+    signal should_be_zeros[MAX_DEGREE + 1];
+    should_be_zeros[0] <== 0;
+    equal[0] <== 0; // Because we disallow degree 0 later on
+    for (var i = 1; i < MAX_DEGREE + 1; i++) {
         // Comparators
-        cmp[i] = LessThan(MAX_DEGREE_NUM_BITS);
-        cmp[i].in[0] <== degree;
-        cmp[i].in[1] <== i;
+        eq[i-1] = IsEqual();
+        eq[i-1].in[0] <== degree;
+        eq[i-1].in[1] <== i;
+
+        equal[i] <== eq[i-1].out;
+        should_be_zeros[i] <== should_be_zeros[i-1] + equal[i - 1];
+
         // Constraint
-        // if cmp[i].out == 1 then poly[i] must be 0
-        // if cmp[i].out == 0 then poly[i] can be anything
-        poly[i] * cmp[i].out === 0;
+        // if should_be_zeros[i] == 1 then poly[i] must be 0
+        // if should_be_zeros[i] == 0 then poly[i] can be anything
+        poly[i] * should_be_zeros[i] === 0;
     }
+
+    // Enforce degree to be in 1..=MAX_DEGREE
+    var sum = 0;
+    for (var i = 1; i < MAX_DEGREE + 1; i++) {
+        sum += equal[i];
+    }
+    sum === 1;
+
 }
 
 // Checks outside of the ZK proof: The public keys pks need to be valid BabyJubJub points in the correct subgroup.

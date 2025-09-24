@@ -67,8 +67,7 @@ template BinaryMerkleRoot(MAX_DEPTH) {
         if (i == 0) {
             should_be_zeros[i] <== is_depth[i];
         } else {
-            // Arithmetic OR
-            should_be_zeros[i] <== is_depth[i] + should_be_zeros[i-1] - should_be_zeros[i-1] * is_depth[i];
+            should_be_zeros[i] <== is_depth[i] + should_be_zeros[i-1];
         }
         should_be_zeros[i] * indices[i] === 0;
     }
