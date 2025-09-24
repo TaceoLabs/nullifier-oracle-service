@@ -23,7 +23,6 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
-
 ark-algebra-test-templates = "0.5"
 ark-babyjubjub = { path = "ark-babyjubjub" }
 ark-bn254 = { version = "0.5.0" }
@@ -53,6 +52,7 @@ groth16 = { git = "https://github.com/TaceoLabs/groth16.git" }
 http = "1.3.1"
 humantime = "2.2.0"
 itertools = "0.14"
+k256 = "0.13"
 metrics = "0.24.2"
 metrics-exporter-dogstatsd = "0.9.6"
 metrics-exporter-prometheus = "0.17.2"

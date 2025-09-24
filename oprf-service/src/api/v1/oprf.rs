@@ -19,11 +19,7 @@ use oprf_types::{
 };
 use tracing::instrument;
 
-use crate::{
-    AppState,
-    api::errors::{ApiErrors, ApiResult},
-    services::oprf::OprfService,
-};
+use crate::{AppState, api::errors::ApiResult, services::oprf::OprfService};
 
 /// Handles `POST /init`.
 ///
@@ -38,13 +34,6 @@ async fn oprf_request(
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
 
-    tracing::debug!("verify nonce signature");
-    if !request.rp_pk.verify(request.nonce, &request.signature) {
-        tracing::debug!("failed to verify nonce signature");
-        return Err(ApiErrors::BadRequest(
-            "failed to verify nonce signature".to_string(),
-        ));
-    }
     let commitments = oprf_service.init_oprf_session(request).await?;
     Ok(Json(OprfResponse {
         request_id,

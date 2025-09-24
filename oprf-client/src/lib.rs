@@ -70,12 +70,11 @@ pub struct NullifierArgs {
     pub mt_index: u64,
     pub siblings: [BaseField; MAX_DEPTH],
     pub rp_id: RpId,
-    pub rp_pk: EdDSAPublicKey, // TODO remove, will be fetched from somewhere by client and service
     pub action: BaseField,
     pub signal_hash: BaseField,
     pub merkle_epoch: MerkleEpoch,
     pub nonce: BaseField,
-    pub signature: EdDSASignature,
+    pub signature: k256::ecdsa::Signature,
     pub id_commitment_r: BaseField,
     pub degree: usize,
     pub query_pk: Arc<ProvingKey<Bn254>>,
@@ -100,7 +99,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         mt_index,
         siblings,
         rp_id,
-        rp_pk,
         action,
         signal_hash,
         merkle_epoch,
@@ -142,12 +140,11 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         request_id,
         proof,
         point_b: blinded_query,
-        rp_key_id: NullifierShareIdentifier { rp_id, key_epoch },
+        rp_identifier: NullifierShareIdentifier { rp_id, key_epoch },
         merkle_epoch,
         action,
         nonce,
         signature,
-        rp_pk,
     };
     let responses = oprf_request(oprf_services, &req).await;
     let (parties, responses) = choose_party_responses(responses, degree, rng)?;

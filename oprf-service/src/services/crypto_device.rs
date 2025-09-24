@@ -5,14 +5,16 @@
 //!
 //! The device stores private keys and secret shares securely, never exposing
 //! them outside the device. It provides functions to compute public keys,
-//! evaluate polynomials, generate partial commitments, and decrypt received
-//! ciphertexts.
+//! evaluate polynomials, generate partial commitments, decrypt received
+//! ciphertexts, and verifies signature from the RPs.
 //!
 //! All secret material is persisted using the [`SecretManagerService`] and
 //! the device ensures type-safe and consistent handling of cryptographic
 //! values.
 
 use ark_ec::{AffineRepr, CurveGroup as _};
+use ark_ff::{BigInteger as _, PrimeField as _};
+use k256::ecdsa::signature::Verifier;
 use tracing::instrument;
 
 use eyre::Context;
@@ -33,11 +35,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     metrics::METRICS_RP_SECRETS,
     services::{
-        crypto_device::dlog_storage::DLogShareStorage, secret_manager::SecretManagerService,
+        crypto_device::dlog_storage::RpMaterialStore, secret_manager::SecretManagerService,
     },
 };
 
-mod dlog_storage;
+pub(crate) mod dlog_storage;
 
 /// The private key of an OPRF peer.
 ///
@@ -94,16 +96,38 @@ impl PeerPrivateKey {
 /// - generate partial commitments
 /// - evaluate polynomials
 /// - decrypt key-generation ciphertexts
+/// - verifies the nonce signature of the RP
 #[derive(Clone)]
 pub(crate) struct CryptoDevice {
     /// Private key. *Do not return outside the device.*
     private_key: PeerPrivateKey,
-    /// Secret shares. *Do not return outside the device.*
-    shares: DLogShareStorage,
+    /// Secret shares and associated public keys of RPs. *Do not return outside the device.*
+    shares: RpMaterialStore,
     /// Associated public key.
     public_key: PeerPublicKey,
     /// Service to persist secret material.
     secret_manager: SecretManagerService,
+}
+
+type CryptoDeviceResult<T> = std::result::Result<T, CryptoDeviceError>;
+
+/// The errors the `CryptoDevice` returns. This error types is mostly
+/// used in API contexts, meaning it should be digested by the
+/// [`crate::api::errors`] module.
+///
+/// Methods that are used in other contexts may return one of the variants
+/// here or return an `eyre::Result`.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CryptoDeviceError {
+    /// Cannot find the RP.
+    #[error("Cannot find RP id: {0}")]
+    NoSuchRp(RpId),
+    /// Cannot find a secret share for the given RP at the requested epoch.
+    #[error("Cannot find share for Rp with epoch: {0:?}")]
+    UnknownRpShareEpoch(NullifierShareIdentifier),
+    /// Cannot verify nonce signature.
+    #[error(transparent)]
+    NonceSignatureError(#[from] k256::ecdsa::Error),
 }
 
 impl CryptoDevice {
@@ -126,9 +150,35 @@ impl CryptoDevice {
         Ok(Self {
             public_key,
             private_key,
-            shares: DLogShareStorage::new(shares),
+            shares: RpMaterialStore::new(shares),
             secret_manager,
         })
+    }
+
+    /// Verifies an ECDSA signature over a nonce for the given relying party.
+    ///
+    /// The BabyJubJub `nonce` is converted into **little-endian bytes**,
+    /// then verified against the stored ECDSA public key for `rp_id`
+    /// using the provided `signature`.
+    ///
+    /// Returns `Ok(())` on success or an error if the relying party is unknown
+    /// or the signature check fails.
+    #[instrument(level = "debug", skip(self, nonce, signature))]
+    pub(super) fn verify_nonce_signature(
+        &self,
+        rp_id: RpId,
+        nonce: ark_babyjubjub::Fq,
+        signature: k256::ecdsa::Signature,
+    ) -> CryptoDeviceResult<()> {
+        tracing::debug!("verifying nonce: {nonce}");
+        let bytes = nonce.into_bigint().to_bytes_le();
+        let vk = self
+            .shares
+            .get_rp_public_key(rp_id)
+            .ok_or_else(|| CryptoDeviceError::NoSuchRp(rp_id))?;
+        vk.verify(&bytes, &signature)?;
+        tracing::debug!("success");
+        Ok(())
     }
 
     /// Returns the public key of this peer.
@@ -140,16 +190,21 @@ impl CryptoDevice {
     ///
     /// This generates the peer's partial contribution used in the DLogEqualityProof.
     /// The provided [`NullifierShareIdentifier`] identifies the RP and the epoch of the share.
-    /// Returns `None` if the RP is unknown or the share for the epoch is not registered.
+    ///
+    /// Returns an error if the RP is unknown or the share for the epoch is not registered.
     pub(crate) fn partial_commit(
         &self,
         point_b: Affine,
         share_identifier: &NullifierShareIdentifier,
-    ) -> Option<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
+    ) -> CryptoDeviceResult<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
         tracing::debug!("computing partial commitment");
-        Some(DLogEqualitySession::partial_commitments(
+        let share = self
+            .shares
+            .get(share_identifier)
+            .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
+        Ok(DLogEqualitySession::partial_commitments(
             point_b,
-            self.shares.get(share_identifier)?,
+            share,
             &mut rand::thread_rng(),
         ))
     }
@@ -158,15 +213,20 @@ impl CryptoDevice {
     ///
     /// Consumes the session to prevent reuse of the randomness. The provided
     /// [`NullifierShareIdentifier`] identifies the RP and the epoch of the key.
-    /// Returns `None` if the RP is unknown or the key epoch is not registered.
+    ///
+    /// Returns an error if the RP is unknown or the key epoch is not registered.
     pub(crate) fn challenge(
         &self,
         session: DLogEqualitySession,
         challenge: DLogEqualityChallenge,
-        key_identifier: &NullifierShareIdentifier,
-    ) -> Option<DLogEqualityProofShare> {
+        share_identifier: &NullifierShareIdentifier,
+    ) -> CryptoDeviceResult<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
-        Some(session.challenge(self.shares.get(key_identifier)?, challenge))
+        let share = self
+            .shares
+            .get(share_identifier)
+            .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
+        Ok(session.challenge(share, challenge))
     }
 
     /// Registers a new nullifier share for the given relying-party.
@@ -175,10 +235,13 @@ impl CryptoDevice {
     pub(crate) fn register_nullifier_share(
         &self,
         rp_id: RpId,
+        rp_public_key: k256::ecdsa::VerifyingKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
-        self.shares.add(rp_id, share);
-        let result = self.secret_manager.store_dlog_share(rp_id, share);
+        self.shares.add(rp_id, rp_public_key, share);
+        let result = self
+            .secret_manager
+            .store_dlog_share(rp_id, rp_public_key.into(), share);
         metrics::counter!(METRICS_RP_SECRETS).increment(1);
         result
     }

@@ -5,6 +5,7 @@ use ark_ff::{UniformRand, Zero};
 use circom_types::{groth16::ZKey, traits::CheckElement};
 use clap::Parser;
 use eddsa_babyjubjub::EdDSAPrivateKey;
+use k256::ecdsa::{SigningKey, signature::SignerMut};
 use oprf_client::{
     Affine, BaseField, MAX_PUBLIC_KEYS, NullifierArgs, Projective, ScalarField,
     config::OprfClientConfig,
@@ -43,14 +44,13 @@ async fn main() -> eyre::Result<()> {
     let oprf_public_key = (Projective::generator() * ScalarField::from(42)).into_affine();
     let key_epoch = ShareEpoch::default();
     let sk = EdDSAPrivateKey::random(&mut rng);
-    let rp_sk = EdDSAPrivateKey::random(&mut rng); // TODO remove, not known
+    let mut rp_signing_key = SigningKey::random(&mut rng); // TODO remove
     let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
     let rp_id = RpId::new(0);
     let action = BaseField::rand(&mut rng);
     let siblings: [BaseField; MAX_DEPTH] = std::array::from_fn(|_| BaseField::rand(&mut rng));
     let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
     let pk = sk.public();
-    let rp_pk = rp_sk.public();
     let mut pks = [[BaseField::zero(); 2]; MAX_PUBLIC_KEYS];
     for (i, pki) in pks.iter_mut().enumerate() {
         if i as u64 == pk_index {
@@ -67,7 +67,7 @@ async fn main() -> eyre::Result<()> {
     let signal_hash = BaseField::rand(&mut rng);
     let merkle_epoch = MerkleEpoch::default();
     let nonce = BaseField::rand(&mut rng);
-    let signature = rp_sk.sign(nonce);
+    let signature = rp_signing_key.sign(nonce.to_string().as_bytes());
     let id_commitment_r = BaseField::rand(&mut rng);
     let query_zkey = ZKey::from_reader(File::open(config.query_zkey_path)?, CheckElement::No)?;
     let (query_matrices, query_pk) = query_zkey.into();
@@ -87,7 +87,6 @@ async fn main() -> eyre::Result<()> {
             mt_index,
             siblings,
             rp_id,
-            rp_pk,
             action,
             signal_hash,
             merkle_epoch,

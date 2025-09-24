@@ -1,8 +1,6 @@
-//! Chain Event Handler Service
-//!
 //! This module provides the [`ChainEventHandler`], a service responsible for polling
-//! the blockchain for relevant events, processing them, and reporting results back
-//! to the chain watcher.
+//! the blockchain for relevant events via the [`ChainWatcherService`],
+//! processing them, and reporting results back to the chain watcher.
 //!
 //! The handler works in **intervals**:  
 //! 1. Waits for the next interval tick.  
@@ -120,8 +118,12 @@ pub(crate) fn handle_chain_events(
                         secret_gen.round2(rp_id, keys),
                     ));
                 }
-                ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent { rp_id, ciphers }) => {
-                    secret_gen.finalize(rp_id, ciphers);
+                ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
+                    rp_id,
+                    rp_public_key,
+                    ciphers,
+                }) => {
+                    secret_gen.finalize(rp_id, rp_public_key, ciphers);
                     results.push(ChainEventResult::SecretGenFinalize(
                         SecretGenFinalizeContribution {
                             rp_id,
