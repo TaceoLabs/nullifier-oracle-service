@@ -156,3 +156,144 @@ impl DLogSecretGenService {
         tracing::info!("my share: {my_share}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ark_ec::{CurveGroup as _, PrimeGroup};
+    use oprf_types::ShareEpoch;
+    use rand::{CryptoRng, Rng};
+
+    use crate::services::{crypto_device::PeerPrivateKey, secret_manager::test::TestSecretManager};
+
+    use super::*;
+
+    async fn secrect_manager_and_dlog_secret_gen<R: Rng + CryptoRng>(
+        party_id: PartyId,
+        rng: &mut R,
+    ) -> eyre::Result<(Arc<TestSecretManager>, DLogSecretGenService)> {
+        let secrect_manager = Arc::new(TestSecretManager::new(
+            PeerPrivateKey::from(ark_babyjubjub::Fr::rand(rng)),
+            HashMap::new(),
+        ));
+        let secrect_manager_ = Arc::clone(&secrect_manager);
+        let crypto_device = Arc::new(CryptoDevice::init(secrect_manager, Vec::new()).await?);
+        let dlog_secret_gen = DLogSecretGenService::init(party_id, crypto_device);
+        Ok((secrect_manager_, dlog_secret_gen))
+    }
+
+    #[tokio::test]
+    async fn test_secret_gen() -> eyre::Result<()> {
+        let mut rng = rand::thread_rng();
+        let rp_id = RpId::new(rng.r#gen());
+        let degree = 1;
+        let (secret_manager0, mut dlog_secret_gen0) =
+            secrect_manager_and_dlog_secret_gen(PartyId::from(0), &mut rng).await?;
+        let (secret_manager1, mut dlog_secret_gen1) =
+            secrect_manager_and_dlog_secret_gen(PartyId::from(1), &mut rng).await?;
+        let (secret_manager2, mut dlog_secret_gen2) =
+            secrect_manager_and_dlog_secret_gen(PartyId::from(2), &mut rng).await?;
+
+        let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, degree);
+        let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, degree);
+        let dlog_secret_gen2_round1 = dlog_secret_gen2.round1(rp_id, degree);
+
+        let round1_contributions = vec![
+            dlog_secret_gen0_round1.contribution,
+            dlog_secret_gen1_round1.contribution,
+            dlog_secret_gen2_round1.contribution,
+        ];
+        let should_public_key = round1_contributions.iter().fold(
+            ark_babyjubjub::EdwardsAffine::zero(),
+            |acc, contribution| (acc + contribution.comm_share).into_affine(),
+        );
+        let peers = round1_contributions
+            .into_iter()
+            .map(|contribution| contribution.sender)
+            .collect::<Vec<_>>();
+
+        let dlog_secret_gen0_round2 =
+            dlog_secret_gen0.round2(rp_id, PeerPublicKeyList::from(peers.clone()));
+        let dlog_secret_gen1_round2 =
+            dlog_secret_gen1.round2(rp_id, PeerPublicKeyList::from(peers.clone()));
+        let dlog_secret_gen2_round2 =
+            dlog_secret_gen2.round2(rp_id, PeerPublicKeyList::from(peers.clone()));
+
+        let ciphers: Vec<Vec<_>> = (0..3)
+            .map(|i| {
+                vec![
+                    dlog_secret_gen0_round2
+                        .contribution
+                        .get_cipher_text(PartyId::from(i))
+                        .unwrap(),
+                    dlog_secret_gen1_round2
+                        .contribution
+                        .get_cipher_text(PartyId::from(i))
+                        .unwrap(),
+                    dlog_secret_gen2_round2
+                        .contribution
+                        .get_cipher_text(PartyId::from(i))
+                        .unwrap(),
+                ]
+            })
+            .collect();
+        let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
+
+        dlog_secret_gen0.finalize(
+            rp_id,
+            k256::SecretKey::random(&mut rng).public_key(),
+            ciphers0,
+        );
+        dlog_secret_gen1.finalize(
+            rp_id,
+            k256::SecretKey::random(&mut rng).public_key(),
+            ciphers1,
+        );
+        dlog_secret_gen2.finalize(
+            rp_id,
+            k256::SecretKey::random(&mut rng).public_key(),
+            ciphers2,
+        );
+
+        let dlog_secret0 = *secret_manager0
+            .rp_materials
+            .lock()
+            .get(&rp_id)
+            .unwrap()
+            .shares
+            .get(&ShareEpoch::default())
+            .unwrap();
+        let dlog_secret1 = *secret_manager1
+            .rp_materials
+            .lock()
+            .get(&rp_id)
+            .unwrap()
+            .shares
+            .get(&ShareEpoch::default())
+            .unwrap();
+        let dlog_secret2 = *secret_manager2
+            .rp_materials
+            .lock()
+            .get(&rp_id)
+            .unwrap()
+            .shares
+            .get(&ShareEpoch::default())
+            .unwrap();
+
+        let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
+        let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
+            &[
+                dlog_secret0.into(),
+                dlog_secret1.into(),
+                dlog_secret2.into(),
+            ],
+            &lagrange,
+        );
+
+        let is_public_key =
+            (ark_babyjubjub::EdwardsProjective::generator() * secret_key).into_affine();
+
+        assert_eq!(is_public_key, should_public_key);
+
+        Ok(())
+    }
+}

@@ -25,14 +25,14 @@ use crate::{
     config::OprfPeerConfig,
     services::{
         chain_watcher::{
-            ChainEventResult, ChainWatcher, ChainWatcherError, ChainWatcherService, MerkleEpoch,
-            MerkleRoot, MerkleRootStore,
+            ChainEventResult, ChainWatcher, ChainWatcherError, MerkleEpoch, MerkleRoot,
+            MerkleRootStore,
         },
         crypto_device::CryptoDevice,
     },
 };
 
-struct HttpMockWatcher {
+pub(crate) struct HttpMockWatcher {
     config: Arc<OprfPeerConfig>,
     client: reqwest::Client,
     party_id: PartyId,
@@ -41,64 +41,66 @@ struct HttpMockWatcher {
     read_request: ReadEventsRequest,
 }
 
-#[instrument(level = "info", skip_all)]
-pub(crate) async fn init(
-    config: Arc<OprfPeerConfig>,
-    crypto_device: &CryptoDevice,
-    cancellation_token: CancellationToken,
-) -> eyre::Result<ChainWatcherService> {
-    tracing::info!("spawning MOCK watcher - THIS WILL NOT TALK TO A REAL CHAIN");
-    // assert that we are really in the dev environment
-    config.environment.assert_is_dev();
+impl HttpMockWatcher {
+    #[instrument(level = "info", skip_all)]
+    pub(crate) async fn init(
+        config: Arc<OprfPeerConfig>,
+        crypto_device: Arc<CryptoDevice>,
+        cancellation_token: CancellationToken,
+    ) -> eyre::Result<Self> {
+        tracing::info!("spawning MOCK watcher - THIS WILL NOT TALK TO A REAL CHAIN");
+        // assert that we are really in the dev environment
+        config.environment.assert_is_dev();
 
-    let client = reqwest::Client::new();
-    // load my party ID
+        let client = reqwest::Client::new();
+        // load my party ID
 
-    let party_id = client
-        .post(format!("{}/api/peers/id", config.chain_url))
-        .json(&GetPartyIdRequest {
-            key: crypto_device.public_key(),
+        let party_id = client
+            .post(format!("{}/api/peers/id", config.chain_url))
+            .json(&GetPartyIdRequest {
+                key: crypto_device.public_key(),
+            })
+            .send()
+            .await
+            .context("while fetching merkle for first time")?
+            .json::<GetPartyIdResponse>()
+            .await
+            .context("while parsing GetPartyIdResponse")?
+            .party_id;
+        // load a bunch of merkle roots
+        let merkle_roots = client
+            .get(format!("{}/api/merkle/fetch", config.chain_url))
+            .query(&FetchRootsRequest {
+                amount: config.max_merkle_store_size as u32,
+            })
+            .send()
+            .await
+            .context("while fetching merkle for first time")?
+            .json::<Vec<MerkleRootUpdate>>()
+            .await
+            .context("while parsing first batch of merkle roots")?;
+
+        let merkle_root_store = Arc::new(Mutex::new(
+            MerkleRootStore::new(merkle_roots, Arc::clone(&config))
+                .context("while building merkle root store")?,
+        ));
+
+        subscribe_merkle_updates(
+            &config,
+            Arc::clone(&merkle_root_store),
+            cancellation_token.clone(),
+        )
+        .await
+        .context("while subscribing to merkle updates")?;
+        Ok(HttpMockWatcher {
+            party_id,
+            config: Arc::clone(&config),
+            _cancellation_token: cancellation_token.clone(),
+            client: reqwest::Client::new(),
+            merkle_root_store,
+            read_request: ReadEventsRequest { party_id },
         })
-        .send()
-        .await
-        .context("while fetching merkle for first time")?
-        .json::<GetPartyIdResponse>()
-        .await
-        .context("while parsing GetPartyIdResponse")?
-        .party_id;
-    // load a bunch of merkle roots
-    let merkle_roots = client
-        .get(format!("{}/api/merkle/fetch", config.chain_url))
-        .query(&FetchRootsRequest {
-            amount: config.max_merkle_store_size as u32,
-        })
-        .send()
-        .await
-        .context("while fetching merkle for first time")?
-        .json::<Vec<MerkleRootUpdate>>()
-        .await
-        .context("while parsing first batch of merkle roots")?;
-
-    let merkle_root_store = Arc::new(Mutex::new(
-        MerkleRootStore::new(merkle_roots, Arc::clone(&config))
-            .context("while building merkle root store")?,
-    ));
-
-    subscribe_merkle_updates(
-        &config,
-        Arc::clone(&merkle_root_store),
-        cancellation_token.clone(),
-    )
-    .await
-    .context("while subscribing to merkle updates")?;
-    Ok(Arc::new(HttpMockWatcher {
-        party_id,
-        config: Arc::clone(&config),
-        _cancellation_token: cancellation_token.clone(),
-        client: reqwest::Client::new(),
-        merkle_root_store,
-        read_request: ReadEventsRequest { party_id },
-    }))
+    }
 }
 
 async fn subscribe_merkle_updates(

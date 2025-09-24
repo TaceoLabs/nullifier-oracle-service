@@ -11,6 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+ark-babyjubjub.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 circom-types.workspace = true
@@ -23,4 +24,5 @@ oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
+smart-contract-mock.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }

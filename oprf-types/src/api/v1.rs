@@ -10,6 +10,7 @@
 use std::fmt;
 
 use ark_serde_compat::groth16::Groth16Proof;
+use eddsa_babyjubjub::EdDSAPublicKey;
 use oprf_core::ddlog_equality::{
     DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
@@ -43,6 +44,12 @@ pub struct OprfRequest {
     pub nonce: ark_babyjubjub::Fq,
     /// The signature of the nonce
     pub signature: k256::ecdsa::Signature,
+    /// The credential public key
+    pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
+    /// The current time stamp
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    pub current_time_stamp: ark_babyjubjub::Fq,
 }
 
 /// Identifies the nullifier share to use for the OPRF computation by relying party ([`RpId`]) and [`ShareEpoch`].
@@ -72,8 +79,8 @@ pub struct ChallengeRequest {
     pub request_id: Uuid,
     /// The challenge to respond to.
     pub challenge: DLogEqualityChallenge,
-    /// Identifies the relying party’s key for this challenge.
-    pub rp_nullifier_share_id: NullifierShareIdentifier,
+    /// Identifies the relying party’s and the epoch of the used share
+    pub rp_identifier: NullifierShareIdentifier,
 }
 
 /// Server response to a [`ChallengeRequest`].

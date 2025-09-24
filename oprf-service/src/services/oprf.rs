@@ -36,6 +36,8 @@ use crate::{
     },
 };
 
+pub const MAX_DEPTH: usize = 30;
+
 /// Errors returned by the [`OprfService`].
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OprfServiceError {
@@ -114,7 +116,11 @@ impl OprfService {
         let public = [
             request.point_b.x,
             request.point_b.y,
+            request.cred_pk.pk.x,
+            request.cred_pk.pk.y,
+            request.current_time_stamp,
             merkle_root.into_inner(),
+            ark_babyjubjub::Fq::from(MAX_DEPTH as u64),
             request.rp_identifier.rp_id.into(),
             request.action,
             request.nonce,
@@ -149,11 +155,9 @@ impl OprfService {
             .retrieve(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self.crypto_device.challenge(
-            session,
-            request.challenge,
-            &request.rp_nullifier_share_id,
-        )?;
+        let proof_share =
+            self.crypto_device
+                .challenge(session, request.challenge, &request.rp_identifier)?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)

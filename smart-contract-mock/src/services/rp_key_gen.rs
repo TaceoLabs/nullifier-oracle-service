@@ -138,7 +138,9 @@ impl RpNullifierGenService {
         contribution: RpSecretGenCommitment,
     ) -> Result<(), RpNullifierGenServiceError> {
         let mut running_key_gens = self.running_key_gens.lock();
-        let key_gen_state = running_key_gens.get_mut(&rp_id).unwrap();
+        let key_gen_state = running_key_gens
+            .get_mut(&rp_id)
+            .ok_or(RpNullifierGenServiceError::UnknownRp(rp_id))?;
 
         if !key_gen_state.round2.is_empty() {
             return Err(RpNullifierGenServiceError::InRound2);
