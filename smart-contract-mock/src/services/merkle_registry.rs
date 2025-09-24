@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 use crate::{config::SmartContractMockConfig, merkle::MerkleTree};
 
 #[derive(Clone)]
-pub(crate) struct PublicKeyRegistry {
+pub(crate) struct MerkleRootRegistry {
     config: Arc<SmartContractMockConfig>,
     storage: Arc<Mutex<RootStorage>>,
     bus: broadcast::Sender<MerkleRootUpdate>,
@@ -32,7 +32,7 @@ impl PublicKey {
     }
 }
 
-impl PublicKeyRegistry {
+impl MerkleRootRegistry {
     pub(crate) fn with_random_elements<R: Rng>(
         config: Arc<SmartContractMockConfig>,
         r: &mut R,

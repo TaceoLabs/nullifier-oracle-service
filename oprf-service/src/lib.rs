@@ -23,6 +23,7 @@ use std::{fs::File, sync::Arc};
 use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
+use oprf_types::crypto::PartyId;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
@@ -48,6 +49,7 @@ pub mod telemetry;
 pub(crate) struct AppState {
     config: Arc<OprfPeerConfig>,
     oprf_service: OprfService,
+    party_id: PartyId,
 }
 
 impl FromRef<AppState> for Arc<OprfPeerConfig> {
@@ -59,6 +61,12 @@ impl FromRef<AppState> for Arc<OprfPeerConfig> {
 impl FromRef<AppState> for OprfService {
     fn from_ref(input: &AppState) -> Self {
         input.oprf_service.clone()
+    }
+}
+
+impl FromRef<AppState> for PartyId {
+    fn from_ref(input: &AppState) -> Self {
+        input.party_id
     }
 }
 
@@ -110,11 +118,19 @@ pub async fn start(
     // spawn the chain watcher
     let chain_watcher = services::chain_watcher::init(
         Arc::clone(&config),
-        Arc::clone(&crypto_device),
+        &crypto_device,
         cancellation_token.clone(),
     )
     .await
     .context("while starting chain watcher")?;
+
+    tracing::info!("loading party id..");
+    // load our party id
+    let party_id = chain_watcher
+        .get_party_id()
+        .await
+        .context("while loading partyID")?;
+    tracing::info!("we are party id: {party_id}");
 
     // start oprf-service service
     tracing::info!("init oprf-service...");
@@ -129,6 +145,7 @@ pub async fn start(
     // spawn the periodic task
     let event_handler = ChainEventHandler::spawn(
         config.chain_check_interval,
+        party_id,
         chain_watcher.clone(),
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
@@ -136,7 +153,7 @@ pub async fn start(
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
-    let axum_rest_api = api::new_app(Arc::clone(&config), oprf_service);
+    let axum_rest_api = api::new_app(Arc::clone(&config), party_id, oprf_service);
 
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     MerkleEpoch, MerkleRoot, RpId,
     chain::{ChainEvent, SecretGenFinalizeEvent, SecretGenRound1Event, SecretGenRound2Event},
-    crypto::{PeerIdentifier, PeerPublicKeyList, RpSecretGenCiphertext},
+    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext},
 };
 
 /// Represents an update of the Merkle root for a specific epoch.
@@ -21,13 +21,27 @@ pub struct MerkleRootUpdate {
     pub epoch: MerkleEpoch,
 }
 
-/// Request for `fetchRoots`.
+/// Request for `fetch_roots`.
 ///
 /// Defines the amount of roots the OPRF-Service wants to load
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FetchRootsRequest {
     /// The amount of roots to fetch (max value).
     pub amount: u32,
+}
+
+/// Requests for `get_party_id`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetPartyIdRequest {
+    /// The public key of the peer
+    pub key: PeerPublicKey,
+}
+
+/// Response for `get_party_id`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetPartyIdResponse {
+    /// The party id
+    pub party_id: PartyId,
 }
 
 /// Request for `is_valid_epoch`.
@@ -40,8 +54,8 @@ pub struct IsValidEpochRequest {
 /// Request sent to read events for a given peer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadEventsRequest {
-    /// Identifier of the peer whose events are requested.
-    pub key: PeerIdentifier,
+    /// Party id of the peer whose events are requested.
+    pub party_id: PartyId,
 }
 
 impl ChainEvent {

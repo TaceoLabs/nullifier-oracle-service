@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
     time::Duration,
 };
@@ -9,8 +9,7 @@ use oprf_types::{
     RpId,
     chain::ChainEvent,
     crypto::{
-        PeerIdentifier, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertexts,
-        RpSecretGenCommitment,
+        PartyId, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertexts, RpSecretGenCommitment,
     },
 };
 use parking_lot::Mutex;
@@ -39,9 +38,9 @@ pub(crate) struct RpNullifierGenService {
 
 #[derive(Default)]
 struct RpNullifierGenState {
-    round1: HashMap<PeerIdentifier, RpSecretGenCommitment>,
-    round2: HashMap<PeerIdentifier, RpSecretGenCiphertexts>,
-    done: HashSet<PeerIdentifier>,
+    round1: BTreeMap<PartyId, RpSecretGenCommitment>,
+    round2: BTreeMap<PartyId, RpSecretGenCiphertexts>,
+    done: HashSet<PartyId>,
 }
 
 impl RpNullifierGenService {
@@ -80,7 +79,7 @@ impl RpNullifierGenService {
     }
 
     #[instrument(level = "debug", skip_all)]
-    pub(crate) fn read_events(&self, oprf: PeerIdentifier) -> eyre::Result<Vec<ChainEvent>> {
+    pub(crate) fn read_events(&self, oprf: PartyId) -> eyre::Result<Vec<ChainEvent>> {
         let running_key_gens = self.running_key_gens.lock();
         let mut events = Vec::new();
         for (rp_id, state) in running_key_gens.iter() {
@@ -131,7 +130,7 @@ impl RpNullifierGenService {
     pub(crate) fn add_round1_contribution(
         &self,
         rp_id: RpId,
-        sender: PeerIdentifier,
+        sender: PartyId,
         contribution: RpSecretGenCommitment,
     ) -> Result<(), RpNullifierGenServiceError> {
         let mut running_key_gens = self.running_key_gens.lock();
@@ -151,7 +150,7 @@ impl RpNullifierGenService {
     pub(crate) fn add_round2_contribution(
         &self,
         rp_id: RpId,
-        sender: PeerIdentifier,
+        sender: PartyId,
         contribution: RpSecretGenCiphertexts,
     ) -> Result<(), RpNullifierGenServiceError> {
         let public_key = {
@@ -182,7 +181,7 @@ impl RpNullifierGenService {
     pub(crate) fn oprf_finalize(
         &self,
         rp_id: RpId,
-        sender: PeerIdentifier,
+        sender: PartyId,
     ) -> Result<(), RpNullifierGenServiceError> {
         tracing::debug!("finalize for {rp_id} from {sender}");
         let mut running_key_gens = self.running_key_gens.lock();

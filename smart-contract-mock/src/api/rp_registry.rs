@@ -25,10 +25,10 @@ async fn read_pk(
 #[instrument(level = "debug", skip_all)]
 async fn read_events(
     State(key_gen_service): State<RpNullifierGenService>,
-    Query(ReadEventsRequest { key }): Query<ReadEventsRequest>,
+    Query(ReadEventsRequest { party_id }): Query<ReadEventsRequest>,
 ) -> ApiResult<Json<Vec<ChainEvent>>> {
-    tracing::debug!("ReadEvent from: {key}");
-    Ok(Json(key_gen_service.read_events(key)?))
+    tracing::debug!("ReadEvent from: {party_id}");
+    Ok(Json(key_gen_service.read_events(party_id)?))
 }
 
 #[instrument(level = "debug", skip_all)]

@@ -20,7 +20,8 @@ use oprf_types::{
     RpId,
     chain::{SecretGenRound1Contribution, SecretGenRound2Contribution},
     crypto::{
-        PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts, RpSecretGenCommitment,
+        PartyId, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
+        RpSecretGenCommitment,
     },
 };
 use tracing::instrument;
@@ -37,15 +38,17 @@ type BaseField = ark_babyjubjub::Fq;
 ///
 /// **Note:** Must only be used in a single-owner context. Do not share across tasks.
 pub(crate) struct DLogSecretGenService {
+    pub(crate) party_id: PartyId,
     round1: HashMap<RpId, KeyGenPoly>,
     crypto_device: Arc<CryptoDevice>,
 }
 
 impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
-    pub(crate) fn init(crypto_device: Arc<CryptoDevice>) -> Self {
+    pub(crate) fn init(party_id: PartyId, crypto_device: Arc<CryptoDevice>) -> Self {
         Self {
             crypto_device,
+            party_id,
             round1: HashMap::new(),
         }
     }
@@ -77,7 +80,7 @@ impl DLogSecretGenService {
         SecretGenRound1Contribution {
             rp_id,
             contribution,
-            sender: self.crypto_device.oprf_identifier(),
+            sender: self.party_id,
         }
     }
 
@@ -106,7 +109,7 @@ impl DLogSecretGenService {
                 .crypto_device
                 .gen_share(party_id, &my_poly, their_pk, nonce);
             ciphers.insert(
-                their_pk.to_identifier(),
+                PartyId::from(party_id as u16),
                 RpSecretGenCiphertext {
                     sender: my_pk,
                     nonce,
@@ -116,7 +119,7 @@ impl DLogSecretGenService {
         }
         SecretGenRound2Contribution {
             rp_id,
-            sender: self.crypto_device.oprf_identifier(),
+            sender: self.party_id,
             contribution: RpSecretGenCiphertexts::new(ciphers),
         }
     }

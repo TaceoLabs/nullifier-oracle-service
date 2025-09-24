@@ -4396,6 +4396,8 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-serde-compat",
+ "aws-config",
+ "aws-sdk-secretsmanager",
  "axum",
  "clap",
  "eyre",
