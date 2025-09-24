@@ -7,10 +7,35 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    RpId,
+    MerkleEpoch, MerkleRoot, RpId,
     chain::{ChainEvent, SecretGenFinalizeEvent, SecretGenRound1Event, SecretGenRound2Event},
     crypto::{PeerIdentifier, PeerPublicKeyList, RpSecretGenCiphertext},
 };
+
+/// Represents an update of the Merkle root for a specific epoch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MerkleRootUpdate {
+    /// The merkle root
+    pub hash: MerkleRoot,
+    /// The epoch of the new root
+    pub epoch: MerkleEpoch,
+}
+
+/// Request for `fetchRoots`.
+///
+/// Defines the amount of roots the OPRF-Service wants to load
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FetchRootsRequest {
+    /// The amount of roots to fetch (max value).
+    pub amount: u32,
+}
+
+/// Request for `is_valid_epoch`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsValidEpochRequest {
+    /// The epoch to check
+    pub epoch: MerkleEpoch,
+}
 
 /// Request sent to read events for a given peer.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
     extract::{
-        Path, Query, State, WebSocketUpgrade,
+        Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     http::StatusCode,
@@ -9,8 +9,7 @@ use axum::{
     routing::get,
 };
 use eyre::Context;
-use oprf_types::MerkleRoot;
-use serde::{Deserialize, Serialize};
+use oprf_types::sc_mock::{FetchRootsRequest, IsValidEpochRequest, MerkleRootUpdate};
 use tokio::sync::broadcast;
 use tracing::instrument;
 
@@ -18,16 +17,18 @@ use crate::{AppState, services::pk_registry::PublicKeyRegistry};
 
 /// Subscribe logic.
 ///
-/// Listens to the bus and forwards the [`MerkleRoot`] to the websocket. If the client closes the stream, we will realize only when we write to the websocket again. As we will add new public keys regularly we expect that this is not a problem for resource exhaustion, even though we would want to handle this appropriately in a real implementation.
+/// Listens to the bus and forwards the `MerkleRoot` to the websocket. If the client closes the stream, we will realize only when we write to the websocket again. As we will add new public keys regularly we expect that this is not a problem for resource exhaustion, even though we would want to handle this appropriately in a real implementation.
 async fn handle_subscribe(
     mut ws: WebSocket,
-    mut bus: broadcast::Receiver<MerkleRoot>,
+    mut bus: broadcast::Receiver<MerkleRootUpdate>,
 ) -> eyre::Result<()> {
     loop {
         let merkle_root = bus.recv().await.context("lagging or sender closed")?;
-        ws.send(Message::text(merkle_root.to_string()))
-            .await
-            .context("client closed stream")?;
+        ws.send(Message::text(
+            serde_json::to_string(&merkle_root).expect("can serialize"),
+        ))
+        .await
+        .context("client closed stream")?;
     }
 }
 
@@ -37,7 +38,7 @@ async fn handle_subscribe(
 /// Implementation: This is some quick-and-dirty implementation for the websocket. It does not allow to client close the connection gracefully only by shutting down the Ws (without sending Close frames). Maybe if we find the time we can fix this but priority for that was not too high as this is a mock impl anyways.
 async fn subscribe_merkle_updates(
     ws: WebSocketUpgrade,
-    State(bus): State<broadcast::Receiver<MerkleRoot>>,
+    State(bus): State<broadcast::Receiver<MerkleRootUpdate>>,
 ) -> impl IntoResponse {
     ws.on_failed_upgrade(|error| tracing::warn!("cannot upgrade ws connection: {error:?}"))
         .on_upgrade(|ws| async move {
@@ -48,14 +49,6 @@ async fn subscribe_merkle_updates(
         })
 }
 
-/// Request for `fetchRoots`.
-///
-/// Defines the amount of roots the OPRF-Service wants to load
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct FetchRootsRequest {
-    amount: u32,
-}
-
 /// Fetches a defined amount roots that are currently valid.
 ///
 /// If the given amount is larger than the currently cached roots, this method should return all roots that are currently cached.
@@ -64,7 +57,7 @@ struct FetchRootsRequest {
 async fn fetch_roots(
     State(pk_registry): State<PublicKeyRegistry>,
     Query(req): Query<FetchRootsRequest>,
-) -> Json<Vec<MerkleRoot>> {
+) -> Json<Vec<MerkleRootUpdate>> {
     tracing::debug!("fetch request for {} roots", req.amount);
     Json(pk_registry.fetch_roots(req.amount))
 }
@@ -75,14 +68,14 @@ async fn fetch_roots(
 #[instrument(level = "debug", skip(pk_registry))]
 async fn is_valid_root(
     State(pk_registry): State<PublicKeyRegistry>,
-    Path(root): Path<MerkleRoot>,
-) -> StatusCode {
-    if pk_registry.is_valid_root(root) {
-        tracing::debug!("{root} is a valid root");
-        StatusCode::OK
+    Query(IsValidEpochRequest { epoch }): Query<IsValidEpochRequest>,
+) -> impl IntoResponse {
+    if let Some(root) = pk_registry.get_by_epoch(epoch) {
+        tracing::debug!("{epoch} is a valid epoch");
+        (StatusCode::OK, root.to_string()).into_response()
     } else {
-        tracing::debug!("{root} is NOT a valid root");
-        StatusCode::NOT_FOUND
+        tracing::debug!("{epoch} is NOT a valid epoch");
+        StatusCode::NOT_FOUND.into_response()
     }
 }
 
@@ -93,5 +86,5 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/subscribe", get(subscribe_merkle_updates))
         .route("/valid", get(is_valid_root))
-        .route("/fetch/", get(fetch_roots))
+        .route("/fetch", get(fetch_roots))
 }

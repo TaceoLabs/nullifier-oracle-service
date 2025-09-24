@@ -30,6 +30,7 @@ async fn start_service(id: usize) -> String {
         chain_epoch_max_difference: 10,
         private_key_secret_id: "orpf/sk".to_string(),
         dlog_share_secret_id_suffix: "oprf/share/".to_string(),
+        max_merkle_store_size: 10,
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {

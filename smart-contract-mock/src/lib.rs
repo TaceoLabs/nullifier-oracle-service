@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{Router, extract::FromRef};
 use eyre::Context as _;
-use oprf_types::MerkleRoot;
+use oprf_types::sc_mock::MerkleRootUpdate;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use tokio::sync::broadcast;
@@ -37,7 +37,7 @@ impl FromRef<AppState> for RpRegistry {
     }
 }
 
-impl FromRef<AppState> for broadcast::Receiver<MerkleRoot> {
+impl FromRef<AppState> for broadcast::Receiver<MerkleRootUpdate> {
     fn from_ref(input: &AppState) -> Self {
         input.pk_registry.subscribe_updates()
     }

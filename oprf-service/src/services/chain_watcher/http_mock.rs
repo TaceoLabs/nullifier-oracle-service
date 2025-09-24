@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use futures::StreamExt;
+use http::StatusCode;
+use std::sync::Arc;
+use tokio_tungstenite::tungstenite::Message;
 
 use async_trait::async_trait;
 use eyre::Context;
@@ -7,7 +10,7 @@ use oprf_types::{
         ChainEvent, SecretGenFinalizeContribution, SecretGenRound1Contribution,
         SecretGenRound2Contribution,
     },
-    sc_mock::ReadEventsRequest,
+    sc_mock::{FetchRootsRequest, IsValidEpochRequest, MerkleRootUpdate, ReadEventsRequest},
 };
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
@@ -19,41 +22,116 @@ use crate::{
     services::{
         chain_watcher::{
             ChainEventResult, ChainWatcher, ChainWatcherError, ChainWatcherService, MerkleEpoch,
-            MerkleRoot,
+            MerkleRoot, MerkleRootStore,
         },
         crypto_device::CryptoDevice,
     },
 };
 
-type MerkleRootStore = HashMap<MerkleEpoch, MerkleRoot>;
-
 struct HttpMockWatcher {
     config: Arc<OprfPeerConfig>,
     client: reqwest::Client,
     _cancellation_token: CancellationToken,
-    _merkle_root_store: Arc<Mutex<MerkleRootStore>>,
+    merkle_root_store: Arc<Mutex<MerkleRootStore>>,
     read_request: ReadEventsRequest,
 }
 
 #[instrument(level = "info", skip_all)]
-pub(crate) fn init(
+pub(crate) async fn init(
     config: Arc<OprfPeerConfig>,
     crypto_device: Arc<CryptoDevice>,
     cancellation_token: CancellationToken,
-) -> ChainWatcherService {
+) -> eyre::Result<ChainWatcherService> {
     tracing::info!("spawning MOCK watcher - THIS WILL NOT TALK TO A REAL CHAIN");
     // assert that we are really in the dev environment
     config.environment.assert_is_dev();
-    let merkle_root_store = Arc::new(Mutex::new(MerkleRootStore::new()));
-    Arc::new(HttpMockWatcher {
+
+    // load a bunch of merkle roots
+
+    let client = reqwest::Client::new();
+    let merkle_roots = client
+        .get(format!("{}/api/merkle/fetch", config.chain_url))
+        .query(&FetchRootsRequest {
+            amount: config.max_merkle_store_size as u32,
+        })
+        .send()
+        .await
+        .context("while fetching merkle for first time")?
+        .json::<Vec<MerkleRootUpdate>>()
+        .await
+        .context("while parsing first batch of merkle roots")?;
+
+    let merkle_root_store = Arc::new(Mutex::new(
+        MerkleRootStore::new(merkle_roots, Arc::clone(&config))
+            .context("while building merkle root store")?,
+    ));
+    subscribe_merkle_updates(
+        &config,
+        Arc::clone(&merkle_root_store),
+        cancellation_token.clone(),
+    )
+    .await
+    .context("while subscribing to merkle updates")?;
+    Ok(Arc::new(HttpMockWatcher {
         config: Arc::clone(&config),
         _cancellation_token: cancellation_token.clone(),
         client: reqwest::Client::new(),
-        _merkle_root_store: merkle_root_store,
+        merkle_root_store,
         read_request: ReadEventsRequest {
             key: crypto_device.oprf_identifier(),
         },
-    })
+    }))
+}
+
+async fn subscribe_merkle_updates(
+    config: &OprfPeerConfig,
+    merkle_root_store: Arc<Mutex<MerkleRootStore>>,
+    cancellation_token: CancellationToken,
+) -> eyre::Result<()> {
+    let subscribe_url = format!(
+        "{}/api/merkle/subscribe",
+        config
+            .chain_url
+            .replace("http", "ws")
+            .replace("https", "wss")
+    );
+    tracing::info!("subscribing to merkle root RPC at {subscribe_url}..");
+    let (mut ws_stream, _) = tokio_tungstenite::connect_async(subscribe_url)
+        .await
+        .context("while subscribing to merkle root RPC")?;
+    tracing::debug!("successfully subscribed!");
+    tokio::task::spawn(async move {
+        while let Some(msg) = ws_stream.next().await {
+            match msg {
+                Ok(Message::Text(text)) => match serde_json::from_str::<MerkleRootUpdate>(&text) {
+                    Ok(MerkleRootUpdate { hash, epoch }) => {
+                        tracing::debug!("adding new merkle root with epoch: {epoch}");
+                        merkle_root_store.lock().insert(epoch, hash);
+                    }
+                    Err(err) => {
+                        tracing::error!("cannot deserialize update from RPC: {err:?}");
+                        break;
+                    }
+                },
+                Ok(Message::Close(_)) => {
+                    tracing::debug!("merkle RPC closed stream!");
+                    break;
+                }
+                Ok(_) => {
+                    tracing::error!(
+                        "got unexpected msg type from RPC - only supported Text and Close"
+                    );
+                    break;
+                }
+                Err(err) => {
+                    tracing::error!("error from merkle RPC: {err:?}");
+                    break;
+                }
+            }
+        }
+        cancellation_token.cancel();
+    });
+    Ok(())
 }
 
 #[async_trait]
@@ -61,10 +139,44 @@ impl ChainWatcher for HttpMockWatcher {
     #[instrument(level = "debug", skip(self))]
     async fn get_merkle_root_by_epoch(
         &self,
-        _epoch: MerkleEpoch,
+        epoch: MerkleEpoch,
     ) -> Result<MerkleRoot, ChainWatcherError> {
-        // TODO this must work with tungstenite
-        todo!()
+        tracing::trace!("checking merkle epoch: {epoch}");
+        {
+            let store = self.merkle_root_store.lock();
+            // first check if the merkle root is already registered
+            if let Some(root) = store.get_merkle_root(epoch) {
+                tracing::trace!("cache hit");
+                return Ok(root);
+            } else {
+                tracing::trace!("cache miss - check if too far in the future or past");
+                store.is_sane_epoch(epoch)?;
+                // is sane epoch - need to check on chain
+            }
+        }
+        // is sane epoch - need to check on chain
+        let response = self
+            .client
+            .get(format!("{}/api/merkle/valid", self.config.chain_url))
+            .query(&IsValidEpochRequest { epoch })
+            .send()
+            .await
+            .context("while querying epoch")?;
+        let root = match response.status() {
+            StatusCode::OK => response
+                .text()
+                .await
+                .context("while reading text body")?
+                .parse::<MerkleRoot>()
+                .map_err(|_| eyre::eyre!("while parsing merkle root"))?,
+            StatusCode::NOT_FOUND => {
+                return Err(ChainWatcherError::UnknownEpoch(epoch));
+            }
+            // maybe we should shutdown everything here but for the mock watcher it doesn't really matter
+            x => Err(eyre::eyre!("unexpected status code from chain: {x}"))?,
+        };
+        // we expect the update to come any minute now anyways if it is already on chain, therefore we just return and don't add
+        Ok(root)
     }
 
     async fn check_chain_events(&self) -> Result<Vec<ChainEvent>, ChainWatcherError> {

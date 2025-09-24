@@ -7,7 +7,7 @@
 //! - `POST /init` – Initializes an OPRF session and commits to the partial exponent.
 //! - `POST /finish` – Completes the OPRF session and returns the proof share.
 //!
-//! Both endpoints interact with the [`OprfService`] and use the [`ChainWatcherService`] to verify merkle roots.
+//! Both endpoints use the [`OprfService`] for application logic.
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, State},
@@ -19,7 +19,7 @@ use tracing::instrument;
 use crate::{
     AppState,
     api::errors::{ApiErrors, ApiResult},
-    services::{chain_watcher::ChainWatcherService, oprf::OprfService},
+    services::oprf::OprfService,
 };
 
 /// Handles `POST /init`.
@@ -29,7 +29,6 @@ use crate::{
 #[instrument(level = "debug", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
-    State(chain_watcher): State<ChainWatcherService>,
     Json(request): Json<OprfRequest>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
@@ -42,11 +41,7 @@ async fn oprf_request(
             "failed to verify nonce signature".to_string(),
         ));
     }
-    // get the merkle root identified by the epoch
-    let _merkle_root = chain_watcher.get_merkle_root_by_epoch(request.merkle_epoch);
-    // TODO compare merkle root of request with cache and/or chain
-    // Init the OPRF session
-    let commitments = oprf_service.init_oprf_session(request)?;
+    let commitments = oprf_service.init_oprf_session(request).await?;
     Ok(Json(OprfResponse {
         request_id,
         commitments,

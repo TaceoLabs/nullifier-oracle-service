@@ -34,10 +34,6 @@ pub struct OprfRequest {
     pub rp_key_id: NullifierShareIdentifier,
     /// The Merkle epoch associated with this request.
     pub merkle_epoch: MerkleEpoch,
-    /// The Merkle root
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
-    pub merkle_root: ark_babyjubjub::Fq,
     /// The action
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]

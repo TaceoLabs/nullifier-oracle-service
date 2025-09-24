@@ -14,11 +14,7 @@ use std::sync::Arc;
 use axum::Router;
 use tower_http::trace::TraceLayer;
 
-use crate::{
-    AppState,
-    config::OprfPeerConfig,
-    services::{chain_watcher::ChainWatcherService, oprf::OprfService},
-};
+use crate::{AppState, config::OprfPeerConfig, services::oprf::OprfService};
 
 #[cfg(test)]
 use axum_test::TestServer;
@@ -37,15 +33,10 @@ pub(crate) mod v1;
 ///
 /// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
 /// instances needed to handle requests.
-pub(crate) fn new_app(
-    config: Arc<OprfPeerConfig>,
-    oprf_service: OprfService,
-    chain_watcher: ChainWatcherService,
-) -> Router {
+pub(crate) fn new_app(config: Arc<OprfPeerConfig>, oprf_service: OprfService) -> Router {
     let app_state = AppState {
         config: Arc::clone(&config),
         oprf_service,
-        chain_watcher,
     };
     Router::new()
         .nest("/api/v1", v1::build(config.input_max_body_limit))
@@ -60,12 +51,8 @@ pub(crate) fn new_app(
 /// to spin up the full API with mock services and expectations.
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) fn new_test_app(
-    config: Arc<OprfPeerConfig>,
-    oprf_service: OprfService,
-    chain_watcher: ChainWatcherService,
-) -> TestServer {
-    let app = new_app(config, oprf_service, chain_watcher);
+pub(crate) fn new_test_app(config: Arc<OprfPeerConfig>, oprf_service: OprfService) -> TestServer {
+    let app = new_app(config, oprf_service);
     TestServer::builder()
         .expect_success_by_default()
         .mock_transport()

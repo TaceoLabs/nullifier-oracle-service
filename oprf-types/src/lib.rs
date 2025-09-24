@@ -20,7 +20,7 @@
 //! Use these types to pass, store, and (de)serialize identifiers and
 //! cryptographic values in a type-safe way throughout your application.
 
-use std::fmt;
+use std::{fmt, ops::Sub, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +67,34 @@ impl MerkleEpoch {
     pub fn into_inner(self) -> u128 {
         self.0
     }
+
+    /// Creates a new `MerkleEpoch` by wrapping a `u128`
+    pub fn new(value: u128) -> Self {
+        Self::from(value)
+    }
+
+    /// Increases the epoch by one.
+    pub fn inc(&mut self) -> Self {
+        self.0 += 1;
+        *self
+    }
+
+    /// Returns the absolute difference between two epochs.
+    pub fn diff(self, other: Self) -> u128 {
+        match self.cmp(&other) {
+            std::cmp::Ordering::Less => (other - self).into_inner(),
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => (self - other).into_inner(),
+        }
+    }
+}
+
+impl Sub for MerkleEpoch {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
 }
 
 impl ShareEpoch {
@@ -104,7 +132,21 @@ impl MerkleRoot {
     }
 }
 
+impl FromStr for MerkleRoot {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(ark_babyjubjub::Fq::from_str(s)?))
+    }
+}
+
 impl From<u128> for RpId {
+    fn from(value: u128) -> Self {
+        Self(value)
+    }
+}
+
+impl From<u128> for MerkleEpoch {
     fn from(value: u128) -> Self {
         Self(value)
     }
