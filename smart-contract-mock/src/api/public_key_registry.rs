@@ -13,7 +13,7 @@ use oprf_types::sc_mock::{FetchRootsRequest, IsValidEpochRequest, MerkleRootUpda
 use tokio::sync::broadcast;
 use tracing::instrument;
 
-use crate::{AppState, services::pk_registry::PublicKeyRegistry};
+use crate::{AppState, services::merkle_registry::MerkleRootRegistry};
 
 /// Subscribe logic.
 ///
@@ -32,7 +32,7 @@ async fn handle_subscribe(
     }
 }
 
-/// Allows the OPRF-Service to subscribe to updates of the [`PublicKeyRegistry`].
+/// Allows the OPRF-Service to subscribe to updates of the [`MerkleRootRegistry`].
 ///
 /// This method will send the new merkle root every time a new `PublicKey` is added.
 /// Implementation: This is some quick-and-dirty implementation for the websocket. It does not allow to client close the connection gracefully only by shutting down the Ws (without sending Close frames). Maybe if we find the time we can fix this but priority for that was not too high as this is a mock impl anyways.
@@ -53,24 +53,24 @@ async fn subscribe_merkle_updates(
 ///
 /// If the given amount is larger than the currently cached roots, this method should return all roots that are currently cached.
 /// This method should only be called once from the OPRF-Service during startup.
-#[instrument(level = "debug", skip(pk_registry))]
+#[instrument(level = "debug", skip(merkle_registry))]
 async fn fetch_roots(
-    State(pk_registry): State<PublicKeyRegistry>,
+    State(merkle_registry): State<MerkleRootRegistry>,
     Query(req): Query<FetchRootsRequest>,
 ) -> Json<Vec<MerkleRootUpdate>> {
     tracing::debug!("fetch request for {} roots", req.amount);
-    Json(pk_registry.fetch_roots(req.amount))
+    Json(merkle_registry.fetch_roots(req.amount))
 }
 
 /// Route that allows the OPRF-Service to check whether a given root is actually a valid merkle root.
 ///
 /// The server will hold a defined amount of old hashes as-well and will verify that is belonged to some latest amount of hashes. If the merkle root is too old, this will return NOT_FOUND. The method will also return NOT_FOUND if the provided hash is not valid.
-#[instrument(level = "debug", skip(pk_registry))]
+#[instrument(level = "debug", skip(merkle_registry))]
 async fn is_valid_root(
-    State(pk_registry): State<PublicKeyRegistry>,
+    State(merkle_registry): State<MerkleRootRegistry>,
     Query(IsValidEpochRequest { epoch }): Query<IsValidEpochRequest>,
 ) -> impl IntoResponse {
-    if let Some(root) = pk_registry.get_by_epoch(epoch) {
+    if let Some(root) = merkle_registry.get_by_epoch(epoch) {
         tracing::debug!("{epoch} is a valid epoch");
         (StatusCode::OK, root.to_string()).into_response()
     } else {

@@ -17,7 +17,7 @@ use oprf_core::ddlog_equality::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{MerkleEpoch, RpId, ShareEpoch};
+use crate::{MerkleEpoch, RpId, ShareEpoch, crypto::PartyId};
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Serialize, Deserialize)]
@@ -64,6 +64,8 @@ pub struct OprfResponse {
     pub request_id: Uuid,
     /// Server’s partial commitments for the discrete log equality proof.
     pub commitments: PartialDLogEqualityCommitments,
+    /// The party ID of the peer
+    pub party_id: PartyId,
 }
 
 /// A request from the client to complete the DLog equality challenge.

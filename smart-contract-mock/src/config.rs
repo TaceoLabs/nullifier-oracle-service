@@ -42,4 +42,8 @@ pub struct SmartContractMockConfig {
     /// The degree of the polynomial (the threshold).
     #[clap(long, env = "OPRF_SC_THRESHOLD")]
     pub oprf_degree: u16,
+
+    /// The secret id where the mock finds the public keys in AWS
+    #[clap(long, env = "OPRF_SC_PUBLIC_KEYS_AWS", default_value = "oprf/sc/pubs")]
+    pub oprf_public_keys_secret_id: String,
 }

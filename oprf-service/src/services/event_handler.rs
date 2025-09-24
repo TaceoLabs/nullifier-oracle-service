@@ -30,7 +30,7 @@ use oprf_types::chain::SecretGenFinalizeContribution;
 use oprf_types::chain::SecretGenFinalizeEvent;
 use oprf_types::chain::SecretGenRound1Event;
 use oprf_types::chain::SecretGenRound2Event;
-use oprf_types::crypto::PeerIdentifier;
+use oprf_types::crypto::PartyId;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
@@ -48,6 +48,7 @@ impl ChainEventHandler {
     ///
     /// # Arguments
     /// * `period` - Interval between polling the chain for new events.
+    /// * `party_id` - The [`PartyId`] of this OPRF peer.
     /// * `watcher` - The [`ChainWatcherService`] used to read and report events.
     /// * `crypto_device` - The cryptographic device used to process secret shares.
     /// * `cancellation_token` - Token used to signal shutdown of the handler task.
@@ -56,18 +57,19 @@ impl ChainEventHandler {
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
     pub(crate) fn spawn(
         period: Duration,
+        party_id: PartyId,
         watcher: ChainWatcherService,
         crypto_device: Arc<CryptoDevice>,
         cancellation_token: CancellationToken,
     ) -> ChainEventHandler {
-        let dlog_secret_gen_service = DLogSecretGenService::init(Arc::clone(&crypto_device));
+        let dlog_secret_gen_service =
+            DLogSecretGenService::init(party_id, Arc::clone(&crypto_device));
         // spawn the periodic update task
         Self(tokio::task::spawn(async move {
             match run(
                 period,
                 watcher,
                 dlog_secret_gen_service,
-                crypto_device.oprf_identifier(),
                 cancellation_token.clone(),
             )
             .await
@@ -94,7 +96,6 @@ impl ChainEventHandler {
 ///
 /// # Arguments
 /// * `secret_gen` - Mutable reference to the [`DLogSecretGenService`]. Must be single-owner.
-/// * `identifier` - The identifier of this peer.
 /// * `events` - List of chain events to handle.
 ///
 /// # Returns
@@ -102,7 +103,6 @@ impl ChainEventHandler {
 #[instrument(level = "info", skip_all)]
 pub(crate) fn handle_chain_events(
     secret_gen: &mut DLogSecretGenService,
-    identifier: PeerIdentifier,
     events: Vec<ChainEvent>,
 ) -> eyre::Result<Vec<ChainEventResult>> {
     // We potentially could to this in parallel, but we need mut references/locks and computing proofs has 100% CPU utilization anyways, so we stick with sequential execution for simplicity.
@@ -125,7 +125,7 @@ pub(crate) fn handle_chain_events(
                     results.push(ChainEventResult::SecretGenFinalize(
                         SecretGenFinalizeContribution {
                             rp_id,
-                            sender: identifier,
+                            sender: secret_gen.party_id,
                         },
                     ));
                 }
@@ -142,13 +142,11 @@ pub(crate) fn handle_chain_events(
 /// * `period` - Interval between polls.
 /// * `watcher` - Chain watcher service to retrieve and report events.
 /// * `secret_gen` - Secret generation service (single-owner, not thread-safe).
-/// * `identifier` - Peer identifier used for reporting results.
 /// * `cancellation_token` - Token to signal task shutdown.
 async fn run(
     period: Duration,
     watcher: ChainWatcherService,
     mut secret_gen: DLogSecretGenService,
-    identifier: PeerIdentifier,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
     let mut interval = tokio::time::interval(period);
@@ -169,8 +167,8 @@ async fn run(
             .await
             .context("while checking chain events")?;
         tracing::info!("got {} chain events", events.len());
-        let results = handle_chain_events(&mut secret_gen, identifier, events)
-            .context("while handling chain events")?;
+        let results =
+            handle_chain_events(&mut secret_gen, events).context("while handling chain events")?;
         watcher
             .report_chain_results(results)
             .await

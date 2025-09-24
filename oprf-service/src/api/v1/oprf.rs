@@ -13,7 +13,10 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     routing::post,
 };
-use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
+use oprf_types::{
+    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse},
+    crypto::PartyId,
+};
 use tracing::instrument;
 
 use crate::{
@@ -29,6 +32,7 @@ use crate::{
 #[instrument(level = "debug", skip_all)]
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
+    State(party_id): State<PartyId>,
     Json(request): Json<OprfRequest>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
@@ -45,6 +49,7 @@ async fn oprf_request(
     Ok(Json(OprfResponse {
         request_id,
         commitments,
+        party_id,
     }))
 }
 

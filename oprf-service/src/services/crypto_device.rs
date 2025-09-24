@@ -26,7 +26,7 @@ use oprf_core::{
 use oprf_types::{
     RpId,
     api::v1::NullifierShareIdentifier,
-    crypto::{PeerIdentifier, PeerPublicKey, RpSecretGenCiphertext},
+    crypto::{PeerPublicKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
 
@@ -102,8 +102,6 @@ pub(crate) struct CryptoDevice {
     shares: DLogShareStorage,
     /// Associated public key.
     public_key: PeerPublicKey,
-    /// Peer identifier derived from the public key.
-    identifier: PeerIdentifier,
     /// Service to persist secret material.
     secret_manager: SecretManagerService,
 }
@@ -126,7 +124,6 @@ impl CryptoDevice {
         metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);
         let public_key = private_key.get_public_key();
         Ok(Self {
-            identifier: public_key.to_identifier(),
             public_key,
             private_key,
             shares: DLogShareStorage::new(shares),
@@ -137,11 +134,6 @@ impl CryptoDevice {
     /// Returns the public key of this peer.
     pub(crate) fn public_key(&self) -> PeerPublicKey {
         self.public_key
-    }
-
-    /// Returns the peer identifier derived from the public key.
-    pub(crate) fn oprf_identifier(&self) -> PeerIdentifier {
-        self.identifier
     }
 
     /// Computes C = B * x_share and commitments to a random value k_share.

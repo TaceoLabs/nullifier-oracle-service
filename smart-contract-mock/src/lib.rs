@@ -9,8 +9,12 @@ use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
-use crate::services::{
-    pk_registry::PublicKeyRegistry, rp_key_gen::RpNullifierGenService, rp_registry::RpRegistry,
+use crate::{
+    config::SmartContractMockConfig,
+    services::{
+        merkle_registry::MerkleRootRegistry, peer_key_registry::OprfPeerKeyRegistry,
+        rp_key_gen::RpNullifierGenService, rp_registry::RpRegistry,
+    },
 };
 
 mod api;
@@ -20,14 +24,15 @@ mod services;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
-    pk_registry: PublicKeyRegistry,
+    merkle_registry: MerkleRootRegistry,
     rp_registry: RpRegistry,
     key_gen_service: RpNullifierGenService,
+    peer_keys: OprfPeerKeyRegistry,
 }
 
-impl FromRef<AppState> for PublicKeyRegistry {
+impl FromRef<AppState> for MerkleRootRegistry {
     fn from_ref(input: &AppState) -> Self {
-        input.pk_registry.clone()
+        input.merkle_registry.clone()
     }
 }
 
@@ -39,7 +44,7 @@ impl FromRef<AppState> for RpRegistry {
 
 impl FromRef<AppState> for broadcast::Receiver<MerkleRootUpdate> {
     fn from_ref(input: &AppState) -> Self {
-        input.pk_registry.subscribe_updates()
+        input.merkle_registry.subscribe_updates()
     }
 }
 
@@ -49,8 +54,14 @@ impl FromRef<AppState> for RpNullifierGenService {
     }
 }
 
+impl FromRef<AppState> for OprfPeerKeyRegistry {
+    fn from_ref(input: &AppState) -> Self {
+        input.peer_keys.clone()
+    }
+}
+
 pub async fn start(
-    config: config::SmartContractMockConfig,
+    config: SmartContractMockConfig,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting smart contract mock with config: {config:#?}");
@@ -63,11 +74,16 @@ pub async fn start(
     };
     let config = Arc::new(config);
 
+    // load the public keys from the OPRF services
+    let peer_keys = OprfPeerKeyRegistry::load_from_aws(&config)
+        .await
+        .context("while loading public keys from AWS")?;
+
     tracing::info!(
         "creating merkle tree with {} random nodes (this may take some time)",
         config.init_registry_size
     );
-    let pk_registry = PublicKeyRegistry::with_random_elements(
+    let pk_registry = MerkleRootRegistry::with_random_elements(
         Arc::clone(&config),
         &mut ChaCha12Rng::seed_from_u64(config.seed),
     );
@@ -91,9 +107,10 @@ pub async fn start(
     key_gen_service.start_add_rp_task(config.add_rp_interval);
 
     let app_state = AppState {
-        pk_registry,
+        merkle_registry: pk_registry,
         rp_registry,
         key_gen_service,
+        peer_keys,
     };
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);

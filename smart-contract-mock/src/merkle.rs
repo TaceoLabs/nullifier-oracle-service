@@ -5,7 +5,7 @@ use oprf_types::MerkleRoot;
 use poseidon2::Poseidon2;
 use rand::Rng;
 
-use crate::services::pk_registry::PublicKey;
+use crate::services::merkle_registry::PublicKey;
 
 /// A generic Merkle tree over u128 leaves.
 pub struct MerkleTree {

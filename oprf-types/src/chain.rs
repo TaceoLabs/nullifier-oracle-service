@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     RpId,
     crypto::{
-        PeerIdentifier, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
+        PartyId, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
         RpSecretGenCommitment,
     },
 };
@@ -74,7 +74,7 @@ pub struct SecretGenRound1Contribution {
     /// Identifier of the relying party this contribution belongs to.
     pub rp_id: RpId,
     /// The peer that created this contribution.
-    pub sender: PeerIdentifier,
+    pub sender: PartyId,
     /// The peer’s first-round commitment.
     pub contribution: RpSecretGenCommitment,
 }
@@ -88,7 +88,7 @@ pub struct SecretGenRound2Contribution {
     /// Identifier of the relying party this contribution belongs to.
     pub rp_id: RpId,
     /// The peer that created this contribution.
-    pub sender: PeerIdentifier,
+    pub sender: PartyId,
     /// The peer’s second-round ciphertexts.
     pub contribution: RpSecretGenCiphertexts,
 }
@@ -100,6 +100,6 @@ pub struct SecretGenRound2Contribution {
 pub struct SecretGenFinalizeContribution {
     /// Identifier of the relying party this contribution belongs to.
     pub rp_id: RpId,
-    /// The peer that created this message.
-    pub sender: PeerIdentifier,
+    /// The peer that created this contribution.
+    pub sender: PartyId,
 }

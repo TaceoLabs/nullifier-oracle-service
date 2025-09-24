@@ -3,6 +3,7 @@
 //! Defines the trait and types for services that watch blockchains in the OPRF peer.
 //!
 //! The [`ChainWatcher`] trait is used by the service to:
+//! - Load the [`PartyId`] of the peer.
 //! - Retrieve Merkle roots for given epochs.
 //! - Poll or receive new chain events (e.g., secret generation contributions, finalization events).
 //! - Report results of processed chain events back to the chain.
@@ -25,6 +26,7 @@ pub(crate) use http_mock::init;
 use oprf_types::{
     MerkleEpoch, MerkleRoot,
     chain::{ChainEvent, ChainEventResult},
+    crypto::PartyId,
     sc_mock::MerkleRootUpdate,
 };
 use tracing::instrument;
@@ -54,6 +56,9 @@ pub(crate) enum ChainWatcherError {
 /// otherwise track keygen/finalization contributions.
 #[async_trait]
 pub(crate) trait ChainWatcher {
+    /// Return the party’s own identifier as known to the chain.
+    async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError>;
+
     /// Retrieves a merkle root by epoch.
     ///
     /// May return immediately if the epoch is cached.

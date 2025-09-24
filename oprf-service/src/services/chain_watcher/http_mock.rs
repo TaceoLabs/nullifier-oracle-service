@@ -10,7 +10,11 @@ use oprf_types::{
         ChainEvent, SecretGenFinalizeContribution, SecretGenRound1Contribution,
         SecretGenRound2Contribution,
     },
-    sc_mock::{FetchRootsRequest, IsValidEpochRequest, MerkleRootUpdate, ReadEventsRequest},
+    crypto::PartyId,
+    sc_mock::{
+        FetchRootsRequest, GetPartyIdRequest, GetPartyIdResponse, IsValidEpochRequest,
+        MerkleRootUpdate, ReadEventsRequest,
+    },
 };
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
@@ -31,6 +35,7 @@ use crate::{
 struct HttpMockWatcher {
     config: Arc<OprfPeerConfig>,
     client: reqwest::Client,
+    party_id: PartyId,
     _cancellation_token: CancellationToken,
     merkle_root_store: Arc<Mutex<MerkleRootStore>>,
     read_request: ReadEventsRequest,
@@ -39,16 +44,29 @@ struct HttpMockWatcher {
 #[instrument(level = "info", skip_all)]
 pub(crate) async fn init(
     config: Arc<OprfPeerConfig>,
-    crypto_device: Arc<CryptoDevice>,
+    crypto_device: &CryptoDevice,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<ChainWatcherService> {
     tracing::info!("spawning MOCK watcher - THIS WILL NOT TALK TO A REAL CHAIN");
     // assert that we are really in the dev environment
     config.environment.assert_is_dev();
 
-    // load a bunch of merkle roots
-
     let client = reqwest::Client::new();
+    // load my party ID
+
+    let party_id = client
+        .post(format!("{}/api/peers/id", config.chain_url))
+        .json(&GetPartyIdRequest {
+            key: crypto_device.public_key(),
+        })
+        .send()
+        .await
+        .context("while fetching merkle for first time")?
+        .json::<GetPartyIdResponse>()
+        .await
+        .context("while parsing GetPartyIdResponse")?
+        .party_id;
+    // load a bunch of merkle roots
     let merkle_roots = client
         .get(format!("{}/api/merkle/fetch", config.chain_url))
         .query(&FetchRootsRequest {
@@ -65,6 +83,7 @@ pub(crate) async fn init(
         MerkleRootStore::new(merkle_roots, Arc::clone(&config))
             .context("while building merkle root store")?,
     ));
+
     subscribe_merkle_updates(
         &config,
         Arc::clone(&merkle_root_store),
@@ -73,13 +92,12 @@ pub(crate) async fn init(
     .await
     .context("while subscribing to merkle updates")?;
     Ok(Arc::new(HttpMockWatcher {
+        party_id,
         config: Arc::clone(&config),
         _cancellation_token: cancellation_token.clone(),
         client: reqwest::Client::new(),
         merkle_root_store,
-        read_request: ReadEventsRequest {
-            key: crypto_device.oprf_identifier(),
-        },
+        read_request: ReadEventsRequest { party_id },
     }))
 }
 
@@ -136,6 +154,13 @@ async fn subscribe_merkle_updates(
 
 #[async_trait]
 impl ChainWatcher for HttpMockWatcher {
+    #[instrument(level = "debug", skip(self))]
+    async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError> {
+        // we load the party ID in init before we do anything
+        // a real implementation may wants to do this differently
+        Ok(self.party_id)
+    }
+
     #[instrument(level = "debug", skip(self))]
     async fn get_merkle_root_by_epoch(
         &self,
