@@ -3421,6 +3421,7 @@ dependencies = [
 name = "oprf-test"
 version = "0.1.0"
 dependencies = [
+ "ark-babyjubjub",
  "ark-ec",
  "ark-ff 0.5.0",
  "circom-types",
@@ -3433,6 +3434,7 @@ dependencies = [
  "oprf-types",
  "rand 0.8.5",
  "reqwest",
+ "smart-contract-mock",
  "tokio",
 ]
 
@@ -3442,6 +3444,7 @@ version = "0.1.0"
 dependencies = [
  "ark-babyjubjub",
  "ark-serde-compat",
+ "eddsa-babyjubjub",
  "k256",
  "oprf-core",
  "rand 0.8.5",

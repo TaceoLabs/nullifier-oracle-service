@@ -4,6 +4,7 @@ use crate::AppState;
 
 mod admin;
 pub(crate) mod errors;
+pub(crate) mod health;
 mod key_gen;
 mod peers;
 mod public_key_registry;

@@ -14,9 +14,9 @@ use oprf_types::{RpId, ShareEpoch};
 
 use crate::services::crypto_device::{DLogShare, PeerPrivateKey, dlog_storage::RpMaterial};
 
-pub(crate) mod aws;
-#[cfg(feature = "file-secret-manager")]
-pub(crate) mod local;
+pub mod aws;
+#[cfg(test)]
+pub(crate) mod test;
 
 /// Dynamic trait object for secret manager service.
 ///

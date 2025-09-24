@@ -25,8 +25,9 @@ pub(super) struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 ///
 /// This struct is typically wrapped in a larger storage type (e.g. `RpMaterialStore`)
 /// to manage multiple RPs.
+#[derive(Clone)]
 pub(crate) struct RpMaterial {
-    shares: HashMap<ShareEpoch, DLogShare>,
+    pub(crate) shares: HashMap<ShareEpoch, DLogShare>,
     public_key: k256::ecdsa::VerifyingKey,
 }
 

@@ -77,6 +77,12 @@ impl From<ark_babyjubjub::Fr> for DLogShare {
     }
 }
 
+impl From<DLogShare> for ark_babyjubjub::Fr {
+    fn from(value: DLogShare) -> Self {
+        value.0
+    }
+}
+
 impl PeerPrivateKey {
     /// Computes the associated [`PeerPublicKey`] by multiplying the private key with the generator.
     pub fn get_public_key(&self) -> PeerPublicKey {

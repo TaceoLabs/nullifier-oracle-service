@@ -11,7 +11,7 @@ use tracing::instrument;
 use crate::services::crypto_device::dlog_storage::RpMaterial;
 use crate::{
     config::OprfPeerConfig,
-    services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager, SecretManagerService},
+    services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager},
 };
 
 /// AWS Secret Manager client wrapper.
@@ -21,6 +21,24 @@ pub(crate) struct AwsSecretManager {
     config: Arc<OprfPeerConfig>,
     // holds a handle of the runtime to have the store/update be sync interface.
     runtime: runtime::Handle,
+}
+
+impl AwsSecretManager {
+    /// Initializes an AWS secret manager client.
+    ///
+    /// Loads AWS configuration from the environment and wraps the client
+    /// in a `SecretManagerService`.
+    pub(crate) async fn init(config: Arc<OprfPeerConfig>) -> Self {
+        // loads the latest defaults for aws
+        tracing::info!("initializing AWS secret manager from env...");
+        let aws_config = aws_config::load_from_env().await;
+        let client = aws_sdk_secretsmanager::Client::new(&aws_config);
+        AwsSecretManager {
+            client,
+            config,
+            runtime: Handle::current(),
+        }
+    }
 }
 
 /// JSON structure used to serialize secrets in AWS.
@@ -58,22 +76,6 @@ impl AwsSecret {
             previous: None,
         }
     }
-}
-
-/// Initializes an AWS secret manager client.
-///
-/// Loads AWS configuration from the environment and wraps the client
-/// in a `SecretManagerService`.
-pub(crate) async fn init(config: Arc<OprfPeerConfig>) -> SecretManagerService {
-    // loads the latest defaults for aws
-    tracing::info!("initializing AWS secret manager from env...");
-    let aws_config = aws_config::load_from_env().await;
-    let client = aws_sdk_secretsmanager::Client::new(&aws_config);
-    Arc::new(AwsSecretManager {
-        client,
-        config,
-        runtime: Handle::current(),
-    })
 }
 
 #[async_trait]

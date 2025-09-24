@@ -57,7 +57,7 @@ pub(crate) fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
 }
 
 /// Reconstruct the from its shares and lagrange coefficients.
-pub(crate) fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
+pub fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
     debug_assert_eq!(shares.len(), lagrange.len());
     let mut res = F::zero();
     for (s, l) in shares.iter().zip(lagrange.iter()) {

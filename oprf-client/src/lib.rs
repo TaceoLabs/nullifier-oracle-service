@@ -61,7 +61,7 @@ pub enum Error {
 
 // TODO docs for fields
 pub struct NullifierArgs {
-    pub oprf_public_key: Affine,
+    pub rp_nullifier_key: Affine,
     pub key_epoch: ShareEpoch,
     pub sk: EdDSAPrivateKey,
     pub pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
@@ -81,6 +81,13 @@ pub struct NullifierArgs {
     pub query_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
     pub nullifier_pk: Arc<ProvingKey<Bn254>>,
     pub nullifier_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
+    pub cred_type_id: BaseField,
+    pub cred_pk: EdDSAPublicKey,
+    pub cred_sk: EdDSAPrivateKey,
+    pub cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
+    pub genesis_issued_at: BaseField,
+    pub expired_at: BaseField,
+    pub current_time_stamp: BaseField,
 }
 
 #[instrument(level = "debug", skip_all)]
@@ -90,7 +97,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Result<(Groth16Proof, BaseField)> {
     let NullifierArgs {
-        oprf_public_key,
+        rp_nullifier_key,
         key_epoch,
         sk,
         pks,
@@ -110,6 +117,13 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         query_matrices,
         nullifier_pk,
         nullifier_matrices,
+        cred_type_id,
+        cred_pk,
+        cred_sk,
+        cred_hashes,
+        genesis_issued_at,
+        expired_at,
+        current_time_stamp,
     } = args;
     let request_id = Uuid::new_v4();
     tracing::debug!("new request with id = {request_id}");
@@ -125,6 +139,12 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         rp_id.into(),
         action,
         nonce,
+        cred_type_id,
+        cred_sk,
+        cred_hashes,
+        genesis_issued_at,
+        expired_at,
+        current_time_stamp,
         rng,
     );
     let blinded_query = Affine::new(query_input.q[0], query_input.q[1]);
@@ -145,6 +165,8 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         action,
         nonce,
         signature,
+        cred_pk,
+        current_time_stamp,
     };
     let responses = oprf_request(oprf_services, &req).await;
     let (parties, responses) = choose_party_responses(responses, degree, rng)?;
@@ -159,7 +181,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
             &commitments,
             &lagrange,
-            oprf_public_key,
+            rp_nullifier_key,
             blinded_query,
         );
 
@@ -167,7 +189,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let req = ChallengeRequest {
         request_id,
         challenge: challenge.clone(),
-        rp_nullifier_share_id: NullifierShareIdentifier { rp_id, key_epoch },
+        rp_identifier: NullifierShareIdentifier { rp_id, key_epoch },
     };
     let selected_oprf_services = parties
         .iter()
@@ -182,7 +204,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     tracing::debug!("combine proof shares");
     let dlog_proof = challenge.combine_proofs_shamir(&dlog_proof_shares, &lagrange);
     if !dlog_proof.verify(
-        oprf_public_key,
+        rp_nullifier_key,
         blinded_query,
         blinded_response,
         Affine::generator(),
@@ -193,7 +215,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 
     let nullifier_input = NullifierProofInput::new(
         request_id,
-        oprf_public_key,
+        rp_nullifier_key,
         signal_hash,
         query_input,
         query,
@@ -225,20 +247,28 @@ async fn oprf_request(oprf_services: &[String], req: &OprfRequest) -> Vec<(usize
             .send()
             .await;
         match res {
-            Ok(res) => match res.json::<OprfResponse>().await {
-                Ok(res) => {
-                    if res.request_id == req.request_id {
-                        responses.push((id, res));
-                    } else {
-                        tracing::warn!(
-                            "service return response for invalid request_id {}",
-                            res.request_id
-                        );
+            Ok(res) => {
+                if res.status().is_success() {
+                    match res.json::<OprfResponse>().await {
+                        Ok(res) => {
+                            if res.request_id == req.request_id {
+                                responses.push((id, res));
+                            } else {
+                                tracing::warn!(
+                                    "service return response for invalid request_id {}",
+                                    res.request_id
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            tracing::warn!("failed to decode response to json error: {err:?}")
+                        }
                     }
+                } else {
+                    tracing::debug!("service returned error: {:?}", res.text().await);
                 }
-                Err(err) => tracing::warn!("failed to decode response to json error: {err:?}"),
-            },
-            Err(err) => tracing::debug!("request returned error: {err:?}"),
+            }
+            Err(err) => tracing::debug!("request failed: {err:?}"),
         }
     }
     responses
