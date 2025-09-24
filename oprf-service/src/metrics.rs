@@ -12,6 +12,8 @@ pub const METRICS_KEY_OPEN_SESSIONS: &str = "oprf.sessions.open";
 pub const METRICS_KEY_DELETED_SESSION: &str = "oprf.sessions.deleted";
 /// Metrics key for registered DLogSecrets.
 pub const METRICS_RP_SECRETS: &str = "oprf.rp.secrets";
+/// Metrics key for currently stored merkle roots
+pub const METRICS_MERKLE_COUNT: &str = "oprf.merkle.count";
 
 /// Describe all metrics used by the service.
 ///
@@ -37,6 +39,12 @@ pub fn describe_metrics() {
 
     metrics::describe_counter!(
         METRICS_RP_SECRETS,
+        metrics::Unit::Count,
+        "Number of RPs for which the peer holds secrets"
+    );
+
+    metrics::describe_counter!(
+        METRICS_MERKLE_COUNT,
         metrics::Unit::Count,
         "Number of RPs for which the peer holds secrets"
     );

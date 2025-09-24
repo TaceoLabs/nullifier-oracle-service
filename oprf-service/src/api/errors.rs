@@ -19,7 +19,7 @@ use eyre::Report;
 use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::services::oprf::OprfServiceError;
+use crate::services::{chain_watcher::ChainWatcherError, oprf::OprfServiceError};
 
 /// A structured API error returned to clients.
 #[derive(Debug, Serialize)]
@@ -60,17 +60,36 @@ impl From<ApiError> for ApiErrors {
     }
 }
 
+impl From<ChainWatcherError> for ApiErrors {
+    fn from(value: ChainWatcherError) -> Self {
+        tracing::debug!("{value:?}");
+        match value {
+            ChainWatcherError::UnknownEpoch(epoch)
+            | ChainWatcherError::TooFarInFuture(epoch)
+            | ChainWatcherError::TooFarInPast(epoch) => {
+                ApiErrors::BadRequest(format!("not known epoch: {epoch}"))
+            }
+            ChainWatcherError::ChainCommunicationError(report) => {
+                ApiErrors::InternalSeverError(report)
+            }
+        }
+    }
+}
+
 impl From<OprfServiceError> for ApiErrors {
     fn from(value: OprfServiceError) -> Self {
         tracing::debug!("{value:?}");
         match value {
             OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
-            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
             OprfServiceError::UnknownRpShareEpoch(key_identifier) => ApiErrors::NotFound(format!(
                 "Cannot find share for rp_id: {} , epoch: {}",
                 key_identifier.rp_id, key_identifier.key_epoch
             )),
+            OprfServiceError::ChainWatcherError(chain_watcher_error) => {
+                Self::from(chain_watcher_error)
+            }
+            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
         }
     }
 }

@@ -144,7 +144,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         point_b: blinded_query,
         rp_key_id: NullifierShareIdentifier { rp_id, key_epoch },
         merkle_epoch,
-        merkle_root,
         action,
         nonce,
         signature,

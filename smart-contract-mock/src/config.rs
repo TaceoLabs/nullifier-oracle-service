@@ -20,7 +20,7 @@ pub struct SmartContractMockConfig {
     pub init_registry_size: usize,
 
     /// The interval in which new public keys are added to merkle tree
-    #[clap(long, env = "OPRF_SC_ADD_PK_INTERVAL", default_value = "1h", value_parser=humantime::parse_duration)]
+    #[clap(long, env = "OPRF_SC_ADD_PK_INTERVAL", default_value = "10s", value_parser=humantime::parse_duration)]
     pub add_pk_interval: Duration,
 
     /// The initial size of the RP registry. The secrets need to be computed.

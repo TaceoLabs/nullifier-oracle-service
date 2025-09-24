@@ -119,7 +119,7 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_CHAIN_CHECK_INTERVAL",
-        default_value = "2s",
+        default_value = "10s",
         value_parser = humantime::parse_duration
 
     )]
@@ -150,4 +150,10 @@ pub struct OprfPeerConfig {
         default_value = "oprf/share/"
     )]
     pub dlog_share_secret_id_suffix: String,
+
+    /// The maximum size of the merkle store.
+    ///
+    /// Will drop old merkle roots if this capacity is reached.
+    #[clap(long, env = "OPRF_SERVICE_MERKLE_STORE_SIZE", default_value = "100")]
+    pub max_merkle_store_size: usize,
 }

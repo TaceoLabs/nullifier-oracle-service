@@ -29,8 +29,8 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     config::OprfPeerConfig,
     services::{
-        chain_watcher::ChainWatcherService, crypto_device::CryptoDevice,
-        event_handler::ChainEventHandler, oprf::OprfService, secret_manager,
+        crypto_device::CryptoDevice, event_handler::ChainEventHandler, oprf::OprfService,
+        secret_manager,
     },
 };
 
@@ -48,7 +48,6 @@ pub mod telemetry;
 pub(crate) struct AppState {
     config: Arc<OprfPeerConfig>,
     oprf_service: OprfService,
-    chain_watcher: ChainWatcherService,
 }
 
 impl FromRef<AppState> for Arc<OprfPeerConfig> {
@@ -60,12 +59,6 @@ impl FromRef<AppState> for Arc<OprfPeerConfig> {
 impl FromRef<AppState> for OprfService {
     fn from_ref(input: &AppState) -> Self {
         input.oprf_service.clone()
-    }
-}
-
-impl FromRef<AppState> for ChainWatcherService {
-    fn from_ref(input: &AppState) -> Self {
-        Arc::clone(&input.chain_watcher)
     }
 }
 
@@ -111,11 +104,6 @@ pub async fn start(
             .context("while initiating crypto-device")?,
     );
 
-    // start oprf-service service
-    tracing::info!("init oprf-service...");
-    let oprf_service =
-        OprfService::init(Arc::clone(&config), Arc::clone(&crypto_device), vk.into());
-
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
     tracing::info!("spawn chain watcher..");
@@ -124,6 +112,17 @@ pub async fn start(
         Arc::clone(&config),
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
+    )
+    .await
+    .context("while starting chain watcher")?;
+
+    // start oprf-service service
+    tracing::info!("init oprf-service...");
+    let oprf_service = OprfService::init(
+        Arc::clone(&config),
+        Arc::clone(&crypto_device),
+        Arc::clone(&chain_watcher),
+        vk.into(),
     );
 
     tracing::info!("spawning chain event handler..");
@@ -137,7 +136,7 @@ pub async fn start(
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
-    let axum_rest_api = api::new_app(Arc::clone(&config), oprf_service, chain_watcher);
+    let axum_rest_api = api::new_app(Arc::clone(&config), oprf_service);
 
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {
@@ -248,8 +247,9 @@ mod tests {
             chain_url: "foo".to_string(),
             chain_check_interval: Duration::from_secs(60),
             chain_epoch_max_difference: 10,
-            private_key_secret_id: "orpf/sk".to_string(),
+            private_key_secret_id: "oprf/sk".to_string(),
             dlog_share_secret_id_suffix: "oprf/shares/".to_string(),
+            max_merkle_store_size: 10,
         };
         let _config = Arc::new(config);
         todo!()

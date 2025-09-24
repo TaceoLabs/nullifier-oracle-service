@@ -1,6 +1,6 @@
-use std::{array, collections::VecDeque, sync::Arc, time::Duration};
+use std::{array, collections::BTreeMap, sync::Arc, time::Duration};
 
-use oprf_types::MerkleRoot;
+use oprf_types::{MerkleEpoch, MerkleRoot, sc_mock::MerkleRootUpdate};
 use parking_lot::Mutex;
 use rand::Rng;
 use tokio::sync::broadcast;
@@ -11,12 +11,13 @@ use crate::{config::SmartContractMockConfig, merkle::MerkleTree};
 pub(crate) struct PublicKeyRegistry {
     config: Arc<SmartContractMockConfig>,
     storage: Arc<Mutex<RootStorage>>,
-    bus: broadcast::Sender<MerkleRoot>,
+    bus: broadcast::Sender<MerkleRootUpdate>,
 }
 
 struct RootStorage {
     tree: MerkleTree,
-    roots: VecDeque<MerkleRoot>,
+    current_epoch: MerkleEpoch,
+    roots: BTreeMap<MerkleEpoch, MerkleRoot>,
 }
 
 pub struct PublicKey {
@@ -36,24 +37,29 @@ impl PublicKeyRegistry {
         config: Arc<SmartContractMockConfig>,
         r: &mut R,
     ) -> Self {
-        let mut roots = VecDeque::new();
         // Create a tree with the initial size
-        let mut tree = MerkleTree::random(config.init_registry_size, r);
-        // Now add some more hashes to have a cache of root stores
-        for _ in 0..50 {
-            tree.push_leaf(PublicKey::random(r));
-            add_to_root_store(&mut roots, tree.root(), config.max_root_cache_size);
-        }
+        let tree = MerkleTree::random(config.init_registry_size, r);
         // fairly arbitrary channel size
         let (tx, _) = broadcast::channel(4096);
-        Self {
+
+        let registry = Self {
+            storage: Arc::new(Mutex::new(RootStorage {
+                tree,
+                current_epoch: MerkleEpoch::new(config.init_registry_size as u128),
+                roots: BTreeMap::new(),
+            })),
             config,
-            storage: Arc::new(Mutex::new(RootStorage { tree, roots })),
             bus: tx,
+        };
+
+        // Now add some more hashes to have a cache of root stores
+        for _ in 0..50 {
+            registry.add_pk(PublicKey::random(r));
         }
+        registry
     }
 
-    pub(crate) fn subscribe_updates(&self) -> broadcast::Receiver<MerkleRoot> {
+    pub(crate) fn subscribe_updates(&self) -> broadcast::Receiver<MerkleRootUpdate> {
         self.bus.subscribe()
     }
 
@@ -73,9 +79,17 @@ impl PublicKeyRegistry {
         let new_root = {
             let mut storage = self.storage.lock();
             storage.tree.push_leaf(pk);
+            let new_epoch = storage.current_epoch.inc();
             let root = storage.tree.root();
-            add_to_root_store(&mut storage.roots, root, self.config.max_root_cache_size);
-            root
+            // add to cache
+            storage.roots.insert(new_epoch, root);
+            if storage.roots.len() > self.config.max_root_cache_size {
+                storage.roots.pop_first();
+            }
+            MerkleRootUpdate {
+                hash: root,
+                epoch: storage.current_epoch,
+            }
         };
         match self.bus.send(new_root) {
             Ok(listeners) => tracing::trace!("send new root to {listeners} subscribers"),
@@ -83,23 +97,20 @@ impl PublicKeyRegistry {
         }
     }
 
-    pub(crate) fn is_valid_root(&self, root: MerkleRoot) -> bool {
-        self.storage.lock().roots.contains(&root)
+    pub(crate) fn get_by_epoch(&self, epoch: MerkleEpoch) -> Option<MerkleRoot> {
+        self.storage.lock().roots.get(&epoch).copied()
     }
-    pub(crate) fn fetch_roots(&self, amount: u32) -> Vec<MerkleRoot> {
+
+    pub(crate) fn fetch_roots(&self, amount: u32) -> Vec<MerkleRootUpdate> {
         self.storage
             .lock()
             .roots
             .iter()
             .take(amount as usize)
-            .cloned()
+            .map(|(k, v)| MerkleRootUpdate {
+                epoch: *k,
+                hash: *v,
+            })
             .collect()
-    }
-}
-
-fn add_to_root_store(roots: &mut VecDeque<MerkleRoot>, new_root: MerkleRoot, max_length: usize) {
-    roots.push_front(new_root);
-    if roots.len() > max_length {
-        roots.pop_back();
     }
 }
