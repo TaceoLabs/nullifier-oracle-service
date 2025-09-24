@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::{self, Handle};
 use tracing::instrument;
 
+use crate::services::crypto_device::dlog_storage::RpMaterial;
 use crate::{
     config::OprfPeerConfig,
     services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager, SecretManagerService},
@@ -28,6 +29,7 @@ pub(crate) struct AwsSecretManager {
 #[derive(Serialize, Deserialize)]
 struct AwsSecret {
     rp_id: RpId,
+    rp_public: k256::PublicKey,
     current: EpochSecret,
     // Is none for first secret
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,9 +47,10 @@ impl AwsSecret {
     /// Creates a new secret for a given `RpId`.
     ///
     /// Current epoch is set to 0, previous is `None`.
-    fn new(rp_id: RpId, secret: DLogShare) -> Self {
+    fn new(rp_id: RpId, rp_public: k256::PublicKey, secret: DLogShare) -> Self {
         Self {
             rp_id,
+            rp_public,
             current: EpochSecret {
                 epoch: ShareEpoch::default(),
                 secret,
@@ -79,10 +82,7 @@ impl SecretManager for AwsSecretManager {
     async fn load_secrets(
         &self,
         rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(
-        PeerPrivateKey,
-        HashMap<RpId, HashMap<ShareEpoch, DLogShare>>,
-    )> {
+    ) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
         tracing::info!(
             "loading secret key from AWS with name {}...",
             self.config.private_key_secret_id
@@ -148,7 +148,10 @@ impl SecretManager for AwsSecretManager {
                 if let Some(previous) = aws_secret.previous {
                     rp_shares.insert(previous.epoch, previous.secret);
                 }
-                shares.insert(aws_secret.rp_id, rp_shares);
+                shares.insert(
+                    aws_secret.rp_id,
+                    RpMaterial::new(rp_shares, aws_secret.rp_public.into()),
+                );
             }
         }
 
@@ -162,10 +165,15 @@ impl SecretManager for AwsSecretManager {
     }
 
     #[instrument(level = "info", skip(self, share))]
-    fn store_dlog_share(&self, rp_id: RpId, share: DLogShare) -> eyre::Result<()> {
+    fn store_dlog_share(
+        &self,
+        rp_id: RpId,
+        pubic_key: k256::PublicKey,
+        share: DLogShare,
+    ) -> eyre::Result<()> {
         let secret_id = to_secret_id(&self.config, rp_id);
         tracing::info!("creating new secret at AWS: {secret_id}");
-        let secret = AwsSecret::new(rp_id, share);
+        let secret = AwsSecret::new(rp_id, pubic_key, share);
         let create_fut = self
             .client
             .create_secret()

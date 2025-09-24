@@ -3,6 +3,7 @@ use std::{fs::File, path::PathBuf, sync::Arc, time::Duration};
 use ark_ec::{AffineRepr as _, CurveGroup, PrimeGroup as _};
 use ark_ff::{UniformRand as _, Zero};
 use circom_types::{groth16::ZKey, traits::CheckElement};
+use k256::ecdsa::{SigningKey, signature::SignerMut as _};
 use oprf_client::{
     Affine, BaseField, EdDSAPrivateKey, MAX_DEPTH, MAX_PUBLIC_KEYS, NullifierArgs, Projective,
     ScalarField,
@@ -64,14 +65,13 @@ pub fn nullifier_args<R: Rng + CryptoRng>(rng: &mut R) -> NullifierArgs {
     let oprf_public_key = (Projective::generator() * ScalarField::from(42)).into_affine();
     let key_epoch = ShareEpoch::default();
     let sk = EdDSAPrivateKey::random(rng);
-    let rp_sk = EdDSAPrivateKey::random(rng); // TODO remove, not known
+    let mut rp_signing_key = SigningKey::random(rng); // TODO remove
     let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
     let rp_id = RpId::new(0);
     let action = BaseField::rand(rng);
     let siblings: [BaseField; MAX_DEPTH] = std::array::from_fn(|_| BaseField::rand(rng));
     let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
     let pk = sk.public();
-    let rp_pk = rp_sk.public();
     let mut pks = [[BaseField::zero(); 2]; MAX_PUBLIC_KEYS];
     for (i, pki) in pks.iter_mut().enumerate() {
         if i as u64 == pk_index {
@@ -88,7 +88,7 @@ pub fn nullifier_args<R: Rng + CryptoRng>(rng: &mut R) -> NullifierArgs {
     let signal_hash = BaseField::rand(rng);
     let merkle_epoch = MerkleEpoch::default();
     let nonce = BaseField::rand(rng);
-    let signature = rp_sk.sign(nonce);
+    let signature = rp_signing_key.sign(nonce.to_string().as_bytes());
     let id_commitment_r = BaseField::rand(rng);
     let query_zkey = ZKey::from_reader(
         File::open(dir.join("../circom/main/OPRFQueryProof.zkey")).expect("can open"),
@@ -112,7 +112,6 @@ pub fn nullifier_args<R: Rng + CryptoRng>(rng: &mut R) -> NullifierArgs {
         mt_index,
         siblings,
         rp_id,
-        rp_pk,
         action,
         signal_hash,
         merkle_epoch,

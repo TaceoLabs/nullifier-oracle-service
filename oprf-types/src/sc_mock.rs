@@ -70,7 +70,15 @@ impl ChainEvent {
     }
 
     /// Convenience constructor for a finalize event.
-    pub fn finalize_event(rp_id: RpId, ciphers: Vec<RpSecretGenCiphertext>) -> Self {
-        Self::SecretGenFinalize(SecretGenFinalizeEvent { rp_id, ciphers })
+    pub fn finalize_event(
+        rp_id: RpId,
+        rp_public_key: k256::PublicKey,
+        ciphers: Vec<RpSecretGenCiphertext>,
+    ) -> Self {
+        Self::SecretGenFinalize(SecretGenFinalizeEvent {
+            rp_id,
+            rp_public_key,
+            ciphers,
+        })
     }
 }

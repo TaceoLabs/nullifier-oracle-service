@@ -132,8 +132,13 @@ impl DLogSecretGenService {
     /// # Arguments
     /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
     /// * `ciphers` - Ciphertexts received from other parties in round 2.
-    #[instrument(level = "info", skip(self, ciphers))]
-    pub(crate) fn finalize(&self, rp_id: RpId, ciphers: Vec<RpSecretGenCiphertext>) {
+    #[instrument(level = "info", skip(self, rp_public, ciphers))]
+    pub(crate) fn finalize(
+        &self,
+        rp_id: RpId,
+        rp_public: k256::PublicKey,
+        ciphers: Vec<RpSecretGenCiphertext>,
+    ) {
         tracing::info!("calling finalize with {}", ciphers.len());
         let shares = ciphers
             .into_iter()
@@ -142,7 +147,11 @@ impl DLogSecretGenService {
             .expect("TODO");
         let my_share = KeyGenPoly::accumulate_shares(&shares);
         self.crypto_device
-            .register_nullifier_share(rp_id, DLogShare::from(my_share))
+            .register_nullifier_share(
+                rp_id,
+                k256::ecdsa::VerifyingKey::from(rp_public),
+                DLogShare::from(my_share),
+            )
             .expect("TODO");
         tracing::info!("my share: {my_share}");
     }

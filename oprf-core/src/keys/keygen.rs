@@ -76,9 +76,9 @@ impl KeyGenPoly {
         }
     }
 
-    pub fn reshare<R: Rng + CryptoRng>(rng: &mut R, myshare: ScalarField, degree: usize) -> Self {
+    pub fn reshare<R: Rng + CryptoRng>(rng: &mut R, my_share: ScalarField, degree: usize) -> Self {
         let mut poly = Vec::with_capacity(degree + 1);
-        poly.push(myshare);
+        poly.push(my_share);
         for _ in 0..degree {
             poly.push(ScalarField::rand(rng));
         }

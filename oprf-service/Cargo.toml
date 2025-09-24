@@ -25,6 +25,7 @@ ark-serde-compat = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
@@ -32,6 +33,7 @@ futures = { workspace = true, optional = true }
 git-version = { workspace = true }
 http = { workspace = true }
 humantime = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa", "serde"] }
 metrics = { workspace = true }
 metrics-exporter-dogstatsd = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
@@ -40,7 +42,7 @@ oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
-reqwest = { version = "0.12.23", features = ["json"] }
+reqwest = { workspace = true, features = ["json"] }
 rustls = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

@@ -23,6 +23,7 @@ eyre = { workspace = true }
 futures-util = "0.3.31"
 git-version = { workspace = true }
 humantime = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }

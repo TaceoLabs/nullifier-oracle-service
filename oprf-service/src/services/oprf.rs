@@ -8,7 +8,7 @@
 //! - Persist per-session randomness in the [`SessionStore`] for later challenge completion.
 //!
 //! The service exposes two main flows:
-//! 1. [`OprfService::init_oprf_session`] – initializes an OPRF session, verifies the user's proof, computes partial commitments, and stores the session randomness.
+//! 1. [`OprfService::init_oprf_session`] – initializes an OPRF session, verifies the user's proof and nonce signature, computes partial commitments, and stores the session randomness.
 //! 2. [`OprfService::finalize_oprf_session`] – consumes the stored randomness to produce a final proof share for the client challenge.
 //!
 //! This service is designed to be used behind an HTTP API (via the `api` module).
@@ -22,7 +22,7 @@ use ark_groth16::Groth16;
 use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
-use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
+use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -31,7 +31,7 @@ use crate::{
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{
         chain_watcher::{ChainWatcherError, ChainWatcherService},
-        crypto_device::CryptoDevice,
+        crypto_device::{CryptoDevice, CryptoDeviceError},
         session_store::SessionStore,
     },
 };
@@ -45,9 +45,9 @@ pub(crate) enum OprfServiceError {
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
-    /// Cannot find a secret share for the given RP at the requested epoch.
-    #[error("Cannot find share for Rp with epoch: {0:?}")]
-    UnknownRpShareEpoch(NullifierShareIdentifier),
+    /// Error from CryptoDevice
+    #[error(transparent)]
+    CryptoDevice(#[from] CryptoDeviceError),
     /// An error returned from the chain watcher service during merkle look-up.
     #[error(transparent)]
     ChainWatcherError(#[from] ChainWatcherError),
@@ -83,19 +83,26 @@ impl OprfService {
     /// Initializes an OPRF session for the given request.
     ///
     /// This method executes the first step of the OPRF protocol:
-    /// 1. Retrieves the Merkle root for the epoch specified in the request via the [`ChainWatcherService`].
-    /// 2. Verifies the client's Groth16 proof.
-    /// 3. If verification succeeds, computes partial discrete-log equality commitments using the [`CryptoDevice`].
-    /// 4. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
+    /// 1. Verifies the RP's nonce signature via the [`CryptoDevice`]. **The nonce is converted to le_bytes representation for signature verification**.
+    /// 2. Retrieves the Merkle root for the epoch specified in the request via the [`ChainWatcherService`].
+    /// 3. Verifies the client's Groth16 proof.
+    /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`CryptoDevice`].
+    /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     ///
     /// Returns the compressed Base64-encoded [`PartialDLogEqualityCommitments`] if successful.
-    ///
     #[instrument(level = "debug", skip(self))]
     pub(crate) async fn init_oprf_session(
         &self,
         request: OprfRequest,
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
+        let rp_id = request.rp_identifier.rp_id;
+
+        // check the RP nonce signature - this also lightens the threat
+        // of DoS attack that force the service to always check the merkle roots from chain
+        // TODO for later versions we need to store the signatures and check if the nonces where only used once
+        self.crypto_device
+            .verify_nonce_signature(rp_id, request.nonce, request.signature)?;
 
         // get the merkle root identified by the epoch
         let merkle_root = self
@@ -103,21 +110,22 @@ impl OprfService {
             .get_merkle_root_by_epoch(request.merkle_epoch)
             .await?;
 
-        // Verify the user proof
+        // verify the user proof
         let public = [
             request.point_b.x,
             request.point_b.y,
             merkle_root.into_inner(),
-            request.rp_key_id.rp_id.into(),
+            request.rp_identifier.rp_id.into(),
             request.action,
             request.nonce,
         ];
         self.verify_user_proof(request.proof, &public)?;
+
         // Partial commit through the crypto device
         let (session, comm) = self
             .crypto_device
-            .partial_commit(request.point_b, &request.rp_key_id)
-            .ok_or_else(|| OprfServiceError::UnknownRpShareEpoch(request.rp_key_id))?;
+            .partial_commit(request.point_b, &request.rp_identifier)?;
+
         // Store the randomness for finalize request
         self.session_store.store(request.request_id, session);
         tracing::debug!("handled session init");
@@ -141,10 +149,11 @@ impl OprfService {
             .retrieve(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self
-            .crypto_device
-            .challenge(session, request.challenge, &request.rp_nullifier_share_id)
-            .ok_or_else(|| OprfServiceError::UnknownRpShareEpoch(request.rp_nullifier_share_id))?;
+        let proof_share = self.crypto_device.challenge(
+            session,
+            request.challenge,
+            &request.rp_nullifier_share_id,
+        )?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)

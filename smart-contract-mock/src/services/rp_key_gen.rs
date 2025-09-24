@@ -36,11 +36,11 @@ pub(crate) struct RpNullifierGenService {
     rp_registry: RpRegistry,
 }
 
-#[derive(Default)]
 struct RpNullifierGenState {
     round1: BTreeMap<PartyId, RpSecretGenCommitment>,
     round2: BTreeMap<PartyId, RpSecretGenCiphertexts>,
     done: HashSet<PartyId>,
+    rp_signing_key: k256::SecretKey,
 }
 
 impl RpNullifierGenService {
@@ -115,7 +115,11 @@ impl RpNullifierGenService {
                 .collect::<Vec<_>>();
             if my_ciphers.len() == self.config.oprf_services {
                 // all ciphers are done for me
-                events.push(ChainEvent::finalize_event(*rp_id, my_ciphers));
+                events.push(ChainEvent::finalize_event(
+                    *rp_id,
+                    state.rp_signing_key.public_key(),
+                    my_ciphers,
+                ));
             } else {
                 tracing::debug!(
                     "still waiting for round2 contributions, have {}",
@@ -211,7 +215,12 @@ impl RpNullifierGenService {
 
 impl RpNullifierGenState {
     pub(crate) fn new() -> Self {
-        Self::default()
+        Self {
+            round1: BTreeMap::new(),
+            round2: BTreeMap::new(),
+            done: HashSet::new(),
+            rp_signing_key: k256::SecretKey::random(&mut rand::thread_rng()),
+        }
     }
 
     fn finish(&self) -> ark_babyjubjub::EdwardsAffine {
