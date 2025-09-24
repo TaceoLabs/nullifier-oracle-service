@@ -34,9 +34,12 @@ template BinaryMerkleRoot(MAX_DEPTH) {
     var root = 0;
 
     signal indices[MAX_DEPTH] <== Num2Bits(MAX_DEPTH)(index);
+    signal is_depth[MAX_DEPTH + 1];
+    signal should_be_zeros[MAX_DEPTH + 1];
 
     for (var i = 0; i < MAX_DEPTH; i++) {
         var isDepth = IsEqual()([depth, i]);
+        is_depth[i] <== isDepth;
 
         roots[i] <== isDepth * nodes[i];
 
@@ -51,6 +54,22 @@ template BinaryMerkleRoot(MAX_DEPTH) {
     }
 
     var isDepth = IsEqual()([depth, MAX_DEPTH]);
+    is_depth[MAX_DEPTH] <== isDepth;
 
     out <== root + isDepth * nodes[MAX_DEPTH];
+
+    // For our use case we need to enforce that the index is in range. We do this by checking that for all bits greater than the depth, the index bit is zero.
+    // We can reuse the isDepth signal from above to do this.
+    // The following construction translates the one-hot vector isDepth to a vector where each element i is 1 starting with the 1 in isDepth and 0 before.
+    // E.g., [0,0,1,0,0] is translated to [0,0,1,1,1].
+    // Thus a constraint indices[i] * should_be_zeros[i] === 0 enforces that all bits in indices after the depth are zero.
+    for (var i = 0; i < MAX_DEPTH; i++) {
+        if (i == 0) {
+            should_be_zeros[i] <== is_depth[i];
+        } else {
+            // Arithmetic OR
+            should_be_zeros[i] <== is_depth[i] + should_be_zeros[i-1] - should_be_zeros[i-1] * is_depth[i];
+        }
+        should_be_zeros[i] * indices[i] === 0;
+    }
 }
