@@ -1,0 +1,78 @@
+name: Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: 'Name of the Docker image to build and push'
+        required: true
+        type: string
+      dockerfile:
+        description: 'Path to the Dockerfile'
+        required: true
+        type: string
+      registry-type:
+        description: 'Type of the registry (e.g., public, private)'
+        type: string
+        default: 'private'
+      registry-alias:
+        description: 'Alias for the registry, prefixed with / (optional, used for public ECR)'
+        type: string
+        default: ''
+      aws-region:
+        description: 'AWS region for ECR (default: eu-central-1)'
+        type: string
+        default: 'eu-central-1'
+
+permissions:
+  contents: read # Required for the checkout action
+  id-token: write # Required for OIDC authentication with AWS
+
+jobs:
+  build-and-push:
+    runs-on: [arc-runner-set]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws-region }}
+          role-to-assume: arn:aws:iam::651706750785:role/oidc/github-actions-role
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: ${{ inputs.registry-type }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Using https://github.com/marketplace/actions/docker-metadata-action
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ steps.login-ecr.outputs.registry }}${{ inputs.registry-alias }}/nullifier-oracle-service/${{ inputs.image-name }}
+
+          flavor: |
+            latest=false
+            suffix=-amd64
+
+          tags: |
+            type=sha,format=long
+            type=match,pattern=(\w){3}-(.*),group=2
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          file: ${{ inputs.dockerfile }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_HASH=${{ github.sha }}
