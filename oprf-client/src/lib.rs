@@ -29,6 +29,7 @@ pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
 pub mod config;
+pub mod serialization;
 
 pub const MAX_DEPTH: usize = 30;
 
