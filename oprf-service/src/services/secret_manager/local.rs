@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -7,6 +6,7 @@ use tracing::instrument;
 
 use crate::config::OprfPeerConfig;
 use crate::services::crypto_device::PeerPrivateKey;
+use crate::services::crypto_device::dlog_storage::RpMaterial;
 use crate::services::secret_manager::{DLogShare, SecretManager, SecretManagerService};
 
 /// Type alias for secret manager client for ergonomics
@@ -23,11 +23,8 @@ impl SecretManager for LocalSecretManager {
     #[instrument(level = "info", skip_all)]
     async fn load_secrets(
         &self,
-        _rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(
-        PeerPrivateKey,
-        HashMap<RpId, HashMap<ShareEpoch, DLogShare>>,
-    )> {
+        __rp_ids: Vec<RpId>,
+    ) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
         todo!()
         // let key_share =
         //     serde_json::from_reader::<_, DLogShare>(File::open(&config.private_key_secret_id)?)?;
@@ -37,8 +34,12 @@ impl SecretManager for LocalSecretManager {
         // Ok((private_key, rp_key_shares))
     }
 
-    #[instrument(level = "info", skip(self, _share))]
-    fn store_dlog_share(&self, _rp_id: RpId, _share: DLogShare) -> eyre::Result<()> {
+    fn store_dlog_share(
+        &self,
+        _rp_id: RpId,
+        _public_key: k256::PublicKey,
+        _share: DLogShare,
+    ) -> eyre::Result<()> {
         Ok(())
     }
 
