@@ -4,6 +4,9 @@
 //! It defines request/response types and event payloads exchanged with
 //! the mock contract used in integration testing.
 
+use std::array;
+
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,6 +14,33 @@ use crate::{
     chain::{ChainEvent, SecretGenFinalizeEvent, SecretGenRound1Event, SecretGenRound2Event},
     crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext},
 };
+
+/// The public key of an end-user.
+///
+/// Stored in the Merkle-Tree at the Smart Contract.
+#[derive(Clone)]
+pub struct UserPublicKey(pub [ark_babyjubjub::EdwardsAffine; 7]);
+
+impl UserPublicKey {
+    /// Generates a random `UserPublicKey` with the provided source of randomness.
+    pub fn random<R: Rng>(r: &mut R) -> Self {
+        Self(array::from_fn(|_| r.r#gen()))
+    }
+}
+
+/// A MerklePath produced by the Smart Contract Mock.
+///
+/// Used for testing.
+pub struct MerklePath {
+    /// The index of the element in the tree
+    pub index: u64,
+    /// The siblings in the path
+    pub siblings: Vec<ark_babyjubjub::Fq>,
+    /// The produced root
+    pub root: MerkleRoot,
+    /// The key (leaf)
+    pub key: UserPublicKey,
+}
 
 /// Represents an update of the Merkle root for a specific epoch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
