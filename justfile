@@ -5,6 +5,7 @@ lint:
 
 dev-up:
     cd oprf-service/deploy && docker-compose up -d
+    cargo run --bin key-gen -- --overwrite-old-keys
 
 dev-down:
     cd oprf-service/deploy && docker-compose down
