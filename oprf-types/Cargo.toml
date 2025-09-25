@@ -12,15 +12,12 @@ readme.workspace = true
 
 [features]
 default = ["mock-chain-watcher"]
-mock-chain-watcher = ["poseidon2"]
+mock-chain-watcher = []
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-serde-compat = { workspace = true }
-eddsa-babyjubjub = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
-poseidon2 = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }

@@ -26,11 +26,9 @@ oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
-serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
-tokio-util = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
@@ -44,7 +42,7 @@ tempfile = { workspace = true }
 default = ["bin"]
 
 # enables the binary client example
-bin = ["dep:clap", "dep:tokio", "dep:tokio-util"]
+bin = ["dep:clap", "dep:tokio"]
 
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]

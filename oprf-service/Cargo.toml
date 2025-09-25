@@ -25,7 +25,6 @@ ark-serde-compat = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
-eddsa-babyjubjub = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
