@@ -6,8 +6,8 @@ use oprf_service::config::OprfPeerConfig;
 
 #[tokio::main]
 async fn main() -> eyre::Result<ExitCode> {
-    let tracing_config = oprf_service::telemetry::ServiceConfig::try_from_env()?;
-    let _tracing_handle = oprf_service::telemetry::initialize_tracing(&tracing_config)?;
+    let tracing_config = nodes_telemetry::TracingConfig::try_from_env()?;
+    let _tracing_handle = nodes_telemetry::initialize_tracing(&tracing_config)?;
     oprf_service::metrics::describe_metrics();
     tracing::info!(
         "{} {} ({})",

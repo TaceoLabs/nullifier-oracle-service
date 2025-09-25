@@ -33,19 +33,15 @@ http = { workspace = true }
 humantime = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 metrics = { workspace = true }
-metrics-exporter-dogstatsd = { workspace = true }
-metrics-exporter-prometheus = { workspace = true }
-metrics-exporter-statsd = { workspace = true }
+nodes-telemetry = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 rustls = { workspace = true }
-secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-telemetry-batteries = { workspace = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"], optional = true }
