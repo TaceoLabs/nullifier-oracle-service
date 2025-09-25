@@ -4,8 +4,6 @@
 //! It defines request/response types and event payloads exchanged with
 //! the mock contract used in integration testing.
 
-use std::array;
-
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -18,23 +16,33 @@ use crate::{
 /// The public key of an end-user.
 ///
 /// Stored in the Merkle-Tree at the Smart Contract.
-#[derive(Clone)]
-pub struct UserPublicKey(pub [ark_babyjubjub::EdwardsAffine; 7]);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPublicKey {
+    /// Values of the the public key (always len 7)
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine_sequence")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine_sequence")]
+    pub values: Vec<ark_babyjubjub::EdwardsAffine>,
+}
 
 impl UserPublicKey {
     /// Generates a random `UserPublicKey` with the provided source of randomness.
     pub fn random<R: Rng>(r: &mut R) -> Self {
-        Self(array::from_fn(|_| r.r#gen()))
+        Self {
+            values: (0..7).map(|_| r.r#gen()).collect(),
+        }
     }
 }
 
 /// A MerklePath produced by the Smart Contract Mock.
 ///
 /// Used for testing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerklePath {
     /// The index of the element in the tree
     pub index: u64,
     /// The siblings in the path
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base_sequence")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base_sequence")]
     pub siblings: Vec<ark_babyjubjub::Fq>,
     /// The produced root
     pub root: MerkleRoot,
@@ -81,11 +89,45 @@ pub struct IsValidEpochRequest {
     pub epoch: MerkleEpoch,
 }
 
+/// Request to add a new [`UserPublicKey`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPublicKeyRequest {
+    /// The epoch to check
+    pub public_key: UserPublicKey,
+}
+
+/// Response to for adding a [`UserPublicKey`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPublicKeyResponse {
+    /// The epoch to check
+    pub epoch: MerkleEpoch,
+    /// The epoch to check
+    pub path: MerklePath,
+}
+
 /// Request sent to read events for a given peer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadEventsRequest {
     /// Party id of the peer whose events are requested.
     pub party_id: PartyId,
+}
+
+/// Request to sign the `nonce` with the rp's signing key
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignNonceRequest {
+    /// The rp that signs the nonce
+    pub rp_id: RpId,
+    /// The nonce to sign
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    pub nonce: ark_babyjubjub::Fq,
+}
+
+/// Response with the signed nonce
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignNonceResponse {
+    /// The signature
+    pub signature: k256::ecdsa::Signature,
 }
 
 impl ChainEvent {

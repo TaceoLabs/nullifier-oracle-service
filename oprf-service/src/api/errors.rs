@@ -104,7 +104,7 @@ impl From<CryptoDeviceError> for ApiErrors {
             }
             CryptoDeviceError::UnknownRpShareEpoch(key_identifier) => ApiErrors::NotFound(format!(
                 "Cannot find share for rp_id: {} , epoch: {}",
-                key_identifier.rp_id, key_identifier.key_epoch
+                key_identifier.rp_id, key_identifier.share_epoch
             )),
         }
     }

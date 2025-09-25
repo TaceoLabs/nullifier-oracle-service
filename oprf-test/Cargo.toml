@@ -11,18 +11,16 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-ark-babyjubjub.workspace = true
-ark-ec.workspace = true
 ark-ff.workspace = true
 circom-types.workspace = true
 eyre.workspace = true
 futures.workspace = true
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-client = { workspace = true }
-oprf-core = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 smart-contract-mock.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

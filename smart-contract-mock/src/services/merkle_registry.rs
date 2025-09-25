@@ -36,8 +36,8 @@ impl PoseidonCompression {
         let mut input = [ark_babyjubjub::Fq::ZERO; 16];
         input[0] = self.domain_separator;
         for i in 0..7 {
-            input[i * 2 + 1] = pk.0[i].x().expect("not infinity");
-            input[i * 2 + 2] = pk.0[i].y().expect("not infinity");
+            input[i * 2 + 1] = pk.values[i].x().expect("not infinity");
+            input[i * 2 + 2] = pk.values[i].y().expect("not infinity");
         }
         self.poseidon2_16.permutation(&input)[1]
     }
@@ -87,6 +87,14 @@ impl MerkleRootRegistry {
     // Creates a path where the key is the leave and the path are random siblings.
     pub(crate) fn add_random<R: Rng>(&self, r: &mut R) {
         let key = UserPublicKey::random(r);
+        self.add_public_key(key, r);
+    }
+
+    pub(crate) fn add_public_key<R: Rng>(
+        &self,
+        key: UserPublicKey,
+        r: &mut R,
+    ) -> (MerkleEpoch, MerklePath) {
         let index = self.current_index.fetch_add(1, Ordering::Relaxed);
         let poseidon = PoseidonCompression::default();
         let mut current = poseidon.merkle_leaf(key.clone());
@@ -104,20 +112,19 @@ impl MerkleRootRegistry {
         }
         let root = MerkleRoot::from(current);
         let epoch = MerkleEpoch::from(index);
-        self.storage.lock().insert(
-            MerkleEpoch::from(u128::from(index)),
-            MerklePath {
-                index,
-                siblings,
-                root: MerkleRoot::from(current),
-                key,
-            },
-        );
+        let path = MerklePath {
+            index,
+            siblings,
+            root: MerkleRoot::from(current),
+            key,
+        };
+        self.storage.lock().insert(epoch, path.clone());
         // write update
         match self.bus.send(MerkleRootUpdate { hash: root, epoch }) {
             Ok(listeners) => tracing::trace!("send new root to {listeners} subscribers"),
             Err(_) => tracing::trace!("no subscriber listening"),
         }
+        (epoch, path)
     }
 
     pub(crate) fn subscribe_updates(&self) -> broadcast::Receiver<MerkleRootUpdate> {

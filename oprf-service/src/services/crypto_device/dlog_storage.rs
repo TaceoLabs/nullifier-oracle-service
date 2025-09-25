@@ -67,7 +67,7 @@ impl RpMaterialStore {
         self.0
             .read()
             .get(&key_identifier.rp_id)?
-            .get_share(key_identifier.key_epoch)
+            .get_share(key_identifier.share_epoch)
             .map(|share| share.0)
     }
 

@@ -1,16 +1,15 @@
-use std::{fs::File, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-use ark_ec::{AffineRepr as _, CurveGroup};
-use ark_ff::{BigInteger, PrimeField, UniformRand as _, Zero};
-use circom_types::{groth16::ZKey, traits::CheckElement};
-use k256::ecdsa::{SigningKey, signature::SignerMut as _};
-use oprf_client::{
-    Affine, BaseField, EdDSAPrivateKey, MAX_DEPTH, MAX_PUBLIC_KEYS, NullifierArgs, ScalarField,
-};
-use oprf_core::proof_input_gen::query::QueryProofInput;
+use oprf_client::{BaseField, MAX_DEPTH};
 use oprf_service::config::{Environment, OprfPeerConfig};
-use oprf_types::{MerkleEpoch, RpId, ShareEpoch, crypto::RpNullifierKey};
-use rand::{CryptoRng, Rng};
+use oprf_types::{
+    MerkleEpoch, RpId,
+    crypto::RpNullifierKey,
+    sc_mock::{
+        AddPublicKeyRequest, AddPublicKeyResponse, MerklePath, SignNonceRequest, SignNonceResponse,
+        UserPublicKey,
+    },
+};
 use smart_contract_mock::config::SmartContractMockConfig;
 
 async fn start_service(id: usize) -> String {
@@ -21,13 +20,13 @@ async fn start_service(id: usize) -> String {
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
         input_max_body_limit: 32768,
         request_lifetime: Duration::from_secs(5 * 60),
-        session_cleanup_interval: Duration::from_micros(10),
+        session_cleanup_interval: Duration::from_micros(1000000),
         max_concurrent_jobs: 100000,
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
         chain_url: "http://localhost:6789".to_string(),
-        chain_check_interval: Duration::from_millis(100),
+        chain_check_interval: Duration::from_millis(1000),
         chain_epoch_max_difference: 10,
         private_key_secret_id: format!("oprf/sk/n{id}"),
         dlog_share_secret_id_suffix: format!("oprf/share/n{id}"),
@@ -117,86 +116,47 @@ pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)
     Ok((rp_id, rp_nullifier_key))
 }
 
-pub async fn nullifier_args<R: Rng + CryptoRng>(
-    rp_id: RpId,
-    rp_nullifier_key: RpNullifierKey,
-    rng: &mut R,
-) -> eyre::Result<NullifierArgs> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let degree = 1;
-    let key_epoch = ShareEpoch::default();
-    let sk = EdDSAPrivateKey::random(rng);
-    let mut rp_signing_key = SigningKey::from(k256::SecretKey::new(k256::Scalar::ONE.into())); // TODO remove
-    let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
-    let action = BaseField::rand(rng);
-    let siblings: [BaseField; MAX_DEPTH] = std::array::from_fn(|_| BaseField::rand(rng));
-    let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
-    let pk = sk.public();
-    let mut pks = [[BaseField::zero(); 2]; MAX_PUBLIC_KEYS];
-    for (i, pki) in pks.iter_mut().enumerate() {
-        if i as u64 == pk_index {
-            pki[0] = pk.pk.x;
-            pki[1] = pk.pk.y;
-        } else {
-            let sk_i = ScalarField::rand(rng);
-            let pk_i = (Affine::generator() * sk_i).into_affine();
-            pki[0] = pk_i.x;
-            pki[1] = pk_i.y;
-        }
+pub async fn register_public_key(
+    chain_url: &str,
+    public_key: UserPublicKey,
+) -> eyre::Result<(MerkleEpoch, MerklePath)> {
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{chain_url}/api/admin/register-new-public-key"))
+        .json(&AddPublicKeyRequest { public_key })
+        .send()
+        .await
+        .expect("smart contract is online");
+    if res.status().is_success() {
+        let res = res
+            .json::<AddPublicKeyResponse>()
+            .await
+            .expect("can get merkle path");
+        Ok((res.epoch, res.path))
+    } else {
+        eyre::bail!("returned error: {:?}", res.text().await?);
     }
-    let merkle_root = QueryProofInput::merkle_root_from_pks(&pks, &siblings, mt_index);
-    let signal_hash = BaseField::rand(rng);
-    let merkle_epoch = MerkleEpoch::default();
-    let nonce = BaseField::rand(rng);
-    let signature = rp_signing_key.sign(&nonce.into_bigint().to_bytes_le());
-    let id_commitment_r = BaseField::rand(rng);
-    let query_zkey = ZKey::from_reader(
-        File::open(dir.join("../circom/main/OPRFQueryProof.zkey")).expect("can open"),
-        CheckElement::No,
-    )
-    .expect("valid zkey");
-    let (query_matrices, query_pk) = query_zkey.into();
-    let nullifier_zkey = ZKey::from_reader(
-        File::open(dir.join("../circom/main/OPRFNullifierProof.zkey")).expect("can open"),
-        CheckElement::No,
-    )
-    .expect("valid zkey");
-    let (nullifier_matrices, nullifier_pk) = nullifier_zkey.into();
-    let cred_type_id = BaseField::rand(rng);
-    let cred_sk = EdDSAPrivateKey::random(rng);
-    let cred_pk = cred_sk.public();
-    let cred_hashes = [BaseField::rand(rng), BaseField::rand(rng)]; // In practice, these are 2 hashes
-    let genesis_issued_at = BaseField::from(rng.r#gen::<u64>());
-    let expired_at_u64 = rng.gen_range(1..=u64::MAX);
-    let current_time_stamp = BaseField::from(rng.gen_range(0..expired_at_u64));
-    let expired_at = BaseField::from(expired_at_u64);
-    Ok(NullifierArgs {
-        rp_nullifier_key: rp_nullifier_key.inner(),
-        key_epoch,
-        sk,
-        pks,
-        pk_index,
-        merkle_root,
-        mt_index,
-        siblings,
-        rp_id,
-        action,
-        signal_hash,
-        merkle_epoch,
-        nonce,
-        signature,
-        id_commitment_r,
-        degree,
-        query_pk: Arc::new(query_pk),
-        query_matrices: Arc::new(query_matrices),
-        nullifier_pk: Arc::new(nullifier_pk),
-        nullifier_matrices: Arc::new(nullifier_matrices),
-        cred_type_id,
-        cred_pk,
-        cred_sk,
-        cred_hashes,
-        genesis_issued_at,
-        expired_at,
-        current_time_stamp,
-    })
+}
+
+pub async fn sign_nonce(
+    chain_url: &str,
+    rp_id: RpId,
+    nonce: BaseField,
+) -> eyre::Result<k256::ecdsa::Signature> {
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{chain_url}/api/rp/sign"))
+        .json(&SignNonceRequest { rp_id, nonce })
+        .send()
+        .await
+        .expect("smart contract is online");
+    if res.status().is_success() {
+        let res = res
+            .json::<SignNonceResponse>()
+            .await
+            .expect("can get merkle path");
+        Ok(res.signature)
+    } else {
+        eyre::bail!("returned error: {:?}", res.text().await?);
+    }
 }

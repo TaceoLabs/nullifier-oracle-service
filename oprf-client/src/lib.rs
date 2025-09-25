@@ -15,6 +15,7 @@ use oprf_core::{
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
+use oprf_types::crypto::PartyId;
 use oprf_types::{MerkleEpoch, RpId, ShareEpoch};
 use rand::seq::IteratorRandom as _;
 use rand::{CryptoRng, Rng};
@@ -62,7 +63,7 @@ pub enum Error {
 // TODO docs for fields
 pub struct NullifierArgs {
     pub rp_nullifier_key: Affine,
-    pub key_epoch: ShareEpoch,
+    pub share_epoch: ShareEpoch,
     pub sk: EdDSAPrivateKey,
     pub pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
     pub pk_index: u64,
@@ -98,7 +99,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 ) -> Result<(Groth16Proof, BaseField)> {
     let NullifierArgs {
         rp_nullifier_key,
-        key_epoch,
+        share_epoch,
         sk,
         pks,
         pk_index,
@@ -160,7 +161,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         request_id,
         proof,
         point_b: blinded_query,
-        rp_identifier: NullifierShareIdentifier { rp_id, key_epoch },
+        rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
         merkle_epoch,
         action,
         nonce,
@@ -169,7 +170,8 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         current_time_stamp,
     };
     let responses = oprf_request(oprf_services, &req).await;
-    let (parties, responses) = choose_party_responses(responses, degree, rng)?;
+    let (parties, selected_oprf_services, responses) =
+        choose_party_responses(responses, degree, rng)?;
     let lagrange = shamir::lagrange_from_coeff(&parties);
     let commitments = responses
         .into_iter()
@@ -189,12 +191,8 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let req = ChallengeRequest {
         request_id,
         challenge: challenge.clone(),
-        rp_identifier: NullifierShareIdentifier { rp_id, key_epoch },
+        rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
     };
-    let selected_oprf_services = parties
-        .iter()
-        .map(|id| oprf_services[id - 1].clone())
-        .collect::<Vec<String>>();
     let responses = challenge_request(&selected_oprf_services, &req).await?;
     let dlog_proof_shares = responses
         .into_iter()
@@ -235,12 +233,15 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     Ok((proof, nullifier_input.nullifier))
 }
 
-async fn oprf_request(oprf_services: &[String], req: &OprfRequest) -> Vec<(usize, OprfResponse)> {
+async fn oprf_request(
+    oprf_services: &[String],
+    req: &OprfRequest,
+) -> Vec<(PartyId, String, OprfResponse)> {
     // TODO maybe create client in caller and reuse for both requests
     let client = reqwest::Client::new();
     // TODO FuturesOrdered
     let mut responses = Vec::with_capacity(oprf_services.len());
-    for (id, url) in oprf_services.iter().enumerate() {
+    for url in oprf_services.iter() {
         let res = client
             .post(format!("{url}/api/v1/init"))
             .json(req)
@@ -252,7 +253,7 @@ async fn oprf_request(oprf_services: &[String], req: &OprfRequest) -> Vec<(usize
                     match res.json::<OprfResponse>().await {
                         Ok(res) => {
                             if res.request_id == req.request_id {
-                                responses.push((id, res));
+                                responses.push((res.party_id, url.clone(), res));
                             } else {
                                 tracing::warn!(
                                     "service return response for invalid request_id {}",
@@ -297,10 +298,10 @@ async fn challenge_request(
 }
 
 fn choose_party_responses<R: Rng + CryptoRng>(
-    responses: Vec<(usize, OprfResponse)>,
+    responses: Vec<(PartyId, String, OprfResponse)>,
     degree: usize,
     rng: &mut R,
-) -> Result<(Vec<usize>, Vec<OprfResponse>)> {
+) -> Result<(Vec<usize>, Vec<String>, Vec<OprfResponse>)> {
     let chosen_responses = responses.into_iter().choose_multiple(rng, degree + 1);
     let num_responses = chosen_responses.len();
     if num_responses != degree + 1 {
@@ -311,14 +312,18 @@ fn choose_party_responses<R: Rng + CryptoRng>(
     }
     let parties = chosen_responses
         .iter()
-        .map(|(id, _)| id + 1)
+        .map(|(id, _, _)| (u16::from(*id) + 1) as usize)
         .collect::<Vec<usize>>();
+    let services = chosen_responses
+        .iter()
+        .map(|(_, url, _)| url.clone())
+        .collect::<Vec<String>>();
     let chosen_responses = chosen_responses
         .into_iter()
-        .map(|(_, res)| res)
+        .map(|(_, _, res)| res)
         .collect::<Vec<OprfResponse>>();
     tracing::debug!("randomly selected parties: {parties:?}");
-    Ok((parties, chosen_responses))
+    Ok((parties, services, chosen_responses))
 }
 
 fn parse(value: serde_json::Value) -> Vec<U256> {
