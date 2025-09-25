@@ -45,7 +45,7 @@ struct RpNullifierGenState {
 
 impl RpNullifierGenService {
     pub(crate) fn init(config: Arc<SmartContractMockConfig>, rp_registry: RpRegistry) -> Self {
-        let init_size = config.init_registry_size;
+        let init_size = config.init_rp_registry;
         tracing::info!("Spawning {init_size} KeyGen requests");
         let registry = Self {
             config,

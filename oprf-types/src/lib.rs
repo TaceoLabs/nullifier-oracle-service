@@ -152,6 +152,12 @@ impl From<u128> for MerkleEpoch {
     }
 }
 
+impl From<u64> for MerkleEpoch {
+    fn from(value: u64) -> Self {
+        Self(u128::from(value))
+    }
+}
+
 impl From<ark_babyjubjub::Fq> for MerkleRoot {
     fn from(value: ark_babyjubjub::Fq) -> Self {
         Self(value)

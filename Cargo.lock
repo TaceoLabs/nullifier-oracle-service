@@ -3444,6 +3444,7 @@ dependencies = [
  "ark-serde-compat",
  "k256",
  "oprf-core",
+ "rand 0.8.5",
  "serde",
  "uuid",
 ]

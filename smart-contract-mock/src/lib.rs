@@ -19,7 +19,6 @@ use crate::{
 
 mod api;
 pub mod config;
-mod merkle;
 mod services;
 
 #[derive(Clone)]
@@ -80,8 +79,8 @@ pub async fn start(
         .context("while loading public keys from AWS")?;
 
     tracing::info!(
-        "creating merkle tree with {} random nodes (this may take some time)",
-        config.init_registry_size
+        "creating merkle registry with depth: {}",
+        config.merkle_depth
     );
     let pk_registry = MerkleRootRegistry::with_random_elements(
         Arc::clone(&config),
