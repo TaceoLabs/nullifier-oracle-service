@@ -119,6 +119,7 @@ pub async fn start(
         .context("while binding tcp listener")?;
     let router = Router::new()
         .nest("/api/", api::build())
+        .merge(api::health::routes())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state);
     tracing::info!(

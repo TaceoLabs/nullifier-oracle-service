@@ -16,13 +16,13 @@
 //! such as Axum.
 
 #[cfg(feature = "mock-chain-watcher")]
-mod http_mock;
+pub(crate) mod http_mock;
+#[cfg(test)]
+pub(crate) mod test;
 
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-#[cfg(feature = "mock-chain-watcher")]
-pub(crate) use http_mock::init;
 use oprf_types::{
     MerkleEpoch, MerkleRoot,
     chain::{ChainEvent, ChainEventResult},

@@ -12,7 +12,6 @@ readme.workspace = true
 
 [features]
 default = ["mock-chain-watcher"]
-file-secret-manager = []
 mock-chain-watcher = ["oprf-types/mock-chain-watcher", "tokio-tungstenite", "futures"]
 
 [dependencies]

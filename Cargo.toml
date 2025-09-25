@@ -63,20 +63,21 @@ oprf-service = { path = "oprf-service" }
 oprf-types = { path = "oprf-types" }
 parking_lot = "0.12.4"
 poseidon2 = { path = "poseidon2" }
-rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
+rand = { version = "0.8" }
 reqwest = { version = "0.12" }
 rustls = "0.23.31"
-serde = { version = "1" }
 serde_json = { version = "1" }
+serde = { version = "1" }
+smart-contract-mock = { path = "smart-contract-mock" }
 tempfile = "3.22.0"
 thiserror = { version = "2" }
-tokio = { version = "1.47" }
 tokio-tungstenite = "0.27.0"
 tokio-util = "0.7.16"
+tokio = { version = "1.47" }
 tower-http = "0.6.6"
-tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
+tracing = { version = "0.1" }
 uuid = { version = "1.18.0" }
 witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", branch = "dev" }
 zeroize = "1"

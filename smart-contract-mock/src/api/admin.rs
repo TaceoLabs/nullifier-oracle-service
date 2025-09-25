@@ -8,5 +8,5 @@ async fn register_new_rp(State(rp_key_gen): State<RpNullifierGenService>) -> Jso
 }
 
 pub(crate) fn router() -> Router<AppState> {
-    Router::new().route("/", post(register_new_rp))
+    Router::new().route("/register-new-rp", post(register_new_rp))
 }

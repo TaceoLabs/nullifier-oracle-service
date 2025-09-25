@@ -17,6 +17,7 @@ mock-chain-watcher = ["rand"]
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-serde-compat = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 rand = { workspace = true, optional = true}

@@ -29,8 +29,11 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     config::OprfPeerConfig,
     services::{
-        crypto_device::CryptoDevice, event_handler::ChainEventHandler, oprf::OprfService,
-        secret_manager,
+        chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
+        crypto_device::CryptoDevice,
+        event_handler::ChainEventHandler,
+        oprf::OprfService,
+        secret_manager::aws::AwsSecretManager,
     },
 };
 
@@ -96,10 +99,7 @@ pub async fn start(
 
     // Load the secret manager. For now we only support AWS.
     // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
-    #[cfg(feature = "file-secret-manager")]
-    let secret_manager = secret_manager::local::init(&config)?;
-    #[cfg(not(feature = "file-secret-manager"))]
-    let secret_manager = secret_manager::aws::init(Arc::clone(&config)).await;
+    let secret_manager = Arc::new(AwsSecretManager::init(Arc::clone(&config)).await);
 
     // TODO load all RP_ids from SC
 
@@ -114,13 +114,15 @@ pub async fn start(
 
     tracing::info!("spawn chain watcher..");
     // spawn the chain watcher
-    let chain_watcher = services::chain_watcher::init(
-        Arc::clone(&config),
-        &crypto_device,
-        cancellation_token.clone(),
-    )
-    .await
-    .context("while starting chain watcher")?;
+    let chain_watcher: ChainWatcherService = Arc::new(
+        HttpMockWatcher::init(
+            Arc::clone(&config),
+            Arc::clone(&crypto_device),
+            cancellation_token.clone(),
+        )
+        .await
+        .context("while starting chain watcher")?,
+    );
 
     tracing::info!("loading party id..");
     // load our party id
@@ -144,7 +146,7 @@ pub async fn start(
     let event_handler = ChainEventHandler::spawn(
         config.chain_check_interval,
         party_id,
-        chain_watcher.clone(),
+        Arc::clone(&chain_watcher),
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
     );
@@ -239,15 +241,28 @@ pub async fn default_shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, time::Duration};
+    use std::str::FromStr;
+    use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
+    use ark_ff::UniformRand;
+    use ark_serde_compat::groth16::Groth16VerificationKey;
     use axum_test::TestServer;
+    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, sc_mock::MerkleRootUpdate};
 
-    use crate::config::Environment;
+    use crate::services::crypto_device::dlog_storage::RpMaterial;
+    use crate::{
+        config::Environment,
+        services::{
+            chain_watcher::test::TestWatcher,
+            crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
+            secret_manager::test::TestSecretManager,
+        },
+    };
 
     use super::*;
 
     async fn test_server() -> eyre::Result<TestServer> {
+        let mut rng = rand::thread_rng();
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let config = OprfPeerConfig {
             environment: Environment::Dev,
@@ -266,94 +281,104 @@ mod tests {
             dlog_share_secret_id_suffix: "oprf/shares/".to_string(),
             max_merkle_store_size: 10,
         };
-        let _config = Arc::new(config);
-        todo!()
-        // let secret_manager = secret_manager::local::init()?;
-        // let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
-        // let vk = File::open(&config.user_verification_key_path)?;
-        // let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
-        // let oprf_service = OprfService::init(Arc::clone(&config), crypto_device, vk.into());
-
-        // let chain_watcher = crate::services::chain_watcher::init(
-        //     Arc::clone(&config),
-        //     Arc::clone(&crypto_device),
-        //     CancellationToken::new(),
-        // );
-        // let server = api::new_test_app(config, oprf_service, chain_watcher);
-        // Ok(server)
+        let config = Arc::new(config);
+        let secret_manager = Arc::new(TestSecretManager::new(
+            PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng)),
+            HashMap::from([(
+                RpId::new(0),
+                RpMaterial::new(
+                    HashMap::from([(
+                        ShareEpoch::default(),
+                        DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
+                    )]),
+                    k256::SecretKey::new(k256::Scalar::ONE.into())
+                        .public_key()
+                        .into(),
+                ),
+            )]),
+        ));
+        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+        let chain_watcher = Arc::new(TestWatcher::new(
+            vec![MerkleRootUpdate {
+                hash: MerkleRoot::new(ark_babyjubjub::Fq::from_str(
+                    "12184867385685695781627163047456512405047415901037550089919079425163309680784",
+                ).expect("can deserialize")),
+                epoch: MerkleEpoch::new(0),
+            }],
+            Arc::clone(&config),
+        )?);
+        let vk = File::open(&config.user_verification_key_path)?;
+        let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+        let oprf_service =
+            OprfService::init(Arc::clone(&config), crypto_device, chain_watcher, vk.into());
+        let server = api::new_test_app(config, PartyId::from(0), oprf_service);
+        Ok(server)
     }
 
     fn init_req() -> serde_json::Value {
         serde_json::json!({
-            "request_id": "e70268aa-fa9a-4e9e-b76c-c41fff40f6f4",
-            "proof": {
-              "pi_a": [
-                "6349570088365552239612347468351610627195030363513293827443377303359660823669",
-                "6753883411263494317944303627097592155325952374143787573092555378760696609897",
-                "1"
-              ],
-              "pi_b": [
-                [
-                  "1029525447704954470968997867751954950530344967964073379148935357546227680429",
-                  "871118679697810306823762821446145694919635208444599225201223171537142303434"
-                ],
-                [
-                  "17386501546121704623661895573517623371232645240102206072482573194074052902929",
-                  "9162154086687477089722341440812693001637734641073250904213144361349375807542"
-                ],
-                [
-                  "1",
-                  "0"
-                ]
-              ],
-              "pi_c": [
-                "4290638307091560008359938510617691693837093003791342827618304777208210686605",
-                "11122274897539367157049285256126542704142033744794859131294844414789776803491",
-                "1"
-              ]
-            },
-            "point_b": [
-              "18237229852531934280679321339995874890383597479740627110845247919555047357510",
-              "3668425390394053707146876594874500621838710739979860432809555286424756824931"
+          "request_id": "598bbf10-5c8c-484d-a6a8-797df2f6adad",
+          "proof": {
+            "pi_a": [
+              "14950137340857000683222569762333765310473881853005116566045546314594839239598",
+              "11775569493808639561638425283898899249711410214638629000366143416753426284589",
+              "1"
             ],
-            "rp_key_id": {
-              "rp_id": 0,
-              "key_epoch": 0
-            },
-            "merkle_epoch": 0,
-            "merkle_root": "18113525670981476624162220635029909626458587036860423708002025726733198978273",
-            "action": "4780594342984269312659834610742751871778649094924684591207098796086938056455",
-            "nonce": "16526427576321170906618500040054521043441986479477002208590768728741775635002",
-            "signature": {
-              "r": [
-                "1051127582116816098464922787683501458236668706209853015557519330864147549639",
-                "16375937591535146361037884689273654078836000169295135357191197962801711293702"
+            "pi_b": [
+              [
+                "2785514216536277469827906089473581593816545804542544051984432397533886084626",
+                "17930103312496396226353435195950919235360268218173249660508137011847990329751"
               ],
-              "s": "2367218161840642687877915404264974575293885020472239903684633479580936117917"
-            },
-            "rp_pk": {
-              "pk": [
-                "10265072520302061766783430308667681143731174197023564349371614639508988107811",
-                "9343021272028152424050964465457090846274804108161787027537058016585155190409"
+              [
+                "2363689777289495504064683516501778916746070898103709476778676066463296842685",
+                "6941075786901911120599789621029487052766435115468727654164762473724024343868"
+              ],
+              [
+                "1",
+                "0"
               ]
-            }
+            ],
+            "pi_c": [
+              "14917417826074216436678528082272805526100515653647889683876810571053982674852",
+              "18095770844934730928017558660041137777286354566190867165301998237933752732866",
+              "1"
+            ]
+          },
+          "point_b": [
+            "17545216781400172894265373183007675673600726709015686814609433516294328685361",
+            "4537764014265182053143850536234521610551807474914555869615963094641400823793"
+          ],
+          "rp_identifier": {
+            "rp_id": 0,
+            "key_epoch": 0
+          },
+          "merkle_epoch": 0,
+          "action": "1120809321026975175757466560999318768049435153540642913185613570219065846805",
+          "nonce": "11995758882934032369948628586537618022736362526028373754122425120894302910697",
+          "signature": "246F7FB4040A520C17D4358883A5103FA43483EA12C8039BADE1CFBF2CAAF2FE56DE7C9B833EE0F52C3E9F99C50D3E328B25211B146AB5F28B9055329A323FE3",
+          "cred_pk": {
+            "pk": [
+              "20250441087630822051897171877168864569957088175290736110746783269969005217521",
+              "2413711181075542609538861548035891129041376599307510529757411775315152595154"
+            ]
+          },
+          "current_time_stamp": "650588418409228923"
         })
     }
 
     fn finish_req() -> serde_json::Value {
         serde_json::json!({
-            "request_id": "e70268aa-fa9a-4e9e-b76c-c41fff40f6f4",
+            "request_id": "598bbf10-5c8c-484d-a6a8-797df2f6adad",
             "challenge": {
               "e": "16620368534569496780871678850089758319969215860113286164642302138248101420004"
             },
-            "rp_key_id": {
+            "rp_identifier": {
               "rp_id": 0,
               "key_epoch": 0
             }
         })
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_init() -> eyre::Result<()> {
         let server = test_server().await?;
@@ -366,7 +391,6 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_init_bad_proof() -> eyre::Result<()> {
         let server = test_server().await?;
@@ -382,23 +406,23 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_init_bad_signature() -> eyre::Result<()> {
         let server = test_server().await?;
         let mut req = init_req();
-        req["signature"]["s"] = serde_json::json!("1234");
+        req["signature"] = serde_json::json!(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
         let res = server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
             .await;
-        res.assert_text("failed to verify nonce signature");
+        res.assert_text("Invalid signature: signature error");
         res.assert_status_bad_request();
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_init_invalid_point() -> eyre::Result<()> {
         let server = test_server().await?;
@@ -413,7 +437,6 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_finish() -> eyre::Result<()> {
         let server = test_server().await?;
@@ -432,7 +455,6 @@ mod tests {
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_finish_without_init() -> eyre::Result<()> {
         let server = test_server().await?;

@@ -237,4 +237,4 @@ template OprfQuery(MAX_DEPTH) {
     signal nonce_squared <== nonce * nonce;
 }
 
-// component main {public [cred_pk, current_time_stamp, merkle_root, depth, depth, rp_id, action, nonce]} = OprfQuery(30);
+// component main {public [cred_pk, current_time_stamp, merkle_root, depth, rp_id, action, nonce]} = OprfQuery(30);
