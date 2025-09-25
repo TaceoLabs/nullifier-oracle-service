@@ -16,6 +16,7 @@ ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
+ark-serialize = { workspace = true }
 circom-types.workspace = true
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 eddsa-babyjubjub = { workspace = true }
@@ -28,7 +29,14 @@ rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tokio = { workspace = true, optional = true, features = [
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+    "macros",
+] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
