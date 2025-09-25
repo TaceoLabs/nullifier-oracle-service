@@ -15,7 +15,6 @@
 //! # Modules
 //! - `config`: Configuration via environment variables or CLI.
 //! - `metrics`: Metrics keys and helpers.
-//! - `telemetry`: Logging and tracing initialization.
 //! - `services`: Core services like OPRF evaluation, chain watcher, and secret management.
 //! - `api`: REST API routes.
 use std::{fs::File, sync::Arc};
@@ -39,7 +38,6 @@ pub(crate) mod api;
 pub mod config;
 pub mod metrics;
 pub(crate) mod services;
-pub mod telemetry;
 
 /// Main application state for the OPRF-Peer used for Axum.
 ///

@@ -21,6 +21,7 @@ eyre = { workspace = true }
 git-version = { workspace = true }
 humantime = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
+nodes-telemetry = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 poseidon2 = { workspace = true }

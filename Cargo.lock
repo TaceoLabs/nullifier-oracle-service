@@ -3075,6 +3075,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nodes-telemetry"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/nodes-telemetry.git?rev=06f4f13#06f4f139292ef56852ee7d04b58da8f0688aee87"
+dependencies = [
+ "eyre",
+ "humantime",
+ "metrics",
+ "metrics-exporter-dogstatsd",
+ "metrics-exporter-prometheus 0.17.2",
+ "metrics-exporter-statsd",
+ "secrecy",
+ "telemetry-batteries",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3394,19 +3411,15 @@ dependencies = [
  "humantime",
  "k256",
  "metrics",
- "metrics-exporter-dogstatsd",
- "metrics-exporter-prometheus 0.17.2",
- "metrics-exporter-statsd",
+ "nodes-telemetry",
  "oprf-core",
  "oprf-types",
  "parking_lot",
  "rand 0.8.5",
  "reqwest",
  "rustls 0.23.32",
- "secrecy",
  "serde",
  "serde_json",
- "telemetry-batteries",
  "thiserror 2.0.16",
  "tokio",
  "tokio-tungstenite 0.27.0",
@@ -4570,6 +4583,7 @@ dependencies = [
  "git-version",
  "humantime",
  "k256",
+ "nodes-telemetry",
  "oprf-types",
  "parking_lot",
  "poseidon2",

@@ -3,28 +3,10 @@ use git_version::git_version;
 use smart_contract_mock::config::SmartContractMockConfig;
 use tokio::signal;
 
-fn install_tracing() {
-    use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{
-        EnvFilter,
-        fmt::{self},
-    };
-
-    let fmt_layer = fmt::layer().with_target(false).with_line_number(false);
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("smart_contract_mock=trace,warn"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
-}
-
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    // TODO setup DD logging - put this in a common crate
-    install_tracing();
+    let tracing_config = nodes_telemetry::TracingConfig::try_from_env()?;
+    let _tracing_handle = nodes_telemetry::initialize_tracing(&tracing_config)?;
     tracing::info!(
         "{} {} ({})",
         env!("CARGO_PKG_NAME"),
