@@ -42,3 +42,9 @@ run-services:
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
     wait $pid0 $pid1 $pid2
+
+build-push-docker-image-oprf-service-amd TAG:
+  docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{TAG}}-amd64 -f build/Dockerfile.oprf-service .
+
+build-push-docker-image-key-gen-amd TAG:
+  docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{TAG}}-amd64 -f build/Dockerfile.key-gen .

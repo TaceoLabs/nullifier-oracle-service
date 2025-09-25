@@ -1,0 +1,17 @@
+name: Build and Push (oprf-service)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'oprf-service-v*'
+
+jobs:
+  workflow:
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      image-name: oprf-service
+      dockerfile: build/Dockerfile.oprf-service
+
