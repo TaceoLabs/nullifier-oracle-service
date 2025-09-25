@@ -48,6 +48,18 @@ pub fn serialize_babyjubjub_affine<S: Serializer>(
     x_seq.end()
 }
 
+pub fn serialize_babyjubjub_affine_sequence<S: Serializer>(
+    ps: &[ark_babyjubjub::EdwardsAffine],
+    ser: S,
+) -> Result<S::Ok, S::Error> {
+    let mut seq = ser.serialize_seq(Some(ps.len()))?;
+    for p in ps {
+        let (x, y) = (p.x, p.y);
+        seq.serialize_element(&[x.to_string(), y.to_string()])?;
+    }
+    seq.end()
+}
+
 pub fn serialize_babyjubjub_scalar<S: Serializer>(
     p: &ark_babyjubjub::Fr,
     ser: S,
@@ -130,6 +142,15 @@ where
     D: de::Deserializer<'de>,
 {
     deserializer.deserialize_seq(BabyJubJubAffineVisitor)
+}
+
+pub fn deserialize_babyjubjub_affine_sequence<'de, D>(
+    deserializer: D,
+) -> Result<Vec<ark_babyjubjub::EdwardsAffine>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    deserializer.deserialize_seq(BabyJubJubAffineSeqVisitor)
 }
 
 pub fn deserialize_babyjubjub_scalar<'de, D>(
@@ -516,6 +537,36 @@ impl<'de> de::Visitor<'de> for BabyJubJubBaseSeqVisitor {
             values.push(
                 ark_babyjubjub::Fq::from_str(&v).map_err(|_| de::Error::custom("Invalid data"))?,
             );
+        }
+        Ok(values)
+    }
+}
+
+struct BabyJubJubAffineSeqVisitor;
+
+impl<'de> de::Visitor<'de> for BabyJubJubAffineSeqVisitor {
+    type Value = Vec<ark_babyjubjub::EdwardsAffine>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a sequence of elements representing babyjubjub affine points.")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut values = vec![];
+        while let Some(point) = seq.next_element::<Vec<String>>()? {
+            //check if there are no more elements
+            if point.len() != 2 {
+                return Err(de::Error::invalid_length(point.len(), &self));
+            } else {
+                values.push(
+                    babyjubjub_affine_from_strings(&point[0], &point[1]).map_err(|_| {
+                        de::Error::custom("Invalid affine point on babyjubjub.".to_owned())
+                    })?,
+                );
+            }
         }
         Ok(values)
     }

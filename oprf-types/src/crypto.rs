@@ -207,3 +207,9 @@ impl From<u16> for PartyId {
         Self(value)
     }
 }
+
+impl From<PartyId> for u16 {
+    fn from(value: PartyId) -> Self {
+        value.0
+    }
+}

@@ -32,15 +32,15 @@ pub(crate) enum RpNullifierGenServiceError {
 #[derive(Clone)]
 pub(crate) struct RpNullifierGenService {
     config: Arc<SmartContractMockConfig>,
-    running_key_gens: Arc<Mutex<HashMap<RpId, RpNullifierGenState>>>,
+    pub(crate) running_key_gens: Arc<Mutex<HashMap<RpId, RpNullifierGenState>>>,
     rp_registry: RpRegistry,
 }
 
-struct RpNullifierGenState {
+pub(crate) struct RpNullifierGenState {
     round1: BTreeMap<PartyId, RpSecretGenCommitment>,
     round2: BTreeMap<PartyId, RpSecretGenCiphertexts>,
     done: HashSet<PartyId>,
-    rp_signing_key: k256::SecretKey,
+    pub(crate) rp_signing_key: k256::SecretKey,
 }
 
 impl RpNullifierGenService {

@@ -1,9 +1,16 @@
+use ark_ff::{BigInteger as _, PrimeField as _};
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    routing::get,
+    routing::{get, post},
 };
-use oprf_types::{RpId, chain::ChainEvent, crypto::RpNullifierKey, sc_mock::ReadEventsRequest};
+use k256::ecdsa::{SigningKey, signature::SignerMut as _};
+use oprf_types::{
+    RpId,
+    chain::ChainEvent,
+    crypto::RpNullifierKey,
+    sc_mock::{ReadEventsRequest, SignNonceRequest, SignNonceResponse},
+};
 use tracing::instrument;
 
 use crate::{
@@ -36,9 +43,28 @@ async fn list_rps(State(rp_registry): State<RpRegistry>) -> ApiResult<Json<Vec<R
     Ok(Json(rp_registry.list_public_keys()))
 }
 
+#[instrument(level = "debug", skip_all)]
+async fn sign_nonce(
+    State(key_gen_service): State<RpNullifierGenService>,
+    Json(req): Json<SignNonceRequest>,
+) -> ApiResult<Json<SignNonceResponse>> {
+    let mut rp_signing_key = SigningKey::from(
+        key_gen_service
+            .running_key_gens
+            .lock()
+            .get(&req.rp_id)
+            .ok_or_else(|| ApiErrors::NotFound(format!("unknown rp_id: {}", req.rp_id)))?
+            .rp_signing_key
+            .clone(),
+    );
+    let signature = rp_signing_key.sign(&req.nonce.into_bigint().to_bytes_le());
+    Ok(Json(SignNonceResponse { signature }))
+}
+
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/{rp_id}", get(read_pk))
         .route("/list", get(list_rps))
         .route("/event", get(read_events))
+        .route("/sign", post(sign_nonce))
 }

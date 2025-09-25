@@ -58,7 +58,7 @@ pub struct NullifierShareIdentifier {
     /// ID of the relying party.
     pub rp_id: RpId,
     /// Epoch of the key.
-    pub key_epoch: ShareEpoch,
+    pub share_epoch: ShareEpoch,
 }
 
 /// Server response to an [`OprfRequest`].

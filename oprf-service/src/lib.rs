@@ -350,7 +350,7 @@ mod tests {
           ],
           "rp_identifier": {
             "rp_id": 0,
-            "key_epoch": 0
+            "share_epoch": 0
           },
           "merkle_epoch": 0,
           "action": "1120809321026975175757466560999318768049435153540642913185613570219065846805",
@@ -374,7 +374,7 @@ mod tests {
             },
             "rp_identifier": {
               "rp_id": 0,
-              "key_epoch": 0
+              "share_epoch": 0
             }
         })
     }
