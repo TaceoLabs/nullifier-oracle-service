@@ -40,6 +40,7 @@ aws-config = "1.8.6"
 aws-sdk-secretsmanager = "1.88.0"
 axum = "0.8.4"
 axum-test = "18.1.0"
+base64ct = "1.7.3"
 blake3 = "1.8"
 circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
 clap = "4.5.48"

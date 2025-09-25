@@ -6,26 +6,41 @@
 
 use std::array;
 
+use eddsa_babyjubjub::EdDSAPublicKey;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     MerkleEpoch, MerkleRoot, RpId,
     chain::{ChainEvent, SecretGenFinalizeEvent, SecretGenRound1Event, SecretGenRound2Event},
-    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext},
+    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
 };
-
-/// The public key of an end-user.
-///
-/// Stored in the Merkle-Tree at the Smart Contract.
-#[derive(Clone)]
-pub struct UserPublicKey(pub [ark_babyjubjub::EdwardsAffine; 7]);
 
 impl UserPublicKey {
     /// Generates a random `UserPublicKey` with the provided source of randomness.
     pub fn random<R: Rng>(r: &mut R) -> Self {
         Self(array::from_fn(|_| r.r#gen()))
     }
+
+    /// Generates a random `UserPublicKey`, but sets element at position
+    /// 0 the provided `EdDSAPublicKey`.
+    pub fn with_eddsa_pk<R: Rng>(pk: EdDSAPublicKey, r: &mut R) -> Self {
+        let mut inner = array::from_fn(|_| r.r#gen());
+        inner[0] = pk.pk;
+        Self(inner)
+    }
+}
+
+/// The keys associated with an RP.
+///
+/// Nullifier public key generated in secret-gen and a signing key to
+/// sign nonces
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpKeys {
+    /// The nullifier public key
+    pub nullifier: RpNullifierKey,
+    /// The signing key used to sign nonces encoded as b64
+    pub sk: String,
 }
 
 /// A MerklePath produced by the Smart Contract Mock.

@@ -45,6 +45,12 @@ pub struct RpNullifierKey(
     ark_babyjubjub::EdwardsAffine,
 );
 
+/// The public key batch of end-users.
+///
+/// Stored in the Merkle-Tree at the Smart Contract.
+#[derive(Clone)]
+pub struct UserPublicKeyBatch([ark_babyjubjub::EdwardsAffine; 7]);
+
 /// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`PeerPublicKey`] of the peer that created this contribution,
@@ -92,6 +98,12 @@ pub struct RpSecretGenCiphertext {
     pub cipher: ark_babyjubjub::Fq,
 }
 
+impl From<[ark_babyjubjub::EdwardsAffine; 7]> for UserPublicKeyBatch {
+    fn from(value: [ark_babyjubjub::EdwardsAffine; 7]) -> Self {
+        Self(value)
+    }
+}
+
 impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {
     fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
         Self(value)
@@ -101,6 +113,16 @@ impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {
 impl From<ark_babyjubjub::EdwardsAffine> for PeerPublicKey {
     fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
         Self(value)
+    }
+}
+
+impl UserPublicKeyBatch {
+    pub fn flatten(self) -> [ark_babyjubjub::Fq; 14] {
+        for p in self.0 {
+            let x = p.x;
+            let y = p.y;
+        }
+        todo!()
     }
 }
 

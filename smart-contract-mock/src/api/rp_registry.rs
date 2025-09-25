@@ -3,7 +3,11 @@ use axum::{
     extract::{Path, Query, State},
     routing::get,
 };
-use oprf_types::{RpId, chain::ChainEvent, crypto::RpNullifierKey, sc_mock::ReadEventsRequest};
+use oprf_types::{
+    RpId,
+    chain::ChainEvent,
+    sc_mock::{ReadEventsRequest, RpKeys},
+};
 use tracing::instrument;
 
 use crate::{
@@ -15,7 +19,7 @@ use crate::{
 async fn read_pk(
     State(registry): State<RpRegistry>,
     Path(rp_id): Path<RpId>,
-) -> ApiResult<Json<RpNullifierKey>> {
+) -> ApiResult<Json<RpKeys>> {
     let key = registry
         .get_public_key(rp_id)
         .ok_or_else(|| ApiErrors::NotFound(format!("unknown rp_id: {rp_id}")))?;

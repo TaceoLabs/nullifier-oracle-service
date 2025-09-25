@@ -5,12 +5,14 @@ use std::{
 };
 
 use ark_ec::CurveGroup;
+use base64ct::{Base64, Encoding};
 use oprf_types::{
     RpId,
     chain::ChainEvent,
     crypto::{
         PartyId, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertexts, RpSecretGenCommitment,
     },
+    sc_mock::RpKeys,
 };
 use parking_lot::Mutex;
 use tracing::instrument;
@@ -159,28 +161,17 @@ impl RpNullifierGenService {
         sender: PartyId,
         contribution: RpSecretGenCiphertexts,
     ) -> Result<(), RpNullifierGenServiceError> {
-        let public_key = {
-            let mut running_key_gens = self.running_key_gens.lock();
-            let key_gen_state = running_key_gens
-                .get_mut(&rp_id)
-                .ok_or(RpNullifierGenServiceError::UnknownRp(rp_id))?;
-            if key_gen_state.round1.len() != self.config.oprf_services {
-                return Err(RpNullifierGenServiceError::InRound1);
-            }
-            if key_gen_state.round2.contains_key(&sender) {
-                return Err(RpNullifierGenServiceError::AlreadySubmitted);
-            }
-            key_gen_state.round2.insert(sender, contribution);
-            // check if we are done
-            if key_gen_state.round2.len() == self.config.oprf_services {
-                // finish
-                key_gen_state.finish()
-            } else {
-                return Ok(());
-            }
-        };
-        self.rp_registry
-            .add_public_key(rp_id, RpNullifierKey::from(public_key));
+        let mut running_key_gens = self.running_key_gens.lock();
+        let key_gen_state = running_key_gens
+            .get_mut(&rp_id)
+            .ok_or(RpNullifierGenServiceError::UnknownRp(rp_id))?;
+        if key_gen_state.round1.len() != self.config.oprf_services {
+            return Err(RpNullifierGenServiceError::InRound1);
+        }
+        if key_gen_state.round2.contains_key(&sender) {
+            return Err(RpNullifierGenServiceError::AlreadySubmitted);
+        }
+        key_gen_state.round2.insert(sender, contribution);
         Ok(())
     }
 
@@ -190,10 +181,10 @@ impl RpNullifierGenService {
         sender: PartyId,
     ) -> Result<(), RpNullifierGenServiceError> {
         tracing::debug!("finalize for {rp_id} from {sender}");
-        let mut running_key_gens = self.running_key_gens.lock();
-        let should_remove = {
-            let key_gen_state = running_key_gens
-                .get_mut(&rp_id)
+        let (generated_key, signing_key) = {
+            let mut running_key_gens = self.running_key_gens.lock();
+            let mut key_gen_state = running_key_gens
+                .remove(&rp_id)
                 .ok_or(RpNullifierGenServiceError::UnknownRp(rp_id))?;
             // check if we are in correct round
             if key_gen_state.round1.len() != self.config.oprf_services {
@@ -204,12 +195,24 @@ impl RpNullifierGenService {
             } else {
                 key_gen_state.done.insert(sender);
                 // as soon as all are done we can remove the key gen
-                Ok(key_gen_state.done.len() == self.config.oprf_services)
+                if key_gen_state.done.len() == self.config.oprf_services {
+                    // we are done and can remove the key gen
+                    key_gen_state.finish()
+                } else {
+                    // still need to wait for peers
+                    running_key_gens.insert(rp_id, key_gen_state);
+                    return Ok(());
+                }
             }
-        }?;
-        if should_remove {
-            tracing::info!("Can remove key gen for {rp_id}!");
-        }
+        };
+
+        self.rp_registry.add_public_key(
+            rp_id,
+            RpKeys {
+                nullifier: RpNullifierKey::from(generated_key),
+                sk: Base64::encode_string(&signing_key.to_bytes()),
+            },
+        );
 
         Ok(())
     }
@@ -225,13 +228,16 @@ impl RpNullifierGenState {
         }
     }
 
-    fn finish(&self) -> ark_babyjubjub::EdwardsAffine {
+    fn finish(self) -> (ark_babyjubjub::EdwardsAffine, k256::SecretKey) {
         // According to the protocol the smart contract should check whether the commitments provided by the OPRF-Services are distinct. We skip this check as the chance of it happening accidentally is negligible and they need to provide a proof anyways.
         //
         // Compute the Public Key
-        self.round1.values().fold(
-            ark_babyjubjub::EdwardsAffine::zero(),
-            |acc, contribution| (acc + contribution.comm_share).into_affine(),
+        (
+            self.round1.values().fold(
+                ark_babyjubjub::EdwardsAffine::zero(),
+                |acc, contribution| (acc + contribution.comm_share).into_affine(),
+            ),
+            self.rp_signing_key.clone(),
         )
     }
 }

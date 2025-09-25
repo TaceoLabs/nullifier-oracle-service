@@ -16,12 +16,14 @@ ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
+base64ct = { workspace = true, features = ["alloc"], optional = true }
 circom-types.workspace = true
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
 groth16 = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
+nodes-telemetry = { workspace = true, optional = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
@@ -42,7 +44,7 @@ tempfile = { workspace = true }
 default = ["bin"]
 
 # enables the binary client example
-bin = ["dep:clap", "dep:tokio"]
+bin = ["dep:clap", "dep:tokio", "dep:nodes-telemetry", "dep:base64ct"]
 
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
