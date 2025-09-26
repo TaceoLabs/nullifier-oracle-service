@@ -65,7 +65,7 @@ jobs:
 
           tags: |
             type=sha,format=long
-            type=match,pattern=(\w){3}-(.*),group=2
+            type=match,pattern=(.*)-(v\d+\.\d+\.\d+.*),group=2
 
       - name: Build and push
         uses: docker/build-push-action@v6
