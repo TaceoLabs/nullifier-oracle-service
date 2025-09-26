@@ -82,13 +82,20 @@ impl From<OprfServiceError> for ApiErrors {
     fn from(value: OprfServiceError) -> Self {
         tracing::debug!("{value:?}");
         match value {
-            OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
-            OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
+            err @ OprfServiceError::InvalidProof => ApiErrors::BadRequest(err.to_string()),
+            err @ OprfServiceError::UnknownRequestId(_) => ApiErrors::NotFound(err.to_string()),
             OprfServiceError::CryptoDevice(crypto_device_error) => Self::from(crypto_device_error),
             OprfServiceError::ChainWatcherError(chain_watcher_error) => {
                 Self::from(chain_watcher_error)
             }
             OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
+            err @ OprfServiceError::TimeStampDifference => ApiErrors::BadRequest(err.to_string()),
+            OprfServiceError::DuplicateSignatureError(err) => {
+                ApiErrors::BadRequest(err.to_string())
+            }
+            err @ OprfServiceError::MerkleDepthGreaterThanMax(_) => {
+                ApiErrors::BadRequest(err.to_string())
+            }
         }
     }
 }
