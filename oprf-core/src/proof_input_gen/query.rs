@@ -7,7 +7,7 @@ use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 use std::array;
 use uuid::Uuid;
 
-use crate::oprf::OPrfClient;
+use crate::{credentials::UserCredentials, oprf::OPrfClient};
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
@@ -54,7 +54,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         BaseField::from_be_bytes_mod_order(Self::PK_DS)
     }
 
-    // Returns the domain separator for the hashing of the credential message as a field element
+    // Returns the domain separator for te hashing of the credential message as a field element
     fn get_cred_ds() -> BaseField {
         BaseField::from_be_bytes_mod_order(Self::CRED_DS)
     }
@@ -70,7 +70,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         credential_type_id: BaseField,
         user_id: BaseField,
         genesis_issued_at: BaseField,
-        exprires_at: BaseField,
+        expires_at: BaseField,
         hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
     ) -> BaseField {
         let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
@@ -79,7 +79,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             credential_type_id,
             user_id,
             genesis_issued_at,
-            exprires_at,
+            expires_at,
             hashes[0],
             hashes[1],
             BaseField::zero(),
@@ -179,6 +179,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     // Also returns the query, since this is used in the nullifier proof input generation
     #[expect(clippy::too_many_arguments)]
     pub fn new<R: Rng + CryptoRng>(
+        user_credentials: UserCredentials,
         request_id: Uuid,
         sk: EdDSAPrivateKey,
         pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
@@ -190,7 +191,6 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         action: BaseField,
         nonce: BaseField,
         cred_type_id: BaseField,
-        cred_sk: EdDSAPrivateKey,
         cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
         genesis_issued_at: BaseField,
         expired_at: BaseField,
@@ -201,17 +201,8 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         let pk_index_ = BaseField::from(pk_index);
         let mt_index_ = BaseField::from(mt_index);
 
-        let cred_pk = cred_sk.public();
-
-        // Credential signature
-        let cred_msg = Self::credential_message(
-            cred_type_id,
-            mt_index_,
-            genesis_issued_at,
-            expired_at,
-            cred_hashes,
-        );
-        let cred_signature = cred_sk.sign(cred_msg);
+        let cred_signature = user_credentials.sign();
+        let cred_pk = user_credentials.pk();
 
         // Calculate OPRF
         let oprf_client = OPrfClient::new(pk.pk);

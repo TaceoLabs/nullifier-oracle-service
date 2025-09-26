@@ -3,7 +3,8 @@ use std::{fs::File, path::PathBuf, sync::Arc};
 use ark_ff::UniformRand as _;
 use circom_types::{groth16::ZKey, traits::CheckElement};
 use oprf_client::{BaseField, EdDSAPrivateKey, MAX_PUBLIC_KEYS, NullifierArgs};
-use oprf_types::{ShareEpoch, sc_mock::UserPublicKey};
+use oprf_core::credentials::UserCredentials;
+use oprf_types::{ShareEpoch, crypto::UserPublicKeyBatch};
 use rand::Rng as _;
 
 fn install_tracing() {
@@ -33,7 +34,7 @@ async fn test_nullifier() -> eyre::Result<()> {
     let (rp_id, rp_nullifier_key) = oprf_test::register_rp(&chain_url).await?;
     let sk = EdDSAPrivateKey::random(&mut rng);
     let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
-    let mut public_key = UserPublicKey::random(&mut rng);
+    let mut public_key = UserPublicKeyBatch::random(&mut rng);
     public_key.values[pk_index as usize] = sk.public().pk;
     let (merkle_epoch, merkle_path) =
         oprf_test::register_public_key(&chain_url, public_key.clone()).await?;
@@ -67,6 +68,17 @@ async fn test_nullifier() -> eyre::Result<()> {
     let current_time_stamp = BaseField::from(rng.gen_range(0..expired_at_u64));
     let expired_at = BaseField::from(expired_at_u64);
     let args = NullifierArgs {
+        user_credentials: {
+            UserCredentials {
+                credential_type_id: cred_type_id,
+                user_id: merkle_path.index,
+                genesis_issued_at,
+                expires_at: expired_at,
+                claims_hash: cred_hashes[0],
+                associated_data_hash: cred_hashes[1],
+                cred_sk,
+            }
+        },
         rp_nullifier_key: rp_nullifier_key.inner(),
         share_epoch,
         sk,
@@ -95,7 +107,6 @@ async fn test_nullifier() -> eyre::Result<()> {
         nullifier_matrices: Arc::new(nullifier_matrices),
         cred_type_id,
         cred_pk,
-        cred_sk,
         cred_hashes,
         genesis_issued_at,
         expired_at,

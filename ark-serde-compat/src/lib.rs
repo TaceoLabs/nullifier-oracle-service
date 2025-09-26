@@ -150,7 +150,17 @@ pub fn deserialize_babyjubjub_affine_sequence<'de, D>(
 where
     D: de::Deserializer<'de>,
 {
-    deserializer.deserialize_seq(BabyJubJubAffineSeqVisitor)
+    deserializer.deserialize_seq(BabyJubJubAffineSeqVisitor { size: None })
+}
+
+pub fn deserialize_user_key_batch<'de, D>(
+    deserializer: D,
+) -> Result<[ark_babyjubjub::EdwardsAffine; 7], D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let seq = deserializer.deserialize_seq(BabyJubJubAffineSeqVisitor { size: Some(7) })?;
+    Ok(seq.try_into().expect("provided len 7"))
 }
 
 pub fn deserialize_babyjubjub_scalar<'de, D>(
@@ -542,13 +552,23 @@ impl<'de> de::Visitor<'de> for BabyJubJubBaseSeqVisitor {
     }
 }
 
-struct BabyJubJubAffineSeqVisitor;
+struct BabyJubJubAffineSeqVisitor {
+    size: Option<usize>,
+}
 
 impl<'de> de::Visitor<'de> for BabyJubJubAffineSeqVisitor {
     type Value = Vec<ark_babyjubjub::EdwardsAffine>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a sequence of elements representing babyjubjub affine points.")
+        if let Some(size) = self.size {
+            formatter.write_str(&format!(
+                "a sequence of elements representing babyjubjub affine points of length {size}."
+            ))
+        } else {
+            formatter.write_str(
+                "a sequence of elements representing babyjubjub affine points of variable length.",
+            )
+        }
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -568,6 +588,10 @@ impl<'de> de::Visitor<'de> for BabyJubJubAffineSeqVisitor {
                 );
             }
         }
-        Ok(values)
+        if self.size.is_some_and(|size| size != values.len()) {
+            Err(de::Error::invalid_length(values.len(), &self))
+        } else {
+            Ok(values)
+        }
     }
 }

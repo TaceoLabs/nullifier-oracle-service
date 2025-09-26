@@ -10,25 +10,16 @@ use serde::{Deserialize, Serialize};
 use crate::{
     MerkleEpoch, MerkleRoot, RpId,
     chain::{ChainEvent, SecretGenFinalizeEvent, SecretGenRound1Event, SecretGenRound2Event},
-    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext},
+    crypto::{
+        PartyId, PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext, UserPublicKeyBatch,
+    },
 };
 
-/// The public key of an end-user.
-///
-/// Stored in the Merkle-Tree at the Smart Contract.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserPublicKey {
-    /// Values of the the public key (always len 7)
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine_sequence")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine_sequence")]
-    pub values: Vec<ark_babyjubjub::EdwardsAffine>,
-}
-
-impl UserPublicKey {
+impl UserPublicKeyBatch {
     /// Generates a random `UserPublicKey` with the provided source of randomness.
     pub fn random<R: Rng>(r: &mut R) -> Self {
         Self {
-            values: (0..7).map(|_| r.r#gen()).collect(),
+            values: std::array::from_fn(|_| r.r#gen()),
         }
     }
 }
@@ -46,8 +37,8 @@ pub struct MerklePath {
     pub siblings: Vec<ark_babyjubjub::Fq>,
     /// The produced root
     pub root: MerkleRoot,
-    /// The key (leaf)
-    pub key: UserPublicKey,
+    /// The user-key batch (leaf)
+    pub key_batch: UserPublicKeyBatch,
 }
 
 /// Represents an update of the Merkle root for a specific epoch.
@@ -93,7 +84,7 @@ pub struct IsValidEpochRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPublicKeyRequest {
     /// The epoch to check
-    pub public_key: UserPublicKey,
+    pub public_key: UserPublicKeyBatch,
 }
 
 /// Response to for adding a [`UserPublicKey`]

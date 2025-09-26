@@ -3440,6 +3440,7 @@ dependencies = [
  "futures",
  "k256",
  "oprf-client",
+ "oprf-core",
  "oprf-service",
  "oprf-types",
  "rand 0.8.5",

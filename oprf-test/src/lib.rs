@@ -4,10 +4,9 @@ use oprf_client::{BaseField, MAX_DEPTH};
 use oprf_service::config::{Environment, OprfPeerConfig};
 use oprf_types::{
     MerkleEpoch, RpId,
-    crypto::RpNullifierKey,
+    crypto::{RpNullifierKey, UserPublicKeyBatch},
     sc_mock::{
         AddPublicKeyRequest, AddPublicKeyResponse, MerklePath, SignNonceRequest, SignNonceResponse,
-        UserPublicKey,
     },
 };
 use smart_contract_mock::config::SmartContractMockConfig;
@@ -118,7 +117,7 @@ pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)
 
 pub async fn register_public_key(
     chain_url: &str,
-    public_key: UserPublicKey,
+    public_key: UserPublicKeyBatch,
 ) -> eyre::Result<(MerkleEpoch, MerklePath)> {
     let client = reqwest::Client::new();
     let res = client

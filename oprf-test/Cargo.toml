@@ -17,6 +17,7 @@ eyre.workspace = true
 futures.workspace = true
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-client = { workspace = true }
+oprf-core = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true

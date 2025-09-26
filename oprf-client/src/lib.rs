@@ -7,6 +7,7 @@ use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
 use ark_serde_compat::groth16::Groth16Proof;
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
+use oprf_core::credentials::UserCredentials;
 use oprf_core::shamir;
 use oprf_core::{
     ddlog_equality::DLogEqualityChallenge,
@@ -62,6 +63,7 @@ pub enum Error {
 
 // TODO docs for fields
 pub struct NullifierArgs {
+    pub user_credentials: UserCredentials,
     pub rp_nullifier_key: Affine,
     pub share_epoch: ShareEpoch,
     pub sk: EdDSAPrivateKey,
@@ -84,7 +86,6 @@ pub struct NullifierArgs {
     pub nullifier_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
     pub cred_type_id: BaseField,
     pub cred_pk: EdDSAPublicKey,
-    pub cred_sk: EdDSAPrivateKey,
     pub cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
     pub genesis_issued_at: BaseField,
     pub expired_at: BaseField,
@@ -98,6 +99,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Result<(Groth16Proof, BaseField)> {
     let NullifierArgs {
+        user_credentials,
         rp_nullifier_key,
         share_epoch,
         sk,
@@ -120,7 +122,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         nullifier_matrices,
         cred_type_id,
         cred_pk,
-        cred_sk,
         cred_hashes,
         genesis_issued_at,
         expired_at,
@@ -130,6 +131,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     tracing::debug!("new request with id = {request_id}");
     tracing::debug!("generate query witness and proof");
     let (query_input, query) = QueryProofInput::new(
+        user_credentials,
         request_id,
         sk,
         pks,
@@ -141,7 +143,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         action,
         nonce,
         cred_type_id,
-        cred_sk,
         cred_hashes,
         genesis_issued_at,
         expired_at,

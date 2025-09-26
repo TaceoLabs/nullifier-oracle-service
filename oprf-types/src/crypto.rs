@@ -45,6 +45,17 @@ pub struct RpNullifierKey(
     ark_babyjubjub::EdwardsAffine,
 );
 
+/// A batch  of end-user public keys
+///
+/// Stored in the Merkle-Tree at the Smart Contract.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPublicKeyBatch {
+    /// Values of the the public key (always len 7)
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine_sequence")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_user_key_batch")]
+    pub values: [ark_babyjubjub::EdwardsAffine; 7],
+}
+
 /// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`PeerPublicKey`] of the peer that created this contribution,

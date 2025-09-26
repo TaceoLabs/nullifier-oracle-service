@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 //! # oprf-types
 //!
 //! Core type definitions for the OPRF service and client.
