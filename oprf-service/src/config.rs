@@ -146,7 +146,7 @@ pub struct OprfPeerConfig {
     /// The implementation will call `format!("{dlog_share_secret_id_suffix}/{rp_id}")`
     #[clap(
         long,
-        env = "OPRF_SERVICE_PRIVATE_KEY_SECRET_ID",
+        env = "OPRF_SERVICE_DLOG_SHARE_SECRET_ID_SUFFIX",
         default_value = "oprf/share/"
     )]
     pub dlog_share_secret_id_suffix: String,
