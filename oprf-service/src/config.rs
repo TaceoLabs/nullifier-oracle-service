@@ -156,4 +156,28 @@ pub struct OprfPeerConfig {
     /// Will drop old merkle roots if this capacity is reached.
     #[clap(long, env = "OPRF_SERVICE_MERKLE_STORE_SIZE", default_value = "100")]
     pub max_merkle_store_size: usize,
+
+    /// The maximum delta between the received current_time_stamp the service current_time_stamp
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CURRENT_TIME_STAMP_MAX_DIFFERENCE",
+        default_value = "10s",
+        value_parser = humantime::parse_duration
+
+    )]
+    pub current_time_stamp_max_difference: Duration,
+
+    /// Interval to cleanup the signature history
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_SIGNATURE_HISTORY_CLEANUP_INTERVAL",
+        default_value = "30s",
+        value_parser = humantime::parse_duration
+
+    )]
+    pub signature_history_cleanup_interval: Duration,
+
+    /// The max depth of the merkle tree
+    #[clap(long, env = "OPRF_SERVICE_MAX_MERKLE_DEPTH", default_value = "30")]
+    pub max_merkle_depth: u64,
 }

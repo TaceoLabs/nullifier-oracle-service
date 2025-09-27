@@ -174,7 +174,7 @@ impl CryptoDevice {
         &self,
         rp_id: RpId,
         nonce: ark_babyjubjub::Fq,
-        signature: k256::ecdsa::Signature,
+        signature: &k256::ecdsa::Signature,
     ) -> CryptoDeviceResult<()> {
         tracing::debug!("verifying nonce: {nonce}");
         let bytes = nonce.into_bigint().to_bytes_le();
@@ -182,7 +182,7 @@ impl CryptoDevice {
             .shares
             .get_rp_public_key(rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(rp_id))?;
-        vk.verify(&bytes, &signature)?;
+        vk.verify(&bytes, signature)?;
         tracing::debug!("success");
         Ok(())
     }

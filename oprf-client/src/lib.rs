@@ -61,6 +61,7 @@ pub enum Error {
 }
 
 // TODO docs for fields
+#[derive(Debug, Clone)]
 pub struct NullifierArgs {
     pub rp_nullifier_key: Affine,
     pub share_epoch: ShareEpoch,
@@ -88,7 +89,7 @@ pub struct NullifierArgs {
     pub cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
     pub genesis_issued_at: BaseField,
     pub expired_at: BaseField,
-    pub current_time_stamp: BaseField,
+    pub current_time_stamp: u64,
 }
 
 #[instrument(level = "debug", skip_all)]
@@ -145,7 +146,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         cred_hashes,
         genesis_issued_at,
         expired_at,
-        current_time_stamp,
+        current_time_stamp.into(),
         rng,
     );
     let blinded_query = Affine::new(query_input.q[0], query_input.q[1]);
@@ -168,6 +169,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         signature,
         cred_pk,
         current_time_stamp,
+        merkle_depth: 30,
     };
     let responses = oprf_request(oprf_services, &req).await;
     let (parties, selected_oprf_services, responses) =

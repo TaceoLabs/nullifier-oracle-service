@@ -242,6 +242,7 @@ pub async fn default_shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
     use ark_ff::UniformRand;
@@ -280,6 +281,9 @@ mod tests {
             private_key_secret_id: "oprf/sk".to_string(),
             dlog_share_secret_id_suffix: "oprf/shares/".to_string(),
             max_merkle_store_size: 10,
+            current_time_stamp_max_difference: Duration::from_secs(10),
+            signature_history_cleanup_interval: Duration::from_secs(30),
+            max_merkle_depth: 30,
         };
         let config = Arc::new(config);
         let secret_manager = Arc::new(TestSecretManager::new(
@@ -353,6 +357,7 @@ mod tests {
             "share_epoch": 0
           },
           "merkle_epoch": 0,
+          "merkle_depth": 30,
           "action": "1120809321026975175757466560999318768049435153540642913185613570219065846805",
           "nonce": "11995758882934032369948628586537618022736362526028373754122425120894302910697",
           "signature": "246F7FB4040A520C17D4358883A5103FA43483EA12C8039BADE1CFBF2CAAF2FE56DE7C9B833EE0F52C3E9F99C50D3E328B25211B146AB5F28B9055329A323FE3",
@@ -362,7 +367,8 @@ mod tests {
               "2413711181075542609538861548035891129041376599307510529757411775315152595154"
             ]
           },
-          "current_time_stamp": "650588418409228923"
+          "current_time_stamp": SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("system time is after unix epoch").as_secs()
+
         })
     }
 
@@ -377,18 +383,6 @@ mod tests {
               "share_epoch": 0
             }
         })
-    }
-
-    #[tokio::test]
-    async fn test_init() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let req = init_req();
-        server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        Ok(())
     }
 
     #[tokio::test]
@@ -438,20 +432,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_finish() -> eyre::Result<()> {
+    async fn test_init_bad_time_stamp() -> eyre::Result<()> {
         let server = test_server().await?;
-        let req = init_req();
-        server
+        let mut req = init_req();
+        req["current_time_stamp"] = serde_json::json!(42);
+        let res = server
             .post("/api/v1/init")
             .json(&req)
-            .await
-            .assert_status_ok();
-        let req = finish_req();
-        server
-            .post("/api/v1/finish")
-            .json(&req)
-            .await
-            .assert_status_ok();
+            .expect_failure()
+            .await;
+        res.assert_text("the time stamp difference is to large");
+        res.assert_status_bad_request();
         Ok(())
     }
 

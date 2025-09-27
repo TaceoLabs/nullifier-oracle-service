@@ -1,6 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
-use oprf_client::{BaseField, MAX_DEPTH};
+use oprf_client::BaseField;
 use oprf_service::config::{Environment, OprfPeerConfig};
 use oprf_types::{
     MerkleEpoch, RpId,
@@ -31,6 +31,9 @@ async fn start_service(id: usize) -> String {
         private_key_secret_id: format!("oprf/sk/n{id}"),
         dlog_share_secret_id_suffix: format!("oprf/share/n{id}"),
         max_merkle_store_size: 10,
+        current_time_stamp_max_difference: Duration::from_secs(10),
+        signature_history_cleanup_interval: Duration::from_secs(30),
+        max_merkle_depth: 30,
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
@@ -62,7 +65,7 @@ pub async fn start_smart_contract_mock() -> String {
         oprf_services: 3,
         oprf_degree: 1,
         oprf_public_keys_secret_id: "oprf/sc/pubs".to_string(),
-        merkle_depth: MAX_DEPTH,
+        merkle_depth: 30,
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
