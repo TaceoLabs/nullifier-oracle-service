@@ -1,5 +1,5 @@
 use crate::{
-    oprf::{BlindedOPrfRequest, BlindingFactor, OPrfClient, OPrfKey, OPrfService},
+    oprf::{BlindedOPrfRequest, BlindingFactor, OPrfKey, OPrfService, OprfClient},
     proof_input_gen::{query::QueryProofInput, rpid_query::RpIdQueryProofInput},
 };
 use ark_ec::{AffineRepr, CurveGroup};
@@ -175,7 +175,7 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
         let pk_index = query_proof_input.pk_index.into_bigint().0[0] as usize;
         let pk = query_proof_input.pk[pk_index];
         let client_pk = Affine::new_unchecked(pk[0], pk[1]);
-        let oprf_client = OPrfClient::new(client_pk);
+        let oprf_client = OprfClient::new(client_pk);
 
         // We need an intermediate result
         let unblinded_response = (oprf_blinded_response.blinded_response
@@ -188,10 +188,10 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
             .expect("IDs should match");
 
         // lets commit to the id
-        let id_commitment = OPrfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
+        let id_commitment = OprfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
 
         // lets commit to the map id
-        let map_id_commitment = OPrfClient::id_commitment(rp_mt_index, map_id_commitment_r);
+        let map_id_commitment = OprfClient::id_commitment(rp_mt_index, map_id_commitment_r);
 
         // Compute the Merkle root
         let rp_merkle_root = QueryProofInput::<RP_MAX_DEPTH>::merkle_root(

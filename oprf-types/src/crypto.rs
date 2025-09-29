@@ -56,6 +56,12 @@ pub struct UserPublicKeyBatch {
     pub values: [ark_babyjubjub::EdwardsAffine; 7],
 }
 
+impl UserPublicKeyBatch {
+    pub fn into_proof_input(self) -> [[ark_babyjubjub::Fq; 2]; 7] {
+        self.values.map(|p| [p.x, p.y])
+    }
+}
+
 /// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`PeerPublicKey`] of the peer that created this contribution,
@@ -101,6 +107,13 @@ pub struct RpSecretGenCiphertext {
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
     /// The ciphertext.
     pub cipher: ark_babyjubjub::Fq,
+}
+
+impl PartyId {
+    /// Converts to a `u16`.
+    pub fn into_inner(self) -> u16 {
+        self.0
+    }
 }
 
 impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {

@@ -2,8 +2,12 @@ use std::{fs::File, path::PathBuf, sync::Arc};
 
 use ark_ff::UniformRand as _;
 use circom_types::{groth16::ZKey, traits::CheckElement};
-use oprf_client::{BaseField, EdDSAPrivateKey, MAX_PUBLIC_KEYS, NullifierArgs};
+use oprf_client::{
+    BaseField, CredentialsSignature, EdDSAPrivateKey, MAX_DEPTH, MAX_PUBLIC_KEYS, MerkleMembership,
+    OprfQuery,
+};
 use oprf_core::credentials::UserCredentials;
+use oprf_test::{self, oprf::NullifierArgs, sc_mock};
 use oprf_types::{ShareEpoch, crypto::UserPublicKeyBatch};
 use rand::Rng as _;
 
@@ -29,15 +33,14 @@ fn install_tracing() {
 async fn test_nullifier() -> eyre::Result<()> {
     install_tracing();
     let mut rng = rand::thread_rng();
-    let chain_url = oprf_test::start_smart_contract_mock().await;
+    let chain_url = sc_mock::start_smart_contract_mock().await;
     let oprf_services = oprf_test::start_services().await;
-    let (rp_id, rp_nullifier_key) = oprf_test::register_rp(&chain_url).await?;
+    let (rp_id, rp_nullifier_key) = sc_mock::register_rp(&chain_url).await?;
     let sk = EdDSAPrivateKey::random(&mut rng);
     let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
-    let mut public_key = UserPublicKeyBatch::random(&mut rng);
-    public_key.values[pk_index as usize] = sk.public().pk;
-    let (merkle_epoch, merkle_path) =
-        oprf_test::register_public_key(&chain_url, public_key.clone()).await?;
+    let mut pks = UserPublicKeyBatch::random(&mut rng);
+    pks.values[pk_index as usize] = sk.public().pk;
+    let (merkle_epoch, merkle_path) = sc_mock::register_public_key(&chain_url, pks.clone()).await?;
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let degree = 1;
@@ -45,7 +48,7 @@ async fn test_nullifier() -> eyre::Result<()> {
     let action = BaseField::rand(&mut rng);
     let signal_hash = BaseField::rand(&mut rng);
     let nonce = BaseField::rand(&mut rng);
-    let signature = oprf_test::sign_nonce(&chain_url, rp_id, nonce).await?;
+    let signature = sc_mock::sign_nonce(&chain_url, rp_id, nonce).await?;
     let id_commitment_r = BaseField::rand(&mut rng);
     let query_zkey = ZKey::from_reader(
         File::open(dir.join("../circom/main/OPRFQueryProof.zkey")).expect("can open"),
@@ -63,41 +66,53 @@ async fn test_nullifier() -> eyre::Result<()> {
     let cred_sk = EdDSAPrivateKey::random(&mut rng);
     let cred_pk = cred_sk.public();
     let cred_hashes = [BaseField::rand(&mut rng), BaseField::rand(&mut rng)]; // In practice, these are 2 hashes
-    let genesis_issued_at = BaseField::from(rng.r#gen::<u64>());
-    let expired_at_u64 = rng.gen_range(1..=u64::MAX);
-    let current_time_stamp = BaseField::from(rng.gen_range(0..expired_at_u64));
-    let expired_at = BaseField::from(expired_at_u64);
-    let args = NullifierArgs {
-        user_credentials: {
-            UserCredentials {
-                credential_type_id: cred_type_id,
-                user_id: merkle_path.index,
-                genesis_issued_at,
-                expires_at: expired_at,
-                claims_hash: cred_hashes[0],
-                associated_data_hash: cred_hashes[1],
-                cred_sk,
-            }
-        },
-        rp_nullifier_key: rp_nullifier_key.inner(),
-        share_epoch,
-        sk,
-        pks: public_key
-            .values
-            .iter()
-            .map(|p| [p.x, p.y])
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap(),
-        pk_index,
-        merkle_root: merkle_path.root.into_inner(),
+    let genesis_issued_at = rng.r#gen::<u64>();
+    let expires_at = rng.gen_range(1..=u64::MAX);
+    let current_time_stamp = rng.gen_range(0..expires_at);
+
+    let merkle_membership = MerkleMembership {
+        epoch: merkle_epoch,
+        depth: MAX_DEPTH as u64, // TODO fix me
+        root: merkle_path.root,
         mt_index: merkle_path.index,
-        siblings: merkle_path.siblings.try_into().unwrap(),
+        siblings: merkle_path.siblings,
+    };
+
+    let query = OprfQuery {
         rp_id,
+        share_epoch,
         action,
-        signal_hash,
-        merkle_epoch,
         nonce,
+        current_time_stamp,
+    };
+
+    let user_credentials = UserCredentials {
+        credential_type_id: cred_type_id,
+        user_id: merkle_path.index,
+        genesis_issued_at,
+        expires_at,
+        claims_hash: cred_hashes[0],
+        associated_data_hash: cred_hashes[1],
+        cred_sk,
+    };
+
+    let credential_signature = CredentialsSignature {
+        type_id: cred_type_id,
+        issuer: cred_pk,
+        hashes: cred_hashes,
+        signature: user_credentials.sign(),
+        genesis_issued_at: user_credentials.genesis_issued_at,
+        expires_at: user_credentials.expires_at,
+    };
+    let args = NullifierArgs {
+        credential_signature,
+        merkle_membership,
+        oprf_query: query,
+        rp_nullifier_key: rp_nullifier_key.inner(),
+        sk,
+        pks,
+        pk_index,
+        signal_hash,
         signature,
         id_commitment_r,
         degree,
@@ -105,18 +120,12 @@ async fn test_nullifier() -> eyre::Result<()> {
         query_matrices: Arc::new(query_matrices),
         nullifier_pk: Arc::new(nullifier_pk),
         nullifier_matrices: Arc::new(nullifier_matrices),
-        cred_type_id,
-        cred_pk,
-        cred_hashes,
-        genesis_issued_at,
-        expired_at,
-        current_time_stamp,
     };
 
     // TODO find better way
     // wait for the oprf peers to get the dlog share
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    let (_proof, _nullifier) = oprf_client::nullifier(&oprf_services, args, &mut rng).await?;
+    let _ = oprf_test::oprf::nullifier(&oprf_services, args, &mut rng).await?;
     Ok(())
 }
 

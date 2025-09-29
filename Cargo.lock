@@ -3351,6 +3351,7 @@ dependencies = [
  "clap",
  "eddsa-babyjubjub",
  "eyre",
+ "futures",
  "groth16",
  "k256",
  "oprf-core",
@@ -3434,10 +3435,16 @@ dependencies = [
 name = "oprf-test"
 version = "0.1.0"
 dependencies = [
+ "ark-babyjubjub",
+ "ark-bn254",
+ "ark-ec",
  "ark-ff 0.5.0",
+ "ark-serde-compat",
  "circom-types",
+ "eddsa-babyjubjub",
  "eyre",
  "futures",
+ "groth16",
  "k256",
  "oprf-client",
  "oprf-core",
@@ -3448,6 +3455,8 @@ dependencies = [
  "smart-contract-mock",
  "tokio",
  "tracing-subscriber 0.3.20",
+ "uuid",
+ "witness",
 ]
 
 [[package]]

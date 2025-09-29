@@ -97,6 +97,16 @@ pub struct BlindedOPrfRequest {
     pub(crate) blinded_query: Affine,
 }
 
+impl BlindedOPrfRequest {
+    pub fn blinded_query_as_public_output(&self) -> [BaseField; 2] {
+        [self.blinded_query.x, self.blinded_query.y]
+    }
+
+    pub fn blinded_query(&self) -> Affine {
+        self.blinded_query
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindingFactor {
     /// the blinding factor used to blind the query
@@ -117,6 +127,14 @@ impl BlindingFactor {
             query: self.query,
         }
     }
+
+    pub fn beta(&self) -> ScalarField {
+        self.factor
+    }
+
+    pub fn query(&self) -> BaseField {
+        self.query
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
@@ -136,18 +154,18 @@ pub struct BlindedOPrfResponse {
     pub blinded_response: Affine,
 }
 
-pub struct OPrfClient {
+pub struct OprfClient {
     /// the public key of the OPrf service
     public_key: Affine,
 }
 
-impl OPrfClient {
+impl OprfClient {
     const OPRF_DS: &[u8] = b"World ID Proof";
     const QUERY_DS: &[u8] = b"World ID Query";
     const ID_COMMITMENT_DS: &[u8] = b"H(id, r)";
 
     pub fn new(public_key: Affine) -> Self {
-        OPrfClient { public_key }
+        OprfClient { public_key }
     }
 
     // Returns the domain separator for the query finalization as a field element
@@ -476,10 +494,10 @@ mod tests {
         let request_id2 = Uuid::new_v4();
         let key = OPrfKey::random(&mut rng);
         let service = OPrfService::new(key);
-        let client = OPrfClient::new(*service.public_key());
+        let client = OprfClient::new(*service.public_key());
 
         let query =
-            OPrfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
+            OprfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
         let (blinded_request, blinding_factor) = client.blind_query(request_id, query, &mut rng);
         let (blinded_request2, blinding_factor2) = client.blind_query(request_id2, query, &mut rng);
         assert_ne!(blinded_request, blinded_request2);
@@ -496,7 +514,7 @@ mod tests {
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
         let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
-            OPrfClient::get_oprf_ds(),
+            OprfClient::get_oprf_ds(),
             query,
             expected_response.x,
             expected_response.y,
@@ -519,10 +537,10 @@ mod tests {
         let request_id2 = Uuid::new_v4();
         let key = OPrfKey::random(&mut rng);
         let service = OPrfService::new(key);
-        let client = OPrfClient::new(*service.public_key());
+        let client = OprfClient::new(*service.public_key());
 
         let query =
-            OPrfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
+            OprfClient::generate_query(BaseField::from(42), BaseField::from(2), BaseField::from(3));
         let (blinded_request, blinding_factor) = client.blind_query(request_id, query, &mut rng);
         let (blinded_request2, blinding_factor2) = client.blind_query(request_id2, query, &mut rng);
         assert_ne!(blinded_request, blinded_request2);
@@ -543,7 +561,7 @@ mod tests {
         let expected_response = (mappings::encode_to_curve(query) * service.key.key).into_affine();
         let poseidon = Poseidon2::<_, 4, 5>::default();
         let out = poseidon.permutation(&[
-            OPrfClient::get_oprf_ds(),
+            OprfClient::get_oprf_ds(),
             query,
             expected_response.x,
             expected_response.y,

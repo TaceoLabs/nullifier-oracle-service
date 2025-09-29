@@ -167,18 +167,18 @@ mod tests {
 
     use super::*;
 
-    async fn secrect_manager_and_dlog_secret_gen<R: Rng + CryptoRng>(
+    async fn secret_manager_and_dlog_secret_gen<R: Rng + CryptoRng>(
         party_id: PartyId,
         rng: &mut R,
     ) -> eyre::Result<(Arc<TestSecretManager>, DLogSecretGenService)> {
-        let secrect_manager = Arc::new(TestSecretManager::new(
+        let secret_manager = Arc::new(TestSecretManager::new(
             PeerPrivateKey::from(ark_babyjubjub::Fr::rand(rng)),
             HashMap::new(),
         ));
-        let secrect_manager_ = Arc::clone(&secrect_manager);
-        let crypto_device = Arc::new(CryptoDevice::init(secrect_manager, Vec::new()).await?);
+        let secret_manager_ = Arc::clone(&secret_manager);
+        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
         let dlog_secret_gen = DLogSecretGenService::init(party_id, crypto_device);
-        Ok((secrect_manager_, dlog_secret_gen))
+        Ok((secret_manager_, dlog_secret_gen))
     }
 
     #[tokio::test]
@@ -187,11 +187,11 @@ mod tests {
         let rp_id = RpId::new(rng.r#gen());
         let degree = 1;
         let (secret_manager0, mut dlog_secret_gen0) =
-            secrect_manager_and_dlog_secret_gen(PartyId::from(0), &mut rng).await?;
+            secret_manager_and_dlog_secret_gen(PartyId::from(0), &mut rng).await?;
         let (secret_manager1, mut dlog_secret_gen1) =
-            secrect_manager_and_dlog_secret_gen(PartyId::from(1), &mut rng).await?;
+            secret_manager_and_dlog_secret_gen(PartyId::from(1), &mut rng).await?;
         let (secret_manager2, mut dlog_secret_gen2) =
-            secrect_manager_and_dlog_secret_gen(PartyId::from(2), &mut rng).await?;
+            secret_manager_and_dlog_secret_gen(PartyId::from(2), &mut rng).await?;
 
         let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, degree);
         let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, degree);

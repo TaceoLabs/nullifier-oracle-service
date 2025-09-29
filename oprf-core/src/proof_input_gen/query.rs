@@ -7,7 +7,7 @@ use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 use std::array;
 use uuid::Uuid;
 
-use crate::{credentials::UserCredentials, oprf::OPrfClient};
+use crate::{credentials::UserCredentials, oprf::OprfClient};
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
@@ -137,14 +137,14 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         }
 
         // Calculate OPRF
-        let oprf_client = OPrfClient::new(pk.pk);
-        let query = OPrfClient::generate_query(mt_index, rp_id, action);
+        let oprf_client = OprfClient::new(pk.pk);
+        let query = OprfClient::generate_query(mt_index, rp_id, action);
         let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query, rng);
 
         // Sign the query
         let signature = sk.sign(blinding_factor.query);
         // Compute the Merkle root
-        let merkkle_root = Self::merkle_root_from_pks(&pks, &siblings, mt_index_u64);
+        let merkle_root = Self::merkle_root_from_pks(&pks, &siblings, mt_index_u64);
 
         let result = Self {
             pk: pks,
@@ -159,7 +159,7 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             cred_s: cred_signature.s,
             cred_r: [cred_signature.r.x, cred_signature.r.y],
             current_time_stamp,
-            merkle_root: merkkle_root,
+            merkle_root,
             depth: BaseField::from(MAX_DEPTH as u64),
             mt_index,
             siblings,
@@ -205,8 +205,8 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         let cred_pk = user_credentials.pk();
 
         // Calculate OPRF
-        let oprf_client = OPrfClient::new(pk.pk);
-        let query = OPrfClient::generate_query(mt_index_, rp_id, action);
+        let oprf_client = OprfClient::new(pk.pk);
+        let query = OprfClient::generate_query(mt_index_, rp_id, action);
         let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query, rng);
 
         // Sign the query

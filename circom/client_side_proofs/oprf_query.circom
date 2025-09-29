@@ -103,7 +103,7 @@ template CheckCredentialSignature() {
 
 
 template OprfQueryInner(MAX_DEPTH) {
-    // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
+    // Signature verification of the OPRF nonce (There such that sk corresponding to pk is never used in a proof directly)
     signal input pk[7][2];
     signal input pk_index; // 0..6
     signal input s;
@@ -179,7 +179,7 @@ template OprfQueryInner(MAX_DEPTH) {
 }
 
 template OprfQuery(MAX_DEPTH) {
-    // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
+    // Signature verification of the OPRF nonce (There such that sk corresponding to pk is never used in a proof directly)
     signal input pk[7][2];
     signal input pk_index; // 0..6
     signal input s;

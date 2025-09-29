@@ -11,6 +11,15 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+ark-babyjubjub = { workspace = true }
+
+ark-bn254 = { workspace = true }
+ark-serde-compat = { workspace = true }
+ark-ec = { workspace = true }
+groth16 = { workspace = true }
+witness = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
+eddsa-babyjubjub = { workspace = true }
 ark-ff.workspace = true
 circom-types.workspace = true
 eyre.workspace = true

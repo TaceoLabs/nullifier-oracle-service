@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     dlog_equality::DLogEqualityProof,
     oprf::{
-        BlindedOPrfRequest, BlindedOPrfResponse, BlindingFactor, OPrfClient, OPrfKey, OPrfService,
+        BlindedOPrfRequest, BlindedOPrfResponse, BlindingFactor, OprfClient, OPrfKey, OPrfService,
     },
     proof_input_gen::query::QueryProofInput,
 };
@@ -97,7 +97,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         let pk_index = query_proof_input.pk_index.into_bigint().0[0] as usize;
         let pk = query_proof_input.pk[pk_index];
         let client_pk = Affine::new_unchecked(pk[0], pk[1]);
-        let oprf_client = OPrfClient::new(client_pk);
+        let oprf_client = OprfClient::new(client_pk);
 
         // We need an intermediate result
         let unblinded_response = (oprf_blinded_response.blinded_response
@@ -109,7 +109,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             .expect("IDs should match");
 
         // lets commit to the id
-        let id_commitment = OPrfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
+        let id_commitment = OprfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
 
         Self {
             user_pk: query_proof_input.pk,
@@ -175,7 +175,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         let pk_index = query_proof_input.pk_index.into_bigint().0[0] as usize;
         let pk = query_proof_input.pk[pk_index];
         let client_pk = Affine::new_unchecked(pk[0], pk[1]);
-        let oprf_client = OPrfClient::new(client_pk);
+        let oprf_client = OprfClient::new(client_pk);
 
         // We need an intermediate result
         let unblinded_response = (oprf_blinded_response.blinded_response
@@ -187,7 +187,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             .expect("IDs should match");
 
         // lets commit to the id
-        let id_commitment = OPrfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
+        let id_commitment = OprfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
 
         Self {
             user_pk: query_proof_input.pk,

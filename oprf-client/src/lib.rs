@@ -1,3 +1,4 @@
+use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 use std::ops::Shr;
 use std::time::Instant;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -7,20 +8,15 @@ use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
 use ark_serde_compat::groth16::Groth16Proof;
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
-use oprf_core::credentials::UserCredentials;
 use oprf_core::shamir;
 use oprf_core::{
     ddlog_equality::DLogEqualityChallenge,
     proof_input_gen::{nullifier::NullifierProofInput, query::QueryProofInput},
 };
-use oprf_types::api::v1::{
-    ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
-};
-use oprf_types::crypto::PartyId;
-use oprf_types::{MerkleEpoch, RpId, ShareEpoch};
-use rand::seq::IteratorRandom as _;
+use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
+use oprf_types::crypto::UserPublicKeyBatch;
+use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
 use rand::{CryptoRng, Rng};
-use tracing::instrument;
 use uuid::Uuid;
 use witness::{BlackBoxFunction, ruint::aliases::U256};
 
@@ -30,6 +26,8 @@ pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
 pub mod config;
+
+pub mod tokio;
 
 pub const MAX_DEPTH: usize = 30;
 
@@ -41,290 +39,317 @@ pub type BaseField = ark_babyjubjub::Fq;
 pub type Affine = ark_babyjubjub::EdwardsAffine;
 pub type Projective = ark_babyjubjub::EdwardsProjective;
 
+pub struct CredentialsSignature {
+    // Credential Signature
+    pub type_id: BaseField,
+    pub issuer: EdDSAPublicKey,
+    pub hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
+    pub signature: EdDSASignature,
+    pub genesis_issued_at: u64,
+    pub expires_at: u64,
+}
+
+pub struct MerkleMembership {
+    pub epoch: MerkleEpoch,
+    pub root: MerkleRoot,
+    pub depth: u64,
+    pub mt_index: u64,
+    pub siblings: Vec<BaseField>,
+}
+
+pub struct OprfQuery {
+    pub rp_id: RpId,
+    pub share_epoch: ShareEpoch,
+    pub action: BaseField,
+    pub nonce: BaseField,
+    pub current_time_stamp: u64,
+}
+
+pub struct UserSignature {
+    // Signature
+    pub pk_batch: UserPublicKeyBatch,
+    pub pk_index: u64, // 0..6
+    pub signature: EdDSASignature,
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
     ApiError(#[from] reqwest::Error),
-    #[error("expected degree ({degree}) + 1 oprf responses, got {n}")]
-    NotEnoughOprfResponses { n: usize, degree: usize },
+    #[error("expected degree {threshold} responses, got {n}")]
+    NotEnoughOprfResponses { n: usize, threshold: usize },
     #[error("failed to generate witness")]
     WitnessGeneration,
     #[error("failed to generate proof")]
     ProofGeneration,
     #[error("prove could not be verified")]
     InvalidProof,
+    #[error("invalid merkle length, expected {expected}, but is {is}")]
+    InvalidSiblingsLength { expected: usize, is: usize },
     #[error("invalid circuit graph")]
     InvalidCircuitGraph,
     #[error("DLog prove could not be verified")]
     InvalidDLogProof,
+    #[error("Index in public-key batch must be in range [0..6], but is {0}")]
+    InvalidPublicKeyIndex(u64),
+    #[error(transparent)]
+    InternalError(#[from] eyre::Report),
 }
 
-// TODO docs for fields
-pub struct NullifierArgs {
-    pub user_credentials: UserCredentials,
-    pub rp_nullifier_key: Affine,
-    pub share_epoch: ShareEpoch,
-    pub sk: EdDSAPrivateKey,
-    pub pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
-    pub pk_index: u64,
-    pub merkle_root: BaseField,
-    pub mt_index: u64,
-    pub siblings: [BaseField; MAX_DEPTH],
-    pub rp_id: RpId,
-    pub action: BaseField,
-    pub signal_hash: BaseField,
-    pub merkle_epoch: MerkleEpoch,
-    pub nonce: BaseField,
-    pub signature: k256::ecdsa::Signature,
-    pub id_commitment_r: BaseField,
-    pub degree: usize,
-    pub query_pk: Arc<ProvingKey<Bn254>>,
-    pub query_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
-    pub nullifier_pk: Arc<ProvingKey<Bn254>>,
-    pub nullifier_matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
-    pub cred_type_id: BaseField,
-    pub cred_pk: EdDSAPublicKey,
-    pub cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
-    pub genesis_issued_at: BaseField,
-    pub expired_at: BaseField,
-    pub current_time_stamp: BaseField,
+pub struct OprfSession {
+    request_id: Uuid,
+    credentials_signature: CredentialsSignature,
+    merkle_membership: MerkleMembership,
 }
 
-#[instrument(level = "debug", skip_all)]
-pub async fn nullifier<R: Rng + CryptoRng>(
-    oprf_services: &[String],
-    args: NullifierArgs,
-    rng: &mut R,
-) -> Result<(Groth16Proof, BaseField)> {
-    let NullifierArgs {
-        user_credentials,
-        rp_nullifier_key,
-        share_epoch,
-        sk,
-        pks,
-        pk_index,
-        merkle_root,
-        mt_index,
-        siblings,
-        rp_id,
-        action,
-        signal_hash,
-        merkle_epoch,
-        nonce,
-        signature,
-        id_commitment_r,
-        degree,
-        query_pk,
-        query_matrices,
-        nullifier_pk,
-        nullifier_matrices,
-        cred_type_id,
-        cred_pk,
-        cred_hashes,
-        genesis_issued_at,
-        expired_at,
-        current_time_stamp,
-    } = args;
-    let request_id = Uuid::new_v4();
-    tracing::debug!("new request with id = {request_id}");
-    tracing::debug!("generate query witness and proof");
-    let (query_input, query) = QueryProofInput::new(
-        user_credentials,
-        request_id,
-        sk,
-        pks,
-        pk_index,
-        merkle_root,
-        mt_index,
-        siblings,
-        rp_id.into(),
-        action,
-        nonce,
-        cred_type_id,
-        cred_hashes,
-        genesis_issued_at,
-        expired_at,
-        current_time_stamp,
-        rng,
-    );
-    let blinded_query = Affine::new(query_input.q[0], query_input.q[1]);
-    let (proof, public) = generate_query_proof(&query_input, &query_pk, &query_matrices, rng)?;
-    assert_eq!(
-        blinded_query,
-        Affine::new(public[0], public[1]),
-        "blinded query does not match"
-    );
+pub struct OprfSessionSignedQuery {
+    query_hash: BaseField,
+    request_id: Uuid,
+    merkle_epoch: MerkleEpoch,
+    query: OprfQuery,
+    credential_issuer: EdDSAPublicKey,
+    blinded_request: BlindedOPrfRequest,
+    query_input: QueryProofInput<MAX_DEPTH>,
+}
 
-    tracing::debug!("request commitments");
-    let req = OprfRequest {
-        request_id,
-        proof,
-        point_b: blinded_query,
-        rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
-        merkle_epoch,
-        action,
-        nonce,
-        signature,
-        cred_pk,
-        current_time_stamp,
-    };
-    let responses = oprf_request(oprf_services, &req).await;
-    let (parties, selected_oprf_services, responses) =
-        choose_party_responses(responses, degree, rng)?;
-    let lagrange = shamir::lagrange_from_coeff(&parties);
-    let commitments = responses
-        .into_iter()
-        .map(|res| res.commitments)
-        .collect::<Vec<_>>();
+pub struct OprfSessionCreatedRequest {
+    request_id: Uuid,
+    oprf_request: OprfRequest,
+    query: OprfQuery,
+    blinded_request: BlindedOPrfRequest,
+    query_proof_input: QueryProofInput<MAX_DEPTH>,
+    query_hash: BaseField,
+}
 
-    tracing::debug!("combine commitments and create challenge");
-    let (blinded_response, challenge) =
-        DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
-            &commitments,
-            &lagrange,
+pub struct OprfSessionInitSessions {
+    request_id: Uuid,
+    challenge_request: ChallengeRequest,
+    services: Vec<String>,
+    lagrange: Vec<ScalarField>,
+    blinded_request: BlindedOPrfRequest,
+    blinded_response: Affine,
+    query_proof_input: QueryProofInput<MAX_DEPTH>,
+    query_hash: BaseField,
+    rp_nullifier_key: Affine,
+}
+
+impl OprfSessionCreatedRequest {
+    pub async fn init_sessions(
+        self,
+        oprf_services: &[String],
+        threshold: usize,
+        rp_nullifier_key: Affine,
+    ) -> Result<OprfSessionInitSessions> {
+        let (services, sessions) =
+            tokio::init_sessions(oprf_services, threshold, self.oprf_request).await?;
+
+        let (party_ids, commitments) = sessions
+            .into_iter()
+            .map(|session| {
+                (
+                    usize::from(session.party_id.into_inner() + 1),
+                    session.commitments,
+                )
+            })
+            .collect::<(Vec<_>, Vec<_>)>();
+
+        let lagrange = shamir::lagrange_from_coeff(&party_ids);
+        let (blinded_response, challenge) =
+            DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
+                &commitments,
+                &lagrange,
+                rp_nullifier_key,
+                self.blinded_request.blinded_query(),
+            );
+        Ok(OprfSessionInitSessions {
+            query_proof_input: self.query_proof_input,
+            query_hash: self.query_hash,
+            request_id: self.request_id,
+            lagrange,
+            services,
+            blinded_request: self.blinded_request,
+            blinded_response,
             rp_nullifier_key,
-            blinded_query,
-        );
-
-    tracing::debug!("request proof shares");
-    let req = ChallengeRequest {
-        request_id,
-        challenge: challenge.clone(),
-        rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
-    };
-    let responses = challenge_request(&selected_oprf_services, &req).await?;
-    let dlog_proof_shares = responses
-        .into_iter()
-        .map(|res| res.proof_share)
-        .collect::<Vec<_>>();
-
-    tracing::debug!("combine proof shares");
-    let dlog_proof = challenge.combine_proofs_shamir(&dlog_proof_shares, &lagrange);
-    if !dlog_proof.verify(
-        rp_nullifier_key,
-        blinded_query,
-        blinded_response,
-        Affine::generator(),
-    ) {
-        tracing::error!("dlog proof not valid");
-        return Err(Error::WitnessGeneration);
+            challenge_request: ChallengeRequest {
+                request_id: self.request_id,
+                challenge,
+                rp_identifier: NullifierShareIdentifier {
+                    rp_id: self.query.rp_id,
+                    share_epoch: self.query.share_epoch,
+                },
+            },
+        })
     }
-
-    let nullifier_input = NullifierProofInput::new(
-        request_id,
-        rp_nullifier_key,
-        signal_hash,
-        query_input,
-        query,
-        blinded_response,
-        dlog_proof,
-        id_commitment_r,
-    );
-
-    tracing::debug!("generate nullifier witness and proof");
-    let (proof, public) =
-        generate_nullifier_proof(&nullifier_input, &nullifier_pk, &nullifier_matrices, rng)?;
-    assert_eq!(
-        nullifier_input.nullifier, public[1],
-        "nullifier does not match"
-    );
-
-    Ok((proof, nullifier_input.nullifier))
 }
 
-async fn oprf_request(
-    oprf_services: &[String],
-    req: &OprfRequest,
-) -> Vec<(PartyId, String, OprfResponse)> {
-    // TODO maybe create client in caller and reuse for both requests
-    let client = reqwest::Client::new();
-    // TODO FuturesOrdered
-    let mut responses = Vec::with_capacity(oprf_services.len());
-    for url in oprf_services.iter() {
-        let res = client
-            .post(format!("{url}/api/v1/init"))
-            .json(req)
-            .send()
-            .await;
-        match res {
-            Ok(res) => {
-                if res.status().is_success() {
-                    match res.json::<OprfResponse>().await {
-                        Ok(res) => {
-                            if res.request_id == req.request_id {
-                                responses.push((res.party_id, url.clone(), res));
-                            } else {
-                                tracing::warn!(
-                                    "service return response for invalid request_id {}",
-                                    res.request_id
-                                );
-                            }
-                        }
-                        Err(err) => {
-                            tracing::warn!("failed to decode response to json error: {err:?}")
-                        }
-                    }
-                } else {
-                    tracing::debug!("service returned error: {:?}", res.text().await);
-                }
-            }
-            Err(err) => tracing::debug!("request failed: {err:?}"),
+impl OprfSessionInitSessions {
+    pub async fn challenge<R: Rng + CryptoRng>(
+        self,
+        signal_hash: BaseField,
+        id_commitment_r: BaseField,
+        pk: &ProvingKey<Bn254>,
+        matrices: &ConstraintMatrices<ark_bn254::Fr>,
+        rng: &mut R,
+    ) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
+        let challenge = self.challenge_request.challenge.clone();
+        let responses = tokio::finish_sessions(&self.services, self.challenge_request).await?;
+        let proofs = responses
+            .into_iter()
+            .map(|res| res.proof_share)
+            .collect::<Vec<_>>();
+        let dlog_proof = challenge.combine_proofs_shamir(&proofs, &self.lagrange);
+        tracing::info!("checking second proof");
+        if !dlog_proof.verify(
+            self.rp_nullifier_key,
+            self.blinded_request.blinded_query(),
+            self.blinded_response,
+            Affine::generator(),
+        ) {
+            return Err(Error::InvalidDLogProof);
+        }
+
+        let nullifier_input = NullifierProofInput::new(
+            self.request_id,
+            self.rp_nullifier_key,
+            signal_hash,
+            self.query_proof_input,
+            self.query_hash,
+            self.blinded_response,
+            dlog_proof,
+            id_commitment_r,
+        );
+        let (proof, public) = generate_nullifier_proof(&nullifier_input, pk, matrices, rng)?;
+        Ok((proof, public, nullifier_input.nullifier))
+    }
+}
+
+impl OprfSessionSignedQuery {
+    pub fn create_oprf_request<R: Rng + CryptoRng>(
+        self,
+        pk: &ProvingKey<Bn254>,
+        matrices: &ConstraintMatrices<ark_bn254::Fr>,
+        nonce_signature: k256::ecdsa::Signature,
+        rng: &mut R,
+    ) -> Result<OprfSessionCreatedRequest> {
+        let inputs: HashMap<String, serde_json::Value> =
+            serde_json::from_value(self.query_input.json()).expect("can deserialize input");
+        let inputs = inputs
+            .into_iter()
+            .map(|(name, value)| (name, parse(value)))
+            .collect();
+        let witness = generate_witness(QUERY_BYTES, inputs)?;
+        let (proof, _) = generate_proof(pk, matrices, &witness, rng)?;
+        Ok(OprfSessionCreatedRequest {
+            request_id: self.request_id,
+            query_hash: self.query_hash,
+            query_proof_input: self.query_input,
+            oprf_request: OprfRequest {
+                request_id: self.request_id,
+                proof,
+                point_b: self.blinded_request.blinded_query(),
+                rp_identifier: NullifierShareIdentifier {
+                    rp_id: self.query.rp_id,
+                    share_epoch: self.query.share_epoch,
+                },
+                merkle_epoch: self.merkle_epoch,
+                action: self.query.action,
+                nonce: self.query.nonce,
+                signature: nonce_signature,
+                cred_pk: self.credential_issuer.clone(),
+                current_time_stamp: self.query.current_time_stamp.into(),
+            },
+            blinded_request: self.blinded_request,
+            query: self.query,
+        })
+    }
+}
+
+impl OprfSession {
+    pub fn init(
+        credentials_signature: CredentialsSignature,
+        merkle_membership: MerkleMembership,
+    ) -> Result<Self> {
+        if merkle_membership.siblings.len() == MAX_DEPTH {
+            Ok(Self {
+                request_id: Uuid::new_v4(),
+                credentials_signature,
+                merkle_membership,
+            })
+        } else {
+            Err(Error::InvalidSiblingsLength {
+                expected: MAX_DEPTH,
+                is: merkle_membership.siblings.len(),
+            })
         }
     }
-    responses
-}
 
-async fn challenge_request(
-    oprf_services: &[String],
-    req: &ChallengeRequest,
-) -> Result<Vec<ChallengeResponse>> {
-    // TODO maybe create client in caller and reuse for both requests
-    let client = reqwest::Client::new();
-    // TODO FuturesOrdered
-    let mut responses = Vec::with_capacity(oprf_services.len());
-    for url in oprf_services {
-        let res = client
-            .post(format!("{url}/api/v1/finish"))
-            .json(req)
-            .send()
-            .await?
-            .json::<ChallengeResponse>()
-            .await?;
-        responses.push(res);
-    }
-    debug_assert!(responses.iter().all(|res| res.request_id == req.request_id));
-    Ok(responses)
-}
+    pub fn sign_oprf_query<R: Rng + CryptoRng>(
+        self,
+        query: OprfQuery,
+        pk_batch: UserPublicKeyBatch,
+        pk_index: u64,
+        sk: EdDSAPrivateKey,
+        rng: &mut R,
+    ) -> Result<OprfSessionSignedQuery> {
+        if pk_index > 7 {
+            return Err(Error::InvalidPublicKeyIndex(pk_index));
+        }
+        let query_hash = OprfClient::generate_query(
+            self.merkle_membership.mt_index.into(),
+            query.rp_id.into_inner().into(),
+            query.action,
+        );
+        let oprf_client = OprfClient::new(sk.public().pk);
+        let (blinded_request, blinding_factor) =
+            oprf_client.blind_query(self.request_id, query_hash, rng);
+        let signature = sk.sign(blinding_factor.query());
 
-fn choose_party_responses<R: Rng + CryptoRng>(
-    responses: Vec<(PartyId, String, OprfResponse)>,
-    degree: usize,
-    rng: &mut R,
-) -> Result<(Vec<usize>, Vec<String>, Vec<OprfResponse>)> {
-    let chosen_responses = responses.into_iter().choose_multiple(rng, degree + 1);
-    let num_responses = chosen_responses.len();
-    if num_responses != degree + 1 {
-        return Err(Error::NotEnoughOprfResponses {
-            n: num_responses,
-            degree,
-        });
+        let query_input = QueryProofInput::<MAX_DEPTH> {
+            pk: pk_batch.into_proof_input(),
+            pk_index: pk_index.into(),
+            s: signature.s,
+            r: [signature.r.x, signature.r.y],
+            cred_type_id: self.credentials_signature.type_id,
+            cred_pk: [
+                self.credentials_signature.issuer.pk.x,
+                self.credentials_signature.issuer.pk.y,
+            ],
+            cred_hashes: self.credentials_signature.hashes,
+            cred_genesis_issued_at: self.credentials_signature.genesis_issued_at.into(),
+            cred_expires_at: self.credentials_signature.expires_at.into(),
+            cred_s: self.credentials_signature.signature.s,
+            cred_r: [
+                self.credentials_signature.signature.r.x,
+                self.credentials_signature.signature.r.y,
+            ],
+            current_time_stamp: query.current_time_stamp.into(),
+            merkle_root: self.merkle_membership.root.into_inner(),
+            depth: self.merkle_membership.depth.into(),
+            mt_index: self.merkle_membership.mt_index.into(),
+            siblings: self
+                .merkle_membership
+                .siblings
+                .try_into()
+                .expect("checked in init step"),
+            beta: blinding_factor.beta(),
+            rp_id: query.rp_id.into_inner().into(),
+            action: query.action,
+            nonce: query.nonce,
+            q: blinded_request.blinded_query_as_public_output(),
+        };
+
+        Ok(OprfSessionSignedQuery {
+            query_hash,
+            query,
+            merkle_epoch: self.merkle_membership.epoch,
+            request_id: self.request_id,
+            blinded_request,
+            credential_issuer: self.credentials_signature.issuer,
+            query_input,
+        })
     }
-    let parties = chosen_responses
-        .iter()
-        .map(|(id, _, _)| (u16::from(*id) + 1) as usize)
-        .collect::<Vec<usize>>();
-    let services = chosen_responses
-        .iter()
-        .map(|(_, url, _)| url.clone())
-        .collect::<Vec<String>>();
-    let chosen_responses = chosen_responses
-        .into_iter()
-        .map(|(_, _, res)| res)
-        .collect::<Vec<OprfResponse>>();
-    tracing::debug!("randomly selected parties: {parties:?}");
-    Ok((parties, services, chosen_responses))
 }
 
 fn parse(value: serde_json::Value) -> Vec<U256> {
@@ -337,24 +362,8 @@ fn parse(value: serde_json::Value) -> Vec<U256> {
     }
 }
 
-fn generate_query_proof<R: Rng + CryptoRng>(
-    input: &QueryProofInput<MAX_DEPTH>,
-    pk: &ProvingKey<Bn254>,
-    matrices: &ConstraintMatrices<ark_bn254::Fr>,
-    rng: &mut R,
-) -> Result<(Groth16Proof, Vec<BaseField>)> {
-    let inputs: HashMap<String, serde_json::Value> =
-        serde_json::from_value(input.json()).expect("can deserialize input");
-    let inputs = inputs
-        .into_iter()
-        .map(|(name, value)| (name, parse(value)))
-        .collect();
-    let witness = generate_witness(QUERY_BYTES, inputs)?;
-    generate_proof(pk, matrices, &witness, rng)
-}
-
-fn generate_nullifier_proof<R: Rng + CryptoRng>(
-    input: &NullifierProofInput<MAX_DEPTH>,
+fn generate_nullifier_proof<const MERLE_DEPTH: usize, R: Rng + CryptoRng>(
+    input: &NullifierProofInput<MERLE_DEPTH>,
     pk: &ProvingKey<Bn254>,
     matrices: &ConstraintMatrices<ark_bn254::Fr>,
     rng: &mut R,
