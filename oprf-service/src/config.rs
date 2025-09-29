@@ -161,7 +161,7 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_CURRENT_TIME_STAMP_MAX_DIFFERENCE",
-        default_value = "10s",
+        default_value = "5min",
         value_parser = humantime::parse_duration
 
     )]
@@ -171,7 +171,7 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_SIGNATURE_HISTORY_CLEANUP_INTERVAL",
-        default_value = "30s",
+        default_value = "10min",
         value_parser = humantime::parse_duration
 
     )]

@@ -1,9 +1,12 @@
-use std::{fs::File, path::PathBuf, sync::Arc, time::SystemTime};
+use std::{fs::File, path::PathBuf, sync::Arc};
 
 use ark_ff::UniformRand as _;
 use circom_types::{groth16::ZKey, traits::CheckElement};
 use oprf_client::{BaseField, EdDSAPrivateKey, MAX_PUBLIC_KEYS, NullifierArgs};
-use oprf_types::{ShareEpoch, sc_mock::UserPublicKey};
+use oprf_types::{
+    ShareEpoch,
+    sc_mock::{SignNonceResponse, UserPublicKey},
+};
 use rand::Rng as _;
 
 fn install_tracing() {
@@ -44,7 +47,10 @@ async fn test_nullifier() -> eyre::Result<()> {
     let action = BaseField::rand(&mut rng);
     let signal_hash = BaseField::rand(&mut rng);
     let nonce = BaseField::rand(&mut rng);
-    let signature = oprf_test::sign_nonce(&chain_url, rp_id, nonce).await?;
+    let SignNonceResponse {
+        signature,
+        current_time_stamp,
+    } = oprf_test::sign_nonce(&chain_url, rp_id, nonce).await?;
     let id_commitment_r = BaseField::rand(&mut rng);
     let query_zkey = ZKey::from_reader(
         File::open(dir.join("../circom/main/OPRFQueryProof.zkey")).expect("can open"),
@@ -64,10 +70,6 @@ async fn test_nullifier() -> eyre::Result<()> {
     let cred_hashes = [BaseField::rand(&mut rng), BaseField::rand(&mut rng)]; // In practice, these are 2 hashes
     let genesis_issued_at = BaseField::from(rng.r#gen::<u64>());
     let expired_at_u64 = rng.gen_range(1..=u64::MAX);
-    let current_time_stamp = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("system time is after unix epoch")
-        .as_secs();
     let expired_at = BaseField::from(expired_at_u64);
     let args = NullifierArgs {
         rp_nullifier_key: rp_nullifier_key.inner(),

@@ -44,7 +44,7 @@ use crate::{
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OprfServiceError {
     /// The client Groth16 proof did not verify.
-    #[error("invalid proof")]
+    #[error("client proof did not verify")]
     InvalidProof,
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
@@ -55,11 +55,11 @@ pub(crate) enum OprfServiceError {
     /// An error returned from the chain watcher service during merkle look-up.
     #[error(transparent)]
     ChainWatcherError(#[from] ChainWatcherError),
-    /// The difference current time stamp difference between client and service is larger than allowed.
-    #[error("the time stamp difference is to large")]
+    /// The current time stamp difference between client and service is larger than allowed.
+    #[error("the time stamp difference is too large")]
     TimeStampDifference,
     /// A nonce signature was uses more than once
-    #[error("duplicate nonce signature")]
+    #[error(transparent)]
     DuplicateSignatureError(#[from] DuplicateSignatureError),
     /// The merkle tree depth is greater than the max
     #[error("merkle tree depth greater than max: {0}")]
@@ -136,8 +136,12 @@ impl OprfService {
 
         // check the RP nonce signature - this also lightens the threat
         // of DoS attack that force the service to always check the merkle roots from chain
-        self.crypto_device
-            .verify_nonce_signature(rp_id, request.nonce, &request.signature)?;
+        self.crypto_device.verify_nonce_signature(
+            rp_id,
+            request.nonce,
+            request.current_time_stamp,
+            &request.signature,
+        )?;
 
         // add signature to history to check if the nonces where only used once
         self.signature_history
