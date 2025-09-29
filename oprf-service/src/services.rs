@@ -22,3 +22,4 @@ pub(crate) mod oprf;
 pub(crate) mod secret_gen;
 pub(crate) mod secret_manager;
 pub(crate) mod session_store;
+pub(crate) mod signature_history;

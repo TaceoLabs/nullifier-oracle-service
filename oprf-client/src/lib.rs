@@ -107,6 +107,7 @@ pub struct OprfSession {
 pub struct OprfSessionSignedQuery {
     query_hash: BaseField,
     request_id: Uuid,
+    merkle_depth: u64,
     merkle_epoch: MerkleEpoch,
     query: OprfQuery,
     credential_issuer: EdDSAPublicKey,
@@ -258,7 +259,8 @@ impl OprfSessionSignedQuery {
                 nonce: self.query.nonce,
                 signature: nonce_signature,
                 cred_pk: self.credential_issuer.clone(),
-                current_time_stamp: self.query.current_time_stamp.into(),
+                current_time_stamp: self.query.current_time_stamp,
+                merkle_depth: self.merkle_depth,
             },
             blinded_request: self.blinded_request,
             query: self.query,
@@ -341,6 +343,7 @@ impl OprfSession {
         };
 
         Ok(OprfSessionSignedQuery {
+            merkle_depth: self.merkle_membership.depth,
             query_hash,
             query,
             merkle_epoch: self.merkle_membership.epoch,

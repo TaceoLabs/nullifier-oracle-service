@@ -8,7 +8,7 @@ use oprf_client::{
 };
 use oprf_core::credentials::UserCredentials;
 use oprf_test::{self, oprf::NullifierArgs, sc_mock};
-use oprf_types::{ShareEpoch, crypto::UserPublicKeyBatch};
+use oprf_types::{ShareEpoch, crypto::UserPublicKeyBatch, sc_mock::SignNonceResponse};
 use rand::Rng as _;
 
 fn install_tracing() {
@@ -48,7 +48,10 @@ async fn test_nullifier() -> eyre::Result<()> {
     let action = BaseField::rand(&mut rng);
     let signal_hash = BaseField::rand(&mut rng);
     let nonce = BaseField::rand(&mut rng);
-    let signature = sc_mock::sign_nonce(&chain_url, rp_id, nonce).await?;
+    let SignNonceResponse {
+        signature,
+        current_time_stamp,
+    } = oprf_test::sign_nonce(&chain_url, rp_id, nonce).await?;
     let id_commitment_r = BaseField::rand(&mut rng);
     let query_zkey = ZKey::from_reader(
         File::open(dir.join("../circom/main/OPRFQueryProof.zkey")).expect("can open"),
@@ -67,8 +70,7 @@ async fn test_nullifier() -> eyre::Result<()> {
     let cred_pk = cred_sk.public();
     let cred_hashes = [BaseField::rand(&mut rng), BaseField::rand(&mut rng)]; // In practice, these are 2 hashes
     let genesis_issued_at = rng.r#gen::<u64>();
-    let expires_at = rng.gen_range(1..=u64::MAX);
-    let current_time_stamp = rng.gen_range(0..expires_at);
+    let expires_at = rng.gen_range(current_time_stamp + 1..=u64::MAX);
 
     let merkle_membership = MerkleMembership {
         epoch: merkle_epoch,

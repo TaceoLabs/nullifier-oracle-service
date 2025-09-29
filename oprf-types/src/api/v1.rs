@@ -47,9 +47,9 @@ pub struct OprfRequest {
     /// The credential public key
     pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
     /// The current time stamp
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
-    pub current_time_stamp: ark_babyjubjub::Fq,
+    pub current_time_stamp: u64,
+    /// The depth of the credential in the merkle tree
+    pub merkle_depth: u64,
 }
 
 /// Identifies the nullifier share to use for the OPRF computation by relying party ([`RpId`]) and [`ShareEpoch`].

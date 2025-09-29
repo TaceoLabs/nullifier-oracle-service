@@ -161,10 +161,11 @@ impl CryptoDevice {
         })
     }
 
-    /// Verifies an ECDSA signature over a nonce for the given relying party.
+    /// Verifies an ECDSA signature over a nonce and current_time_stamp for the given relying party.
     ///
-    /// The BabyJubJub `nonce` is converted into **little-endian bytes**,
-    /// then verified against the stored ECDSA public key for `rp_id`
+    /// The BabyJubJub `nonce` is converted into `ark_ff::BigInt` and then into **little-endian bytes**.
+    /// The `current_time_stamp` (given as u64 seconds since `UNIX_EPOCH`) is converted into **little-endian bytes**.
+    /// The msg `nonce || current_time_stamp` is then verified against the stored ECDSA public key for `rp_id`
     /// using the provided `signature`.
     ///
     /// Returns `Ok(())` on success or an error if the relying party is unknown
@@ -174,15 +175,18 @@ impl CryptoDevice {
         &self,
         rp_id: RpId,
         nonce: ark_babyjubjub::Fq,
-        signature: k256::ecdsa::Signature,
+        current_time_stamp: u64,
+        signature: &k256::ecdsa::Signature,
     ) -> CryptoDeviceResult<()> {
         tracing::debug!("verifying nonce: {nonce}");
-        let bytes = nonce.into_bigint().to_bytes_le();
         let vk = self
             .shares
             .get_rp_public_key(rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(rp_id))?;
-        vk.verify(&bytes, &signature)?;
+        let mut msg = Vec::new();
+        msg.extend(nonce.into_bigint().to_bytes_le());
+        msg.extend(current_time_stamp.to_le_bytes());
+        vk.verify(&msg, signature)?;
         tracing::debug!("success");
         Ok(())
     }
