@@ -15,7 +15,10 @@
 //!
 //! We refer to [Section 3 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf) for more information about the OPRF-protocol.
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
@@ -33,10 +36,9 @@ use crate::{
         chain_watcher::{ChainWatcherError, ChainWatcherService},
         crypto_device::{CryptoDevice, CryptoDeviceError},
         session_store::SessionStore,
+        signature_history::{DuplicateSignatureError, SignatureHistory},
     },
 };
-
-pub const MAX_DEPTH: usize = 30;
 
 /// Errors returned by the [`OprfService`].
 #[derive(Debug, thiserror::Error)]
@@ -53,6 +55,15 @@ pub(crate) enum OprfServiceError {
     /// An error returned from the chain watcher service during merkle look-up.
     #[error(transparent)]
     ChainWatcherError(#[from] ChainWatcherError),
+    /// The current time stamp difference between client and service is larger than allowed.
+    #[error("the time stamp difference is too large")]
+    TimeStampDifference,
+    /// A nonce signature was uses more than once
+    #[error(transparent)]
+    DuplicateSignatureError(#[from] DuplicateSignatureError),
+    /// The merkle tree depth is greater than the max
+    #[error("merkle tree depth greater than max: {0}")]
+    MerkleDepthGreaterThanMax(u64),
     /// Internal server error
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
@@ -60,9 +71,11 @@ pub(crate) enum OprfServiceError {
 
 #[derive(Clone)]
 pub(crate) struct OprfService {
+    config: Arc<OprfPeerConfig>,
     crypto_device: Arc<CryptoDevice>,
     session_store: SessionStore,
     chain_watcher: ChainWatcherService,
+    signature_history: SignatureHistory,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
 }
 
@@ -75,7 +88,12 @@ impl OprfService {
         vk: ark_groth16::VerifyingKey<Bn254>,
     ) -> Self {
         Self {
+            config: Arc::clone(&config),
             crypto_device,
+            signature_history: SignatureHistory::init(
+                config.current_time_stamp_max_difference * 2,
+                config.signature_history_cleanup_interval,
+            ),
             session_store: SessionStore::init(config),
             chain_watcher,
             vk: Arc::new(ark_groth16::prepare_verifying_key(&vk)),
@@ -100,11 +118,34 @@ impl OprfService {
         tracing::debug!("handling session request: {}", request.request_id);
         let rp_id = request.rp_identifier.rp_id;
 
+        // check the merkle depth against the max
+        if request.merkle_depth > self.config.max_merkle_depth {
+            return Err(OprfServiceError::MerkleDepthGreaterThanMax(
+                self.config.max_merkle_depth,
+            ));
+        }
+
+        // check the time stamp against system time +/- difference
+        let req_time_stamp = Duration::from_secs(request.current_time_stamp);
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system time is after unix epoch");
+        if current_time.abs_diff(req_time_stamp) > self.config.current_time_stamp_max_difference {
+            return Err(OprfServiceError::TimeStampDifference);
+        }
+
         // check the RP nonce signature - this also lightens the threat
         // of DoS attack that force the service to always check the merkle roots from chain
-        // TODO for later versions we need to store the signatures and check if the nonces where only used once
-        self.crypto_device
-            .verify_nonce_signature(rp_id, request.nonce, request.signature)?;
+        self.crypto_device.verify_nonce_signature(
+            rp_id,
+            request.nonce,
+            request.current_time_stamp,
+            &request.signature,
+        )?;
+
+        // add signature to history to check if the nonces where only used once
+        self.signature_history
+            .add_signature(request.signature.to_vec(), req_time_stamp)?;
 
         // get the merkle root identified by the epoch
         let merkle_root = self
@@ -118,9 +159,9 @@ impl OprfService {
             request.point_b.y,
             request.cred_pk.pk.x,
             request.cred_pk.pk.y,
-            request.current_time_stamp,
+            request.current_time_stamp.into(),
             merkle_root.into_inner(),
-            ark_babyjubjub::Fq::from(MAX_DEPTH as u64),
+            request.merkle_depth.into(),
             request.rp_identifier.rp_id.into(),
             request.action,
             request.nonce,

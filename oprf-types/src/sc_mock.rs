@@ -128,6 +128,8 @@ pub struct SignNonceRequest {
 pub struct SignNonceResponse {
     /// The signature
     pub signature: k256::ecdsa::Signature,
+    /// The current time stamp
+    pub current_time_stamp: u64,
 }
 
 impl ChainEvent {

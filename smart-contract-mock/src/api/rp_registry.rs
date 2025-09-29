@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use ark_ff::{BigInteger as _, PrimeField as _};
 use axum::{
     Json, Router,
@@ -57,8 +59,18 @@ async fn sign_nonce(
             .rp_signing_key
             .clone(),
     );
-    let signature = rp_signing_key.sign(&req.nonce.into_bigint().to_bytes_le());
-    Ok(Json(SignNonceResponse { signature }))
+    let current_time_stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system time is after unix epoch")
+        .as_secs();
+    let mut msg = Vec::new();
+    msg.extend(req.nonce.into_bigint().to_bytes_le());
+    msg.extend(current_time_stamp.to_le_bytes());
+    let signature = rp_signing_key.sign(&msg);
+    Ok(Json(SignNonceResponse {
+        signature,
+        current_time_stamp,
+    }))
 }
 
 pub(crate) fn router() -> Router<AppState> {

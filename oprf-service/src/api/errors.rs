@@ -89,6 +89,15 @@ impl From<OprfServiceError> for ApiErrors {
                 Self::from(chain_watcher_error)
             }
             OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
+            OprfServiceError::TimeStampDifference => {
+                ApiErrors::BadRequest("the time stamp difference is too large".to_string())
+            }
+            OprfServiceError::DuplicateSignatureError(err) => {
+                ApiErrors::BadRequest(err.to_string())
+            }
+            OprfServiceError::MerkleDepthGreaterThanMax(max) => {
+                ApiErrors::BadRequest(format!("merkle tree depth greater than max: {max}"))
+            }
         }
     }
 }
