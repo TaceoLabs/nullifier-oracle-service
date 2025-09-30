@@ -1,16 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
-use oprf_client::BaseField;
 use oprf_service::config::{Environment, OprfPeerConfig};
-use oprf_types::{
-    MerkleEpoch, RpId,
-    crypto::RpNullifierKey,
-    sc_mock::{
-        AddPublicKeyRequest, AddPublicKeyResponse, MerklePath, SignNonceRequest, SignNonceResponse,
-        UserPublicKey,
-    },
-};
 use smart_contract_mock::config::SmartContractMockConfig;
+
+pub mod credentials;
+pub mod sc_mock;
 
 async fn start_service(id: usize) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -91,75 +85,4 @@ pub async fn start_services() -> [String; 3] {
         start_service(1).await,
         start_service(2).await,
     ]
-}
-
-pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)> {
-    let client = reqwest::Client::new();
-    let rp_id = client
-        .post(format!("{chain_url}/api/admin/register-new-rp"))
-        .send()
-        .await?
-        .json::<RpId>()
-        .await?;
-    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let res = client
-                .get(format!("{chain_url}/api/rp/{}", rp_id.into_inner()))
-                .send()
-                .await
-                .expect("smart contract is online");
-            if res.status().is_success() {
-                break res.json::<RpNullifierKey>().await.expect("can deserialize");
-            }
-            tokio::time::sleep(Duration::from_millis(200)).await;
-        }
-    })
-    .await
-    .expect("can fetch");
-    Ok((rp_id, rp_nullifier_key))
-}
-
-pub async fn register_public_key(
-    chain_url: &str,
-    public_key: UserPublicKey,
-) -> eyre::Result<(MerkleEpoch, MerklePath)> {
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{chain_url}/api/admin/register-new-public-key"))
-        .json(&AddPublicKeyRequest { public_key })
-        .send()
-        .await
-        .expect("smart contract is online");
-    if res.status().is_success() {
-        let res = res
-            .json::<AddPublicKeyResponse>()
-            .await
-            .expect("can get merkle path");
-        Ok((res.epoch, res.path))
-    } else {
-        eyre::bail!("returned error: {:?}", res.text().await?);
-    }
-}
-
-pub async fn sign_nonce(
-    chain_url: &str,
-    rp_id: RpId,
-    nonce: BaseField,
-) -> eyre::Result<SignNonceResponse> {
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{chain_url}/api/rp/sign"))
-        .json(&SignNonceRequest { rp_id, nonce })
-        .send()
-        .await
-        .expect("smart contract is online");
-    if res.status().is_success() {
-        let res = res
-            .json::<SignNonceResponse>()
-            .await
-            .expect("can get merkle path");
-        Ok(res)
-    } else {
-        eyre::bail!("returned error: {:?}", res.text().await?);
-    }
 }

@@ -6,7 +6,7 @@ use ark_ff::UniformRand;
 use criterion::*;
 use oprf_core::{
     ddlog_equality::{DLogEqualityChallenge, DLogEqualitySession},
-    oprf::{OPrfClient, OPrfKey, OPrfService},
+    oprf::{OPrfKey, OPrfService, OprfClient},
     shamir::lagrange_from_coeff,
 };
 use rand::seq::IteratorRandom;
@@ -17,7 +17,7 @@ fn oprf_bench(c: &mut Criterion) {
         let rng = &mut rand::thread_rng();
         let request_id = Uuid::new_v4();
         let pk = ark_babyjubjub::EdwardsAffine::rand(rng);
-        let client = OPrfClient::new(pk);
+        let client = OprfClient::new(pk);
         let query = ark_babyjubjub::Fq::rand(rng);
 
         b.iter(|| client.blind_query(request_id, query, rng));
@@ -28,7 +28,7 @@ fn oprf_bench(c: &mut Criterion) {
         let request_id = Uuid::new_v4();
         let key = OPrfKey::random(rng);
         let pk = key.public_key().into_affine();
-        let client = OPrfClient::new(pk);
+        let client = OprfClient::new(pk);
         let server = OPrfService::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
@@ -47,7 +47,7 @@ fn oprf_bench(c: &mut Criterion) {
         let request_id = Uuid::new_v4();
         let key = OPrfKey::random(rng);
         let pk = key.public_key().into_affine();
-        let client = OPrfClient::new(pk);
+        let client = OprfClient::new(pk);
         let server = OPrfService::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
@@ -66,7 +66,7 @@ fn oprf_bench(c: &mut Criterion) {
         let request_id = Uuid::new_v4();
         let key = OPrfKey::random(rng);
         let pk = key.public_key().into_affine();
-        let client = OPrfClient::new(pk);
+        let client = OprfClient::new(pk);
         let server = OPrfService::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
@@ -89,7 +89,7 @@ fn oprf_bench(c: &mut Criterion) {
         let request_id = Uuid::new_v4();
         let key = OPrfKey::random(rng);
         let pk = key.public_key().into_affine();
-        let client = OPrfClient::new(pk);
+        let client = OprfClient::new(pk);
         let server = OPrfService::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 

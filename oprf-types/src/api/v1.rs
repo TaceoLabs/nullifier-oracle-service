@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::{MerkleEpoch, RpId, ShareEpoch, crypto::PartyId};
 
 /// A request sent by a client to perform an OPRF evaluation.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OprfRequest {
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
@@ -48,7 +48,7 @@ pub struct OprfRequest {
     pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
     /// The current time stamp
     pub current_time_stamp: u64,
-    /// The depth of the merkle tree
+    /// The depth of the credential in the merkle tree
     pub merkle_depth: u64,
 }
 
@@ -73,7 +73,7 @@ pub struct OprfResponse {
 }
 
 /// A request from the client to complete the DLog equality challenge.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ChallengeRequest {
     /// ID of the original OPRF request.
     pub request_id: Uuid,

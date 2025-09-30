@@ -7,7 +7,7 @@ use rand::{CryptoRng, Rng};
 use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 use uuid::Uuid;
 
-use crate::{oprf::OPrfClient, proof_input_gen::query::QueryProofInput};
+use crate::{oprf::OprfClient, proof_input_gen::query::QueryProofInput};
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
@@ -95,7 +95,7 @@ impl<const MAX_DEPTH: usize> RpIdQueryProofInput<MAX_DEPTH> {
         }
 
         // Calculate OPRF
-        let oprf_client = OPrfClient::new(pk.pk);
+        let oprf_client = OprfClient::new(pk.pk);
         let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, mt_index, rng);
 
         // Sign the query

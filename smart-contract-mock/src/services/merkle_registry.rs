@@ -9,7 +9,8 @@ use std::{
 };
 
 use ark_ec::{AdditiveGroup as _, AffineRepr as _};
-use oprf_types::sc_mock::{MerklePath, UserPublicKey};
+use oprf_types::crypto::UserPublicKeyBatch;
+use oprf_types::sc_mock::MerklePath;
 use oprf_types::{MerkleEpoch, MerkleRoot, sc_mock::MerkleRootUpdate};
 use parking_lot::Mutex;
 use poseidon2::Poseidon2;
@@ -32,7 +33,7 @@ struct PoseidonCompression {
     domain_separator: ark_babyjubjub::Fq,
 }
 impl PoseidonCompression {
-    fn merkle_leaf(&self, pk: UserPublicKey) -> ark_babyjubjub::Fq {
+    fn merkle_leaf(&self, pk: &UserPublicKeyBatch) -> ark_babyjubjub::Fq {
         let mut input = [ark_babyjubjub::Fq::ZERO; 16];
         input[0] = self.domain_separator;
         for i in 0..7 {
@@ -86,18 +87,18 @@ impl MerkleRootRegistry {
 
     // Creates a path where the key is the leave and the path are random siblings.
     pub(crate) fn add_random<R: Rng>(&self, r: &mut R) {
-        let key = UserPublicKey::random(r);
+        let key = UserPublicKeyBatch::random(r);
         self.add_public_key(key, r);
     }
 
     pub(crate) fn add_public_key<R: Rng>(
         &self,
-        key: UserPublicKey,
+        key_batch: UserPublicKeyBatch,
         r: &mut R,
     ) -> (MerkleEpoch, MerklePath) {
         let index = self.current_index.fetch_add(1, Ordering::Relaxed);
         let poseidon = PoseidonCompression::default();
-        let mut current = poseidon.merkle_leaf(key.clone());
+        let mut current = poseidon.merkle_leaf(&key_batch);
         let mut siblings = Vec::new();
         // some random siblings
         for level in 0..self.config.merkle_depth {
@@ -116,7 +117,7 @@ impl MerkleRootRegistry {
             index,
             siblings,
             root: MerkleRoot::from(current),
-            key,
+            key_batch,
         };
         self.storage.lock().insert(epoch, path.clone());
         // write update
