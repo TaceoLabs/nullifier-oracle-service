@@ -1,4 +1,4 @@
-use ark_ec::{AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM};
 use ark_ff::{PrimeField, UniformRand, Zero};
 use itertools::izip;
 use poseidon2::Poseidon2;
@@ -9,6 +9,7 @@ use crate::shamir;
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
+type Projective = ark_babyjubjub::EdwardsProjective;
 
 pub struct KeyGenPoly {
     poly: Vec<ScalarField>,
@@ -178,11 +179,7 @@ impl KeyGenPoly {
     pub fn accumulate_lagrange_pks(pks: &[Affine], lagrange: &[ScalarField]) -> Affine {
         assert!(pks.len() >= lagrange.len());
         let pks = &pks[0..lagrange.len()];
-        let mut result = Affine::zero();
-        for (pk, l) in izip!(pks.iter(), lagrange.iter()) {
-            result = (result + *pk * *l).into_affine();
-        }
-        result
+        Projective::msm_unchecked(pks, lagrange).into_affine()
     }
 
     pub fn degree(&self) -> usize {
