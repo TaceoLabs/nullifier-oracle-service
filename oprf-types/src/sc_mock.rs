@@ -80,14 +80,14 @@ pub struct IsValidEpochRequest {
     pub epoch: MerkleEpoch,
 }
 
-/// Request to add a new [`UserPublicKey`]
+/// Request to add a new [`UserPublicKeyBatch`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPublicKeyRequest {
     /// The epoch to check
     pub public_key: UserPublicKeyBatch,
 }
 
-/// Response to for adding a [`UserPublicKey`]
+/// Response to for adding a [`UserPublicKeyBatch`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPublicKeyResponse {
     /// The epoch to check
