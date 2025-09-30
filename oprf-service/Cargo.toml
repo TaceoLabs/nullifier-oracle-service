@@ -53,3 +53,6 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
 axum-test = { workspace = true }
+eddsa-babyjubjub = { workspace = true }
+oprf-client = { workspace = true }
+oprf-test = { workspace = true }

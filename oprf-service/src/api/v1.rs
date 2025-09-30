@@ -14,8 +14,8 @@ use crate::AppState;
 /// Builds unauthenticated routes for the service.
 ///
 /// Currently all requests are unauthenticated. The routes are defined in the `oprf` module.
-fn unauthenticated_routes(input_max_body_limit: usize) -> Router<AppState> {
-    oprf::router(input_max_body_limit)
+fn unauthenticated_routes() -> Router<AppState> {
+    oprf::router()
 }
 
 /// Build the v1 API router.
@@ -28,14 +28,12 @@ fn unauthenticated_routes(input_max_body_limit: usize) -> Router<AppState> {
 /// # Arguments
 ///
 /// * `input_max_body_limit` - maximum allowed size of request bodies in bytes.
-pub(crate) fn build(input_max_body_limit: usize) -> Router<AppState> {
+pub(crate) fn build() -> Router<AppState> {
     // We setup a wildcard as we are a public API and everyone can access the service.
     let cors = CorsLayer::new()
         .allow_credentials(false)
         .allow_headers([http::header::CONTENT_TYPE, http::header::USER_AGENT])
         .allow_methods([http::Method::POST, http::Method::OPTIONS])
         .allow_origin(AllowOrigin::any());
-    Router::new()
-        .merge(unauthenticated_routes(input_max_body_limit))
-        .layer(cors)
+    Router::new().merge(unauthenticated_routes()).layer(cors)
 }

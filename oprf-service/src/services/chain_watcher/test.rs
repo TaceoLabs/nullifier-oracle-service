@@ -1,14 +1,9 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use oprf_types::{chain::ChainEvent, crypto::PartyId, sc_mock::MerkleRootUpdate};
 use parking_lot::Mutex;
 
-use crate::{
-    config::OprfPeerConfig,
-    services::chain_watcher::{
-        ChainEventResult, ChainWatcher, ChainWatcherError, MerkleEpoch, MerkleRoot, MerkleRootStore,
-    },
+use crate::services::chain_watcher::{
+    ChainEventResult, ChainWatcher, ChainWatcherError, MerkleEpoch, MerkleRoot, MerkleRootStore,
 };
 
 pub(crate) struct TestWatcher {
@@ -18,10 +13,15 @@ pub(crate) struct TestWatcher {
 impl TestWatcher {
     pub(crate) fn new(
         merkle_updates: Vec<MerkleRootUpdate>,
-        config: Arc<OprfPeerConfig>,
+        max_merkle_store_size: usize,
+        chain_epoch_max_difference: u128,
     ) -> eyre::Result<Self> {
         Ok(Self {
-            merkle_root_store: Mutex::new(MerkleRootStore::new(merkle_updates, config)?),
+            merkle_root_store: Mutex::new(MerkleRootStore::new(
+                merkle_updates,
+                max_merkle_store_size,
+                chain_epoch_max_difference,
+            )?),
         })
     }
 }

@@ -70,7 +70,7 @@ impl MerkleEpoch {
 
     /// Creates a new `MerkleEpoch` by wrapping a `u128`
     pub fn new(value: u128) -> Self {
-        Self::from(value)
+        Self(value)
     }
 
     /// Increases the epoch by one.
@@ -103,9 +103,9 @@ impl ShareEpoch {
         self.0
     }
 
-    /// Creates a new key epoch, starting at 0.
-    pub fn new() -> Self {
-        Self::default()
+    /// Creates a new `ShareEpoch` by wrapping a `u128`
+    pub fn new(value: u128) -> Self {
+        Self(value)
     }
 }
 
@@ -117,7 +117,7 @@ impl RpId {
 
     /// Creates a new `RpId` by wrapping a `u128`
     pub fn new(value: u128) -> Self {
-        Self::from(value)
+        Self(value)
     }
 }
 

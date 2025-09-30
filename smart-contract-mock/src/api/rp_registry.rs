@@ -58,7 +58,7 @@ async fn sign_nonce(
     let current_time_stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("system time is after unix epoch")
-        .as_secs();
+        .as_millis() as u64;
     let mut msg = Vec::new();
     msg.extend(req.nonce.into_bigint().to_bytes_le());
     msg.extend(current_time_stamp.to_le_bytes());

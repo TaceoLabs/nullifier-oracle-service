@@ -69,7 +69,7 @@ impl From<ChainWatcherError> for ApiErrors {
             ChainWatcherError::UnknownEpoch(epoch)
             | ChainWatcherError::TooFarInFuture(epoch)
             | ChainWatcherError::TooFarInPast(epoch) => {
-                ApiErrors::BadRequest(format!("not known epoch: {epoch}"))
+                ApiErrors::BadRequest(format!("Unknown merkle epoch: {epoch}"))
             }
             ChainWatcherError::ChainCommunicationError(report) => {
                 ApiErrors::InternalSeverError(report)
@@ -112,8 +112,8 @@ impl From<CryptoDeviceError> for ApiErrors {
                 ApiErrors::BadRequest(format!("Invalid signature: {error}"))
             }
             CryptoDeviceError::UnknownRpShareEpoch(key_identifier) => ApiErrors::NotFound(format!(
-                "Cannot find share for rp_id: {} , epoch: {}",
-                key_identifier.rp_id, key_identifier.share_epoch
+                "Cannot find share with epoch {} for RP with id: {}",
+                key_identifier.share_epoch, key_identifier.rp_id
             )),
         }
     }

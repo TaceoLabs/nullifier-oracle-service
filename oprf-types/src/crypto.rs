@@ -45,7 +45,7 @@ pub struct RpNullifierKey(
     ark_babyjubjub::EdwardsAffine,
 );
 
-/// A batch  of end-user public keys
+/// A batch of end-user public keys
 ///
 /// Stored in the Merkle-Tree at the Smart Contract.
 #[derive(Debug, Clone, Serialize, Deserialize)]

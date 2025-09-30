@@ -26,15 +26,12 @@ use oprf_types::crypto::PartyId;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    config::OprfPeerConfig,
-    services::{
-        chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
-        crypto_device::CryptoDevice,
-        event_handler::ChainEventHandler,
-        oprf::OprfService,
-        secret_manager::aws::AwsSecretManager,
-    },
+use crate::services::{
+    chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
+    crypto_device::CryptoDevice,
+    event_handler::ChainEventHandler,
+    oprf::OprfService,
+    secret_manager::aws::AwsSecretManager,
 };
 
 pub(crate) mod api;
@@ -48,15 +45,8 @@ pub(crate) mod services;
 /// the `AppState`.
 #[derive(Clone)]
 pub(crate) struct AppState {
-    config: Arc<OprfPeerConfig>,
     oprf_service: OprfService,
     party_id: PartyId,
-}
-
-impl FromRef<AppState> for Arc<OprfPeerConfig> {
-    fn from_ref(input: &AppState) -> Self {
-        Arc::clone(&input.config)
-    }
 }
 
 impl FromRef<AppState> for OprfService {
@@ -135,10 +125,14 @@ pub async fn start(
     // start oprf-service service
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
-        Arc::clone(&config),
         Arc::clone(&crypto_device),
         Arc::clone(&chain_watcher),
         vk.into(),
+        config.request_lifetime,
+        config.session_cleanup_interval,
+        config.max_merkle_depth,
+        config.current_time_stamp_max_difference,
+        config.signature_history_cleanup_interval,
     );
 
     tracing::info!("spawning chain event handler..");
@@ -153,7 +147,7 @@ pub async fn start(
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
-    let axum_rest_api = api::new_app(Arc::clone(&config), party_id, oprf_service);
+    let axum_rest_api = api::new_app(party_id, oprf_service);
 
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {
@@ -241,157 +235,191 @@ pub async fn default_shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::array;
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
-    use ark_ff::UniformRand;
+    use ark_ff::{BigInteger as _, PrimeField as _, UniformRand};
     use ark_serde_compat::groth16::Groth16VerificationKey;
     use axum_test::TestServer;
+    use k256::ecdsa::signature::SignerMut;
+    use oprf_client::zk::Groth16Material;
+    use oprf_client::{BaseField, MAX_DEPTH, MerkleMembership, OprfQuery, ScalarField};
+    use oprf_core::ddlog_equality::DLogEqualityChallenge;
+    use oprf_core::proof_input_gen::query::QueryProofInput;
+    use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, sc_mock::MerkleRootUpdate};
+    use rand::Rng as _;
+    use uuid::Uuid;
 
     use crate::services::crypto_device::dlog_storage::RpMaterial;
-    use crate::{
-        config::Environment,
-        services::{
-            chain_watcher::test::TestWatcher,
-            crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
-            secret_manager::test::TestSecretManager,
-        },
+    use crate::services::{
+        chain_watcher::test::TestWatcher,
+        crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
+        secret_manager::test::TestSecretManager,
     };
 
     use super::*;
 
-    async fn test_server() -> eyre::Result<TestServer> {
-        let mut rng = rand::thread_rng();
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let config = OprfPeerConfig {
-            environment: Environment::Dev,
-            bind_addr: "0.0.0.0:10000".to_string().parse().unwrap(),
-            input_max_body_limit: 32768,
-            request_lifetime: Duration::from_secs(5 * 60),
-            session_cleanup_interval: Duration::from_micros(10),
-            max_concurrent_jobs: 100000,
-            max_wait_time_shutdown: Duration::from_secs(10),
-            session_store_mailbox: 4096,
-            user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
-            chain_url: "foo".to_string(),
-            chain_check_interval: Duration::from_secs(60),
-            chain_epoch_max_difference: 10,
-            private_key_secret_id: "oprf/sk".to_string(),
-            dlog_share_secret_id_suffix: "oprf/shares/".to_string(),
-            max_merkle_store_size: 10,
-            current_time_stamp_max_difference: Duration::from_secs(10),
-            signature_history_cleanup_interval: Duration::from_secs(30),
-            max_merkle_depth: 30,
-        };
-        let config = Arc::new(config);
-        let secret_manager = Arc::new(TestSecretManager::new(
-            PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng)),
-            HashMap::from([(
-                RpId::new(0),
-                RpMaterial::new(
-                    HashMap::from([(
-                        ShareEpoch::default(),
-                        DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
-                    )]),
-                    k256::SecretKey::new(k256::Scalar::ONE.into())
-                        .public_key()
-                        .into(),
-                ),
-            )]),
-        ));
-        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
-        let chain_watcher = Arc::new(TestWatcher::new(
-            vec![MerkleRootUpdate {
-                hash: MerkleRoot::new(ark_babyjubjub::Fq::from_str(
-                    "12184867385685695781627163047456512405047415901037550089919079425163309680784",
-                ).expect("can deserialize")),
-                epoch: MerkleEpoch::new(0),
-            }],
-            Arc::clone(&config),
-        )?);
-        let vk = File::open(&config.user_verification_key_path)?;
-        let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
-        let oprf_service =
-            OprfService::init(Arc::clone(&config), crypto_device, chain_watcher, vk.into());
-        let server = api::new_test_app(config, PartyId::from(0), oprf_service);
-        Ok(server)
+    struct TestSetup {
+        server: TestServer,
+        oprf_service: OprfService,
+        oprf_req: OprfRequest,
+        challenge_req: ChallengeRequest,
     }
 
-    fn init_req() -> serde_json::Value {
-        serde_json::json!({
-          "request_id": "598bbf10-5c8c-484d-a6a8-797df2f6adad",
-          "proof": {
-            "pi_a": [
-              "14950137340857000683222569762333765310473881853005116566045546314594839239598",
-              "11775569493808639561638425283898899249711410214638629000366143416753426284589",
-              "1"
-            ],
-            "pi_b": [
-              [
-                "2785514216536277469827906089473581593816545804542544051984432397533886084626",
-                "17930103312496396226353435195950919235360268218173249660508137011847990329751"
-              ],
-              [
-                "2363689777289495504064683516501778916746070898103709476778676066463296842685",
-                "6941075786901911120599789621029487052766435115468727654164762473724024343868"
-              ],
-              [
-                "1",
-                "0"
-              ]
-            ],
-            "pi_c": [
-              "14917417826074216436678528082272805526100515653647889683876810571053982674852",
-              "18095770844934730928017558660041137777286354566190867165301998237933752732866",
-              "1"
-            ]
-          },
-          "point_b": [
-            "17545216781400172894265373183007675673600726709015686814609433516294328685361",
-            "4537764014265182053143850536234521610551807474914555869615963094641400823793"
-          ],
-          "rp_identifier": {
-            "rp_id": 0,
-            "share_epoch": 0
-          },
-          "merkle_epoch": 0,
-          "merkle_depth": 30,
-          "action": "1120809321026975175757466560999318768049435153540642913185613570219065846805",
-          "nonce": "11995758882934032369948628586537618022736362526028373754122425120894302910697",
-          "signature": "246F7FB4040A520C17D4358883A5103FA43483EA12C8039BADE1CFBF2CAAF2FE56DE7C9B833EE0F52C3E9F99C50D3E328B25211B146AB5F28B9055329A323FE3",
-          "cred_pk": {
-            "pk": [
-              "20250441087630822051897171877168864569957088175290736110746783269969005217521",
-              "2413711181075542609538861548035891129041376599307510529757411775315152595154"
-            ]
-          },
-          "current_time_stamp": SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("system time is after unix epoch").as_secs()
+    impl TestSetup {
+        async fn new() -> eyre::Result<Self> {
+            let mut rng = rand::thread_rng();
+            let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
-        })
-    }
+            let key_material = oprf_test::credentials::random_user_keys(&mut rng);
+            let siblings: [BaseField; MAX_DEPTH] = array::from_fn(|_| BaseField::rand(&mut rng));
+            let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
+            let merkle_root = MerkleRoot::new(QueryProofInput::merkle_root_from_pks(
+                &key_material.pk_batch.clone().into_proof_input(),
+                &siblings,
+                mt_index,
+            ));
+            let merkle_epoch = MerkleEpoch::new(0);
+            let share_epoch = ShareEpoch::default();
 
-    fn finish_req() -> serde_json::Value {
-        serde_json::json!({
-            "request_id": "598bbf10-5c8c-484d-a6a8-797df2f6adad",
-            "challenge": {
-              "e": "16620368534569496780871678850089758319969215860113286164642302138248101420004"
-            },
-            "rp_identifier": {
-              "rp_id": 0,
-              "share_epoch": 0
-            }
-        })
+            let rp_id = RpId::new(rng.r#gen());
+            let rp_secret_key = k256::SecretKey::random(&mut rng);
+            let rp_public_key = rp_secret_key.public_key();
+            let mut rp_signing_key = k256::ecdsa::SigningKey::from(rp_secret_key);
+
+            let nonce = BaseField::rand(&mut rng);
+            let current_time_stamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("system time is after unix epoch")
+                .as_millis() as u64;
+            let mut msg = Vec::new();
+            msg.extend(nonce.into_bigint().to_bytes_le());
+            msg.extend(current_time_stamp.to_le_bytes());
+            let signature = rp_signing_key.sign(&msg);
+
+            let groth16_material = Groth16Material::new(
+                dir.join("../circom/main/OPRFQueryProof.zkey"),
+                dir.join("../circom/main/OPRFNullifierProof.zkey"),
+            )?;
+
+            let merkle_membership = MerkleMembership {
+                epoch: merkle_epoch,
+                depth: MAX_DEPTH as u64, // TODO fix me
+                root: merkle_root,
+                mt_index,
+                siblings: siblings.to_vec(),
+            };
+            let oprf_query = OprfQuery {
+                rp_id,
+                share_epoch,
+                action: ark_babyjubjub::Fq::rand(&mut rng),
+                nonce,
+                current_time_stamp,
+                nonce_signature: signature,
+            };
+            let credential_signature = oprf_test::credentials::random_credential_signature(
+                mt_index,
+                current_time_stamp,
+                &mut rng,
+            );
+            let request_id = Uuid::new_v4();
+            let signed_query = oprf_client::sign_oprf_query(
+                credential_signature,
+                merkle_membership,
+                groth16_material,
+                oprf_query,
+                key_material,
+                request_id,
+                &mut rng,
+            )?;
+            let oprf_req = signed_query.get_request();
+            let challenge_req = ChallengeRequest {
+                request_id,
+                challenge: DLogEqualityChallenge::new(BaseField::rand(&mut rng)),
+                rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
+            };
+
+            let secret_manager = Arc::new(TestSecretManager::new(
+                PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng)),
+                HashMap::from([(
+                    rp_id,
+                    RpMaterial::new(
+                        HashMap::from([(
+                            ShareEpoch::default(),
+                            DLogShare::from(ScalarField::rand(&mut rng)),
+                        )]),
+                        rp_public_key.into(),
+                    ),
+                )]),
+            ));
+            let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+            let max_merkle_store_size = 10;
+            let chain_epoch_max_difference = 10;
+            let chain_watcher = Arc::new(TestWatcher::new(
+                vec![MerkleRootUpdate {
+                    hash: merkle_root,
+                    epoch: merkle_epoch,
+                }],
+                max_merkle_store_size,
+                chain_epoch_max_difference,
+            )?);
+            let user_verification_key_path = dir.join("../circom/main/OPRFQueryProof.vk.json");
+            let vk = File::open(&user_verification_key_path)?;
+            let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+            let request_lifetime = Duration::from_secs(5 * 60);
+            let session_cleanup_interval = Duration::from_secs(30);
+            let max_merkle_depth = 30;
+            let current_time_stamp_max_difference = Duration::from_secs(60);
+            let signature_history_cleanup_interval = Duration::from_secs(60);
+            let oprf_service = OprfService::init(
+                crypto_device,
+                chain_watcher,
+                vk.into(),
+                request_lifetime,
+                session_cleanup_interval,
+                max_merkle_depth,
+                current_time_stamp_max_difference,
+                signature_history_cleanup_interval,
+            );
+            let server = api::new_test_app(PartyId::from(0), oprf_service.clone());
+
+            Ok(Self {
+                server,
+                oprf_service,
+                oprf_req,
+                challenge_req,
+            })
+        }
     }
 
     #[tokio::test]
-    #[ignore = "signature includes the current_time_stamp so we fail before verify, annoying with kats, ignore for now"]
+    async fn test_init() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let req = setup.oprf_req;
+        setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        assert!(
+            setup
+                .oprf_service
+                .session_store
+                .contains_key(req.request_id)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_init_bad_proof() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let mut req = init_req();
-        req["proof"]["pi_a"] = req["proof"]["pi_c"].clone();
-        let res = server
+        let setup = TestSetup::new().await?;
+        let mut req = setup.oprf_req;
+        req.proof.a = req.proof.c;
+        let res = setup
+            .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
@@ -403,12 +431,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_init_bad_signature() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let mut req = init_req();
-        req["signature"] = serde_json::json!(
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        );
-        let res = server
+        let setup = TestSetup::new().await?;
+        let mut req = setup.oprf_req;
+        req.signature = k256::ecdsa::Signature::from_slice(&[42u8; 64])?;
+        let res = setup
+            .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
@@ -419,25 +446,103 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_init_invalid_point() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let mut req = init_req();
-        req["point_b"] = serde_json::json!("0");
-        server
+    async fn test_init_unknown_rp_id() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let unknown_rp_id = RpId::new(rand::random());
+        let mut req = setup.oprf_req;
+        req.rp_identifier.rp_id = unknown_rp_id;
+        let res = setup
+            .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
+            .await;
+        res.assert_text(format!("Cannot find RP with id: {unknown_rp_id}"));
+        res.assert_status_not_found();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_unknown_merkle_epoch() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let unknown_merkle_epoch = MerkleEpoch::new(rand::random());
+        let mut req = setup.oprf_req;
+        req.merkle_epoch = unknown_merkle_epoch;
+        let res = setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text(format!("Unknown merkle epoch: {unknown_merkle_epoch}"));
+        res.assert_status_bad_request();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_wrong_merkle_depth() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let mut req = setup.oprf_req;
+        req.merkle_depth = u64::MAX;
+        let res = setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text("merkle tree depth greater than max: 30");
+        res.assert_status_bad_request();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_unknown_share_epoch() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let unknown_share_epoch = ShareEpoch::new(rand::random());
+        let mut req = setup.oprf_req;
+        req.rp_identifier.share_epoch = unknown_share_epoch;
+        let res = setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text(format!(
+            "Cannot find share with epoch {} for RP with id: {}",
+            req.rp_identifier.share_epoch, req.rp_identifier.rp_id,
+        ));
+        res.assert_status_not_found();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_init_duplicate_signature() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let req = setup.oprf_req;
+        setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
             .await
-            .assert_status_unprocessable_entity();
+            .assert_status_ok();
+        let res = setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text("duplicate signature");
+        res.assert_status_bad_request();
         Ok(())
     }
 
     #[tokio::test]
     async fn test_init_bad_time_stamp() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let mut req = init_req();
-        req["current_time_stamp"] = serde_json::json!(42);
-        let res = server
+        let setup = TestSetup::new().await?;
+        let mut req = setup.oprf_req;
+        req.current_time_stamp = 42;
+        let res = setup
+            .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
@@ -448,15 +553,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_finish() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let req = setup.oprf_req;
+        setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        assert!(
+            setup
+                .oprf_service
+                .session_store
+                .contains_key(req.request_id)
+        );
+        let req = setup.challenge_req;
+        setup
+            .server
+            .post("/api/v1/finish")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        assert!(
+            !setup
+                .oprf_service
+                .session_store
+                .contains_key(req.request_id)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_finish_without_init() -> eyre::Result<()> {
-        let server = test_server().await?;
-        let req = finish_req();
-        server
+        let setup = TestSetup::new().await?;
+        let req = setup.challenge_req;
+        setup
+            .server
             .post("/api/v1/finish")
             .json(&req)
             .expect_failure()
             .await
             .assert_status_not_found();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_finish_unknown_share_epoch() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let req = setup.oprf_req;
+        setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .await
+            .assert_status_ok();
+        let unknown_share_epoch = ShareEpoch::new(rand::random());
+        let mut req = setup.challenge_req;
+        req.rp_identifier.share_epoch = unknown_share_epoch;
+        let res = setup
+            .server
+            .post("/api/v1/finish")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text(format!(
+            "Cannot find share with epoch {} for RP with id: {}",
+            req.rp_identifier.share_epoch, req.rp_identifier.rp_id,
+        ));
+        res.assert_status_not_found();
         Ok(())
     }
 }

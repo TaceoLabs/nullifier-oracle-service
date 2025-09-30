@@ -82,6 +82,11 @@ impl DLogEqualitySession {
 }
 
 impl DLogEqualityChallenge {
+    /// Create a new `DLogEqualityChallenge`
+    pub fn new(e: BaseField) -> Self {
+        Self { e }
+    }
+
     /// The accumulating party (e.g., the verifier) combines all the shares of all parties and creates the challenge hash.
     pub fn combine_commitments_and_create_challenge(
         commitments: &[PartialDLogEqualityCommitments],

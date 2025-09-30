@@ -30,7 +30,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    config::OprfPeerConfig,
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{
         chain_watcher::{ChainWatcherError, ChainWatcherService},
@@ -71,32 +70,39 @@ pub(crate) enum OprfServiceError {
 
 #[derive(Clone)]
 pub(crate) struct OprfService {
-    config: Arc<OprfPeerConfig>,
     crypto_device: Arc<CryptoDevice>,
-    session_store: SessionStore,
+    pub(crate) session_store: SessionStore,
     chain_watcher: ChainWatcherService,
     signature_history: SignatureHistory,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
+    max_merkle_depth: u64,
+    current_time_stamp_max_difference: Duration,
 }
 
 impl OprfService {
     /// Builds an [`OprfService`] from configuration, a [`CryptoDevice`], a [`ChainWatcherService`], and a Groth16 verifying key for the client proof.
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn init(
-        config: Arc<OprfPeerConfig>,
         crypto_device: Arc<CryptoDevice>,
         chain_watcher: ChainWatcherService,
         vk: ark_groth16::VerifyingKey<Bn254>,
+        request_lifetime: Duration,
+        session_cleanup_interval: Duration,
+        max_merkle_depth: u64,
+        current_time_stamp_max_difference: Duration,
+        signature_history_cleanup_interval: Duration,
     ) -> Self {
         Self {
-            config: Arc::clone(&config),
             crypto_device,
             signature_history: SignatureHistory::init(
-                config.current_time_stamp_max_difference * 2,
-                config.signature_history_cleanup_interval,
+                current_time_stamp_max_difference * 2,
+                signature_history_cleanup_interval,
             ),
-            session_store: SessionStore::init(config),
+            session_store: SessionStore::init(session_cleanup_interval, request_lifetime),
             chain_watcher,
             vk: Arc::new(ark_groth16::prepare_verifying_key(&vk)),
+            max_merkle_depth,
+            current_time_stamp_max_difference,
         }
     }
 
@@ -119,18 +125,18 @@ impl OprfService {
         let rp_id = request.rp_identifier.rp_id;
 
         // check the merkle depth against the max
-        if request.merkle_depth > self.config.max_merkle_depth {
+        if request.merkle_depth > self.max_merkle_depth {
             return Err(OprfServiceError::MerkleDepthGreaterThanMax(
-                self.config.max_merkle_depth,
+                self.max_merkle_depth,
             ));
         }
 
         // check the time stamp against system time +/- difference
-        let req_time_stamp = Duration::from_secs(request.current_time_stamp);
+        let req_time_stamp = Duration::from_millis(request.current_time_stamp);
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("system time is after unix epoch");
-        if current_time.abs_diff(req_time_stamp) > self.config.current_time_stamp_max_difference {
+        if current_time.abs_diff(req_time_stamp) > self.current_time_stamp_max_difference {
             return Err(OprfServiceError::TimeStampDifference);
         }
 
@@ -174,7 +180,7 @@ impl OprfService {
             .partial_commit(request.point_b, &request.rp_identifier)?;
 
         // Store the randomness for finalize request
-        self.session_store.store(request.request_id, session);
+        self.session_store.insert(request.request_id, session);
         tracing::debug!("handled session init");
         Ok(comm)
     }
@@ -193,7 +199,7 @@ impl OprfService {
         // Retrieve the randomness from the previous step. If the request is not known, we return an error
         let session = self
             .session_store
-            .retrieve(request.request_id)
+            .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
         let proof_share =

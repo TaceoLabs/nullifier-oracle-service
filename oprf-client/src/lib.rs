@@ -304,12 +304,14 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         rp_nullifier_key,
     } = args;
 
+    let request_id = Uuid::new_v4();
     let signed_query = sign_oprf_query(
         credential_signature,
         merkle_membership,
         groth16_material,
         query,
         key_material,
+        request_id,
         rng,
     )?;
 
@@ -362,6 +364,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     groth16_material: Groth16Material,
     query: OprfQuery,
     key_material: UserKeyMaterial,
+    request_id: Uuid,
     rng: &mut R,
 ) -> Result<SignedOprfQuery> {
     if merkle_membership.siblings.len() != MAX_DEPTH {
@@ -373,8 +376,6 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     if key_material.pk_index >= MAX_PUBLIC_KEYS as u64 {
         return Err(Error::InvalidPublicKeyIndex(key_material.pk_index));
     }
-
-    let request_id = Uuid::new_v4();
 
     let query_hash = OprfClient::generate_query(
         merkle_membership.mt_index.into(),
