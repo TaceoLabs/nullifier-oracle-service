@@ -21,6 +21,7 @@ eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
 futures.workspace = true
 groth16 = { workspace = true }
+hex = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
@@ -34,7 +35,6 @@ tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 witness = { workspace = true }
 
-hex = "0.4"
 
 [dev-dependencies]
 tempfile = { workspace = true }
