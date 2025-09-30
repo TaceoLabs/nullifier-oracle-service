@@ -11,6 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+ark-babyjubjub = { workspace = true }
 ark-ec.workspace = true
 ark-ff.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }

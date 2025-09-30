@@ -3393,6 +3393,7 @@ dependencies = [
 name = "oprf-dev-client"
 version = "0.1.0"
 dependencies = [
+ "ark-babyjubjub",
  "ark-ec",
  "ark-ff 0.5.0",
  "clap",

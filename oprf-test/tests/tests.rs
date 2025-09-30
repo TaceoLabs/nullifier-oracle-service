@@ -74,7 +74,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     );
 
     let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
-    let id_commitment_r = ark_babyjubjub::Fq::rand(&mut rng);
 
     println!("Running OPRF client flow...");
     let time = Instant::now();
@@ -86,7 +85,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         groth16_material,
         key_material,
         signal_hash,
-        id_commitment_r,
         rp_nullifier_key,
     };
 

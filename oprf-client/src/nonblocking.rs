@@ -1,9 +1,29 @@
+//! Tokio/reqwest backend for the sans-I/O OPRF client.
+//!
+//! It wires up the I/O-free core with HTTP calls against OPRF peers.
+//!
+//! Key pieces:
+//! - [`init_sessions`] — kicks off OPRF sessions by POSTing to `/api/v1/init`
+//!   until the configured threshold of valid responses is reached.
+//! - [`finish_sessions`] — completes all stored sessions in parallel by POSTing
+//!   to `/api/v1/finish`.
+//!
+//! Errors from individual peers are tolerated during init, as long as the
+//! threshold can still be met. If too many services fail, the client bails
+//! out with [`Error::NotEnoughOprfResponses`](super::Error::NotEnoughOprfResponses).
+//!
+//! Under the hood, requests use `reqwest::Client` and responses are deserialized
+//! into the types defined in [`oprf_types::api::v1`].
+
 use eyre::Context;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
 use tokio::task::JoinSet;
 
 use crate::OprfSessions;
 
+/// Sends an `init` request to one OPRF peer.
+///
+/// Returns the peer's URL alongside the parsed [`OprfResponse`].
 async fn oprf_request(
     client: reqwest::Client,
     service: String,
@@ -20,6 +40,9 @@ async fn oprf_request(
     Ok((service, response))
 }
 
+/// Sends a `challenge` request to one OPRF service.
+///
+/// Returns the parsed [`ChallengeResponse`].
 async fn oprf_challenge(
     client: reqwest::Client,
     service: String,
@@ -35,6 +58,17 @@ async fn oprf_challenge(
         .await?)
 }
 
+/// Completes all OPRF sessions in parallel by calling `/api/v1/finish`
+/// on every peer in the [`OprfSessions`].
+///
+/// **Important:**  
+/// - These must be the *same parties* that were used during the initial
+///   `init_sessions` call.
+/// - The order of the peers matters: we return responses in the order provided and they need
+///   to match the original session list. This is crucial because Lagrange coefficients are
+///   computed in the meantime, and they need to match the shares obtained earlier.
+///
+/// Fails fast if any single request errors out.
 pub async fn finish_sessions(
     sessions: OprfSessions,
     req: ChallengeRequest,
@@ -49,6 +83,14 @@ pub async fn finish_sessions(
     .await
 }
 
+/// Initializes new OPRF sessions by calling `/api/v1/init`
+/// on a list of peers, collecting responses until the
+/// given `threshold` is met.
+///
+/// Peers are queried concurrently. Errors from some services
+/// are logged and ignored, unless they prevent reaching the threshold.
+///
+/// Returns an [`OprfSessions`] ready to be finalized with [`finish_sessions`].
 pub async fn init_sessions(
     oprf_services: &[String],
     threshold: usize,

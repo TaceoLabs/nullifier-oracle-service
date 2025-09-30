@@ -1,4 +1,55 @@
+#![deny(missing_docs)]
+//! This crate provides a Rust client implementation for performing **Oblivious Pseudorandom Function (OPRF)** queries,
+//! computing **Groth16 proofs**, and generating **nullifiers** for privacy-preserving protocols.
+//! Currently, the main focus lies to be a building block for [WorldID v4.0](https://www.notion.so/worldcoin/World-ID-25-Protocol-v4-0-Product-Specs-High-Level-Technical-Specs-2588614bdf8c80e79f6bd132b8b23600#2588614bdf8c80e79f6bd132b8b23600).
+//!
+//! Most users will interact with the high-level [`nullifier`] function, which handles the full workflow asynchronously.
+//!
+//! ## Key Features
+//!
+//! - Sign and blind queries using user credentials.
+//! - Initiate and manage asynchronous sessions with OPRF service peers.
+//! - Compute DLog equality challenges using Shamir interpolation.
+//! - Generate and verify Groth16 proofs for queries and nullifiers.
+//!
+//! ## Asynchronous Runtime
+//!
+//! - Uses `reqwest` under the hood for HTTP requests to OPRF services.
+//! - Requires a `tokio` runtime to drive async sessions.
+//!
+//! Depending on future needs, we will add a blocking API as well.
+//!
+//! ## Example Usage
+//!
+//! ```no_run
+//! use your_crate::{nullifier, NullifierArgs};
+//! use rand::thread_rng;
+//! # tokio_test::block_on(async {
+//! let services = vec!["https://oprf1.example.com".to_string()];
+//! let threshold = 2;
+//! let args = NullifierArgs { /* fill in all fields */ };
+//! let mut rng = thread_rng();
+//!
+//! let (proof, public_inputs, nullifier) = nullifier(&services, threshold, args, &mut rng).await.unwrap();
+//! # });
+//! ```
+//!
+//! ## Notes and Best Practices
+//!
+//! - **Most users** only need [`nullifier`] for generating nullifiers in typical scenarios.
+//! - Ensure enough OPRF services are provided and `threshold` is set correctly; insufficient responses will cause errors.
+//! - Cryptographically secure randomness (`Rng + CryptoRng`) must be provided for all proof operations.
+//! - Internally, the crate uses `arkworks` for Groth16 and `eddsa_babyjubjub` for elliptic curve operations.
+//!
+//! ## Module Overview
+//!
+//! - `client` – High-level client API including [`nullifier`].
+//! - `nonblocking` – Async session management for contacting OPRF peers.
+//! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
+//! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
+
 use oprf_core::ddlog_equality::PartialDLogEqualityCommitments;
+
 use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 
 use ark_ec::AffineRepr;
@@ -31,35 +82,59 @@ pub use types::MerkleMembership;
 pub use types::OprfQuery;
 pub use types::UserKeyMaterial;
 
+/// The maximal depth of the merkle-tree that persists users.
 pub const MAX_DEPTH: usize = 30;
 
-pub type ScalarField = ark_babyjubjub::Fr;
-pub type BaseField = ark_babyjubjub::Fq;
-pub type Affine = ark_babyjubjub::EdwardsAffine;
-pub type Projective = ark_babyjubjub::EdwardsProjective;
+type Result<T> = std::result::Result<T, Error>;
 
-pub type Result<T> = std::result::Result<T, Error>;
-
+/// General error type for the OPRF client.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// HTTP or network errors from OPRF service requests.
     #[error(transparent)]
     ApiError(#[from] reqwest::Error),
+    /// Not enough OPRF responses received to satisfy the required threshold.
     #[error("expected degree {threshold} responses, got {n}")]
-    NotEnoughOprfResponses { n: usize, threshold: usize },
-    #[error("prove could not be verified")]
-    InvalidProof,
+    NotEnoughOprfResponses {
+        /// actual amount responses
+        n: usize,
+        /// expected threshold
+        threshold: usize,
+    },
+    /// Merkle membership proof does not have the expected number of siblings.
     #[error("invalid merkle length, expected {expected}, but is {is}")]
-    InvalidSiblingsLength { expected: usize, is: usize },
+    InvalidSiblingsLength {
+        /// actual siblings
+        is: usize,
+        /// expected length
+        expected: usize,
+    },
+    /// The DLog equality proof failed verification.
     #[error("DLog prove could not be verified")]
     InvalidDLogProof,
+    /// Provided public key index is out of valid range.
     #[error("Index in public-key batch must be in range [0..6], but is {0}")]
     InvalidPublicKeyIndex(u64),
+    /// Errors originating from Groth16 proof generation or verification.
     #[error(transparent)]
     ZkError(#[from] Groth16Error),
+    /// Catch-all for other internal errors.
     #[error(transparent)]
     InternalError(#[from] eyre::Report),
 }
 
+/// A signed OPRF query ready.
+///
+/// This struct holds all information needed to initiate OPRF sessions:
+/// - `request_id`: Unique identifier for this query/request.
+/// - `oprf_request`: The fully formed [`OprfRequest`] including the
+///   blinded query point and Groth16 proof.
+/// - `query`: Original query details (RP ID, action, nonce, timestamp).
+/// - `groth16_material`: The Groth16 proving key and matrices used to generate
+///   the query proof; needed later for OPRFNullifier proof.
+/// - `blinded_request`: The result of blinding the query with the user's key.
+/// - `query_proof_input`: Input data for the OPRFQuery proof.
+/// - `query_hash`: The generated query hash.
 pub struct SignedOprfQuery {
     request_id: Uuid,
     oprf_request: OprfRequest,
@@ -67,44 +142,158 @@ pub struct SignedOprfQuery {
     groth16_material: Groth16Material,
     blinded_request: BlindedOPrfRequest,
     query_proof_input: QueryProofInput<MAX_DEPTH>,
-    query_hash: BaseField,
+    query_hash: ark_babyjubjub::Fq,
 }
 
+/// Holds information about active OPRF sessions with multiple peers.
+///
+/// Tracks the peer services, their party IDs, and the partial DLog equality
+/// commitments received from each peer.
 pub struct OprfSessions {
     services: Vec<String>,
     party_ids: Vec<PartyId>,
     commitments: Vec<PartialDLogEqualityCommitments>,
 }
 
-pub struct Challenges {
+impl OprfSessions {
+    /// Creates an empty [`OprfSessions`] with preallocated capacity.
+    ///
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            services: Vec::with_capacity(capacity),
+            party_ids: Vec::with_capacity(capacity),
+            commitments: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Adds a peer's response to the sessions.
+    fn push(&mut self, service: String, response: OprfResponse) {
+        self.services.push(service);
+        self.party_ids.push(response.party_id);
+        self.commitments.push(response.commitments);
+    }
+
+    /// Returns the number of sessions currently stored.
+    fn len(&self) -> usize {
+        self.services.len()
+    }
+}
+
+/// An OPRF challenge for a given query.
+///
+/// This struct holds all information needed to compute and verify the
+/// DLogEquality challenge for a query:
+/// - `request_id`: Unique identifier for this query/request.
+/// - `challenge_request`: The challenge request that will be sent to OPRF peers.
+/// - `lagrange`: Lagrange coefficients used to combine shares.
+/// - `blinded_request`: The original blinded OPRF request from the user.
+/// - `groth16_material`: Groth16 proving key and matrices, needed later for
+///   generating the OPRFNullifier proof.
+/// - `blinded_response`: The combined blinded response after aggregating
+///   peer commitments.
+/// - `query_proof_input`: Input data used to generate the OPRFQuery proof.
+/// - `query_hash`: The hash of the query used in proofs.
+/// - `rp_nullifier_key`: The RP-specific nullifier public-key.
+pub struct Challenge {
     request_id: Uuid,
     challenge_request: ChallengeRequest,
-    lagrange: Vec<ScalarField>,
+    lagrange: Vec<ark_babyjubjub::Fr>,
     blinded_request: BlindedOPrfRequest,
     groth16_material: Groth16Material,
-    blinded_response: Affine,
+    blinded_response: ark_babyjubjub::EdwardsAffine,
     query_proof_input: QueryProofInput<MAX_DEPTH>,
-    query_hash: BaseField,
+    query_hash: ark_babyjubjub::Fq,
     rp_nullifier_key: RpNullifierKey,
 }
 
+/// Arguments required to generate a nullifier proof.
+///
+/// This struct bundles all inputs needed for [`nullifier`] to produce a
+/// Groth16 nullifier proof. Users typically construct this from their
+/// credentials, key material, and query context.
 pub struct NullifierArgs {
+    /// Signature over the user's credentials.
     pub credential_signature: CredentialsSignature,
+    /// Merkle membership proof of the user's credential in the registry.
     pub merkle_membership: MerkleMembership,
+    /// The original OPRF query (RP ID, action, nonce, timestamp, etc.).
     pub query: OprfQuery,
+    /// Groth16 material (proving key and matrices) used for query and nullifier proofs.
     pub groth16_material: Groth16Material,
+    /// User's key material (private and public keys, batch index, etc.).
     pub key_material: UserKeyMaterial,
+    /// RP-specific nullifier key.
     pub rp_nullifier_key: RpNullifierKey,
-    pub signal_hash: BaseField,
-    pub id_commitment_r: BaseField,
+    /// Signal hash as in semaphore
+    pub signal_hash: ark_babyjubjub::Fq,
 }
 
+impl Challenge {
+    /// Returns the [`ChallengeRequest`] for this challenge.
+    pub fn get_request(&self) -> ChallengeRequest {
+        self.challenge_request.clone()
+    }
+}
+
+impl SignedOprfQuery {
+    /// Returns the [`OprfRequest`] for this signed query.
+    pub fn get_request(&self) -> OprfRequest {
+        self.oprf_request.clone()
+    }
+}
+
+/// Generates a nullifier proof for a given query.
+///
+/// This is the main entry point for most users. It handles the full workflow:
+/// 1. Signs and blinds the OPRF query using the user's credentials and key material.
+/// 2. Initiates sessions with the provided OPRF services and waits for enough responses.
+///    This uses asynchronous HTTP requests via [`reqwest`] and requires a [`tokio`] runtime.
+/// 3. Computes the DLog equality challenges using Shamir interpolation.
+/// 4. Collects the responses and verifies the challenges.
+/// 5. Generates the final Groth16 nullifier proof along with public inputs.
+///
+/// # Arguments
+///
+/// * `services` - List of OPRF service URLs to contact.
+/// * `threshold` - Minimum number of valid peer responses required.
+/// * `args` - [`NullifierArgs`] containing all input data (credentials, Merkle membership, query, keys, signal, etc.).
+/// * `rng` - A cryptographically secure random number generator.
+///
+/// # Returns
+///
+/// On success, returns a tuple:
+/// 1. [`Groth16Proof`] – the generated nullifier proof,
+/// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
+/// 3. `ark_babyjubjub::Fq` – the computed nullifier.
+///
+/// # Errors
+///
+/// Returns [`Error`] in the following cases:
+/// * `InvalidSiblingsLength` – the Merkle proof length does not match `MAX_DEPTH`.
+/// * `InvalidPublicKeyIndex` – the user key index is out of range.
+/// * `InvalidDLogProof` – the DLog equality proof could not be verified.
+/// * Other errors may propagate from network requests, proof generation, or Groth16 verification.
+///
+/// # Example
+///
+/// ```no_run
+/// # use your_crate::{NullifierArgs, nullifier};
+/// # use rand::thread_rng;
+/// # tokio_test::block_on(async {
+/// let services = vec!["https://oprf1.example.com".to_string()];
+/// let threshold = 1;
+/// let args = NullifierArgs { /* fill in all fields */ };
+/// let mut rng = thread_rng();
+///
+/// let (proof, public_inputs, nullifier) = nullifier(&services, threshold, args, &mut rng).await.unwrap();
+/// # });
+/// ```
 pub async fn nullifier<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
     args: NullifierArgs,
     rng: &mut R,
-) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
+) -> Result<(Groth16Proof, Vec<ark_babyjubjub::Fq>, ark_babyjubjub::Fq)> {
     let NullifierArgs {
         credential_signature,
         merkle_membership,
@@ -112,7 +301,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         groth16_material,
         key_material,
         signal_hash,
-        id_commitment_r,
         rp_nullifier_key,
     } = args;
 
@@ -131,79 +319,43 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
     let req = challenges.get_request();
     let responses = nonblocking::finish_sessions(sessions, req).await?;
-    verify_challenges(challenges, responses, signal_hash, id_commitment_r, rng)
+    verify_challenges(challenges, responses, signal_hash, rng)
 }
 
-impl Challenges {
-    pub fn get_request(&self) -> ChallengeRequest {
-        self.challenge_request.clone()
-    }
-}
-
-impl OprfSessions {
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            services: Vec::with_capacity(capacity),
-            party_ids: Vec::with_capacity(capacity),
-            commitments: Vec::with_capacity(capacity),
-        }
-    }
-
-    fn push(&mut self, service: String, response: OprfResponse) {
-        self.services.push(service);
-        self.party_ids.push(response.party_id);
-        self.commitments.push(response.commitments);
-    }
-
-    fn len(&self) -> usize {
-        self.services.len()
-    }
-}
-
-impl SignedOprfQuery {
-    pub fn get_request(&self) -> OprfRequest {
-        self.oprf_request.clone()
-    }
-}
-
-pub fn compute_challenges(
-    query: SignedOprfQuery,
-    sessions: &OprfSessions,
-    rp_nullifier_key: RpNullifierKey,
-) -> Result<Challenges> {
-    let coeffs = sessions
-        .party_ids
-        .iter()
-        .map(|id| usize::from(id.into_inner() + 1))
-        .collect::<Vec<_>>();
-    let lagrange = shamir::lagrange_from_coeff(&coeffs);
-    let (blinded_response, challenge) =
-        DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
-            &sessions.commitments,
-            &lagrange,
-            rp_nullifier_key.inner(),
-            query.blinded_request.blinded_query(),
-        );
-    Ok(Challenges {
-        groth16_material: query.groth16_material,
-        query_proof_input: query.query_proof_input,
-        query_hash: query.query_hash,
-        request_id: query.request_id,
-        lagrange,
-        blinded_request: query.blinded_request,
-        blinded_response,
-        rp_nullifier_key,
-        challenge_request: ChallengeRequest {
-            request_id: query.request_id,
-            challenge,
-            rp_identifier: NullifierShareIdentifier {
-                rp_id: query.query.rp_id,
-                share_epoch: query.query.share_epoch,
-            },
-        },
-    })
-}
-
+/// Signs an OPRF query and prepares it for sending to OPRF peers.
+///
+/// This function performs the following steps:
+/// 1. Validates inputs, including Merkle tree depth and public key index.
+/// 2. Generates a query hash from the Merkle index, RP identifier, and requested action.
+/// 3. Blinds the query hash using the user's public key and a random blinding factor.
+/// 4. Signs the blinded query with the user’s private key.
+/// 5. Constructs a [`QueryProofInput`] containing the signature, credential data,
+///    Merkle membership information, and other metadata required for the proof.
+/// 6. Generates the OPRFQuery zero-knowledge proof using the provided
+///    proving key material.
+///
+/// # Arguments
+///
+/// * `credentials_signature` - The user's credential signature issued by the RP.
+/// * `merkle_membership` - Used to compute proof for membership in the Merkle tree.
+/// * `groth16_material` - Groth16 proving key and constraint matrices.
+/// * `query` - The query details (RP ID, action, nonce, timestamp).
+/// * `key_material` - User key material including private signing key.
+/// * `rng` - Cryptographically secure random number generator.
+///
+/// # Errors
+///
+/// Returns an [`Error`] if:
+/// - The Merkle tree siblings length does not match [`MAX_DEPTH`].
+/// - The public key index is out of bounds.
+/// - Groth16 proof generation fails.
+///
+/// # Returns
+///
+/// A [`SignedOprfQuery`] containing:
+/// - The generated `OprfRequest` ready to initiate sessions with OPRF peers.
+/// - The blinding factor and query hash used for later computations.
+/// - The Groth16 proof input for verification in the nullifier step.
 pub fn sign_oprf_query<R: Rng + CryptoRng>(
     credentials_signature: CredentialsSignature,
     merkle_membership: MerkleMembership,
@@ -255,10 +407,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         merkle_root: merkle_membership.root.into_inner(),
         depth: merkle_membership.depth.into(),
         mt_index: merkle_membership.mt_index.into(),
-        siblings: merkle_membership
-            .siblings
-            .try_into()
-            .expect("checked in init step"),
+        siblings: merkle_membership.siblings,
         beta: blinding_factor.beta(),
         rp_id: query.rp_id.into_inner().into(),
         action: query.action,
@@ -293,13 +442,102 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     })
 }
 
+/// Computes the DLog equality challenges for a signed OPRF query.
+///
+/// Given a [`SignedOprfQuery`] and the corresponding [`OprfSessions`] obtained
+/// from the peers, this function computes the Lagrange coefficients over the
+/// party IDs and combines the partial commitments to generate a single blinded
+/// response and the challenge.
+///
+/// The output is a [`Challenge`] struct, which contains all information
+/// needed to later verify the responses from the OPRF peers, including the
+/// original query, proof inputs, Lagrange coefficients, and the generated
+/// [`ChallengeRequest`].
+///
+/// # Arguments
+///
+/// * `query` - The signed OPRF query produced by [`sign_oprf_query`].
+/// * `sessions` - Active OPRF sessions containing the party IDs and commitments.
+/// * `rp_nullifier_key` - The RP-specific nullifier key used for challenge computation.
+///
+/// # Errors
+///
+/// Returns an error if any internal step fails (e.g., invalid session state).
+pub fn compute_challenges(
+    query: SignedOprfQuery,
+    sessions: &OprfSessions,
+    rp_nullifier_key: RpNullifierKey,
+) -> Result<Challenge> {
+    let coeffs = sessions
+        .party_ids
+        .iter()
+        .map(|id| usize::from(id.into_inner() + 1))
+        .collect::<Vec<_>>();
+    // Compute Lagrange coefficients for Shamir reconstruction
+    let lagrange = shamir::lagrange_from_coeff(&coeffs);
+    // Combine commitments from all sessions and create a single challenge
+    let (blinded_response, challenge) =
+        DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
+            &sessions.commitments,
+            &lagrange,
+            rp_nullifier_key.inner(),
+            query.blinded_request.blinded_query(),
+        );
+    Ok(Challenge {
+        groth16_material: query.groth16_material,
+        query_proof_input: query.query_proof_input,
+        query_hash: query.query_hash,
+        request_id: query.request_id,
+        lagrange,
+        blinded_request: query.blinded_request,
+        blinded_response,
+        rp_nullifier_key,
+        challenge_request: ChallengeRequest {
+            request_id: query.request_id,
+            challenge,
+            rp_identifier: NullifierShareIdentifier {
+                rp_id: query.query.rp_id,
+                share_epoch: query.query.share_epoch,
+            },
+        },
+    })
+}
+
+/// Verifies the combined DLogEquality challenge and generates the
+/// corresponding OPRFNullifier proof.
+///
+/// This function performs the following steps:
+/// 1. Combines the partial proofs from peers using Lagrange coefficients.
+/// 2. Verifies the resulting DLogEquality proof against the blinded query
+///    and aggregated response.
+/// 3. Constructs a [`NullifierProofInput`] for the OPRFNullifier circuit.
+/// 4. Generates an OPRFNullifier Groth16 proof for the provided proving key.
+///
+/// # Arguments
+///
+/// * `challenges` - The [`Challenge`] struct containing all challenge data.
+/// * `responses` - Responses from peers during the finish session. Must be in the same order
+///   as the initial sessions to match the Lagrange coefficients.
+/// * `signal_hash` - The signal hash as in semaphore
+/// * `rng` - Cryptographically secure RNG.
+///
+/// # Returns
+///
+/// On success, returns a tuple `(proof, public_inputs, nullifier)`:
+/// - `proof`: The Groth16 nullifier proof.
+/// - `public_inputs`: Public inputs used in the proof verification.
+/// - `nullifier`: The computed nullifier.
+///
+/// # Errors
+///
+/// Returns [`Error::InvalidDLogProof`] if the combined DLogEquality proof
+/// fails verification, or any [`Groth16Error`] if proof generation fails.
 pub fn verify_challenges<R: Rng + CryptoRng>(
-    challenges: Challenges,
+    challenges: Challenge,
     responses: Vec<ChallengeResponse>,
-    signal_hash: BaseField,
-    id_commitment_r: BaseField,
+    signal_hash: ark_babyjubjub::Fq,
     rng: &mut R,
-) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
+) -> Result<(Groth16Proof, Vec<ark_babyjubjub::Fq>, ark_babyjubjub::Fq)> {
     let proofs = responses
         .into_iter()
         .map(|res| res.proof_share)
@@ -312,7 +550,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),
         challenges.blinded_response,
-        Affine::generator(),
+        ark_babyjubjub::EdwardsAffine::generator(),
     ) {
         return Err(Error::InvalidDLogProof);
     }
@@ -325,7 +563,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.query_hash,
         challenges.blinded_response,
         dlog_proof,
-        id_commitment_r,
+        rng.r#gen(),
     );
     let (proof, public) = challenges
         .groth16_material

@@ -7,7 +7,7 @@ use std::{
 use ark_ff::UniformRand as _;
 use clap::Parser;
 use oprf_client::{
-    BaseField, MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
+    MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
     zk::Groth16Material,
 };
 use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey, sc_mock::SignNonceResponse};
@@ -74,7 +74,7 @@ async fn run_nullifier(
     key_material: UserKeyMaterial,
 ) -> eyre::Result<()> {
     let mut rng = rand_chacha::ChaCha12Rng::from_seed(rand::random());
-    let nonce = BaseField::rand(&mut rng);
+    let nonce = ark_babyjubjub::Fq::rand(&mut rng);
 
     let SignNonceResponse {
         signature,
@@ -92,7 +92,7 @@ async fn run_nullifier(
     let query = OprfQuery {
         rp_id,
         share_epoch: ShareEpoch::default(),
-        action: BaseField::rand(&mut rng),
+        action: ark_babyjubjub::Fq::rand(&mut rng),
         nonce,
         current_time_stamp,
         nonce_signature: signature,
@@ -104,8 +104,7 @@ async fn run_nullifier(
         &mut rng,
     );
 
-    let signal_hash = BaseField::rand(&mut rng);
-    let id_commitment_r = BaseField::rand(&mut rng);
+    let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
 
     let args = NullifierArgs {
         credential_signature,
@@ -114,7 +113,6 @@ async fn run_nullifier(
         groth16_material,
         key_material,
         signal_hash,
-        id_commitment_r,
         rp_nullifier_key,
     };
 
