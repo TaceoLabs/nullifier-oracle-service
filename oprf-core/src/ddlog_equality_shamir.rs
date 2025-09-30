@@ -4,8 +4,8 @@ use crate::{
     },
     dlog_equality::DLogEqualityProof,
 };
-use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
+use ark_ec::{AffineRepr, VariableBaseMSM};
 use ark_ff::Zero;
 
 type ScalarField = ark_babyjubjub::Fr;
@@ -29,15 +29,18 @@ impl DLogEqualityCommitments {
             "Number of commitments must match number of Lagrange coefficients"
         );
 
-        let mut c = Projective::zero();
-        let mut r1 = Projective::zero();
-        let mut r2 = Projective::zero();
-
-        for (lambda, comm) in lagrange.iter().zip(commitments) {
-            c += comm.c * lambda;
-            r1 += comm.r1 * lambda;
-            r2 += comm.r2 * lambda;
-        }
+        let c = Projective::msm_unchecked(
+            &commitments.iter().map(|comm| comm.c).collect::<Vec<_>>(),
+            lagrange,
+        );
+        let r1 = Projective::msm_unchecked(
+            &commitments.iter().map(|comm| comm.r1).collect::<Vec<_>>(),
+            lagrange,
+        );
+        let r2 = Projective::msm_unchecked(
+            &commitments.iter().map(|comm| comm.r2).collect::<Vec<_>>(),
+            lagrange,
+        );
 
         let c = c.into_affine();
         let r1 = r1.into_affine();
