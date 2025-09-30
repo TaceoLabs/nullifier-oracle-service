@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     dlog_equality::DLogEqualityProof,
     oprf::{
-        BlindedOPrfRequest, BlindedOPrfResponse, BlindingFactor, OprfClient, OPrfKey, OPrfService,
+        BlindedOPrfRequest, BlindedOPrfResponse, BlindingFactor, OPrfKey, OPrfService, OprfClient,
     },
     proof_input_gen::query::QueryProofInput,
 };
