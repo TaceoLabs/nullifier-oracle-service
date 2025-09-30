@@ -92,7 +92,7 @@ impl KeyGenPoly {
         }
     }
 
-    fn dh_key_derivation(my_sk: ScalarField, their_pk: Affine) -> BaseField {
+    fn dh_key_derivation(my_sk: &ScalarField, their_pk: Affine) -> BaseField {
         (their_pk * my_sk).into_affine().x
     }
 
@@ -114,7 +114,7 @@ impl KeyGenPoly {
     }
 
     pub fn decrypt_share(
-        my_sk: ScalarField,
+        my_sk: &ScalarField,
         their_pk: Affine,
         ciphertext: BaseField,
         nonce: BaseField,
@@ -128,7 +128,7 @@ impl KeyGenPoly {
     pub fn gen_share(
         &self,
         id: usize,
-        my_sk: ScalarField,
+        my_sk: &ScalarField,
         their_pk: Affine,
         nonce: BaseField,
     ) -> (Affine, BaseField) {
@@ -241,7 +241,7 @@ mod tests {
             let mut cipher = Vec::with_capacity(num_parties);
             for (i, their_pk) in party_pks.iter().enumerate() {
                 let nonce = BaseField::rand(&mut rng);
-                let (_, ciphertext) = poly.gen_share(i, *my_sk, *their_pk, nonce);
+                let (_, ciphertext) = poly.gen_share(i, my_sk, *their_pk, nonce);
                 nonces.push(nonce);
                 cipher.push(ciphertext);
             }
@@ -258,7 +258,7 @@ mod tests {
                 encryption_nonces.iter(),
                 party_pks.iter()
             ) {
-                let share = KeyGenPoly::decrypt_share(*my_sk, *their_pk, cipher[i], nonce[i])
+                let share = KeyGenPoly::decrypt_share(my_sk, *their_pk, cipher[i], nonce[i])
                     .expect("decryption should work");
                 my_shares.push(share);
             }
@@ -333,7 +333,7 @@ mod tests {
             let mut commitments = Vec::with_capacity(num_parties);
             for (i, their_pk) in party_pks.iter().enumerate() {
                 let nonce = BaseField::rand(&mut rng);
-                let (comm, ciphertext) = poly.gen_share(i, *my_sk, *their_pk, nonce);
+                let (comm, ciphertext) = poly.gen_share(i, my_sk, *their_pk, nonce);
                 nonces.push(nonce);
                 cipher.push(ciphertext);
                 commitments.push(comm);
@@ -352,7 +352,7 @@ mod tests {
                 encryption_nonces.iter(),
                 party_pks.iter()
             ) {
-                let share = KeyGenPoly::decrypt_share(*my_sk, *their_pk, cipher[i], nonce[i])
+                let share = KeyGenPoly::decrypt_share(my_sk, *their_pk, cipher[i], nonce[i])
                     .expect("decryption should work");
                 my_shares.push(share);
             }
@@ -401,7 +401,7 @@ mod tests {
             let mut cipher = Vec::with_capacity(num_parties);
             for (i, their_pk) in party_pks.iter().enumerate() {
                 let nonce = BaseField::rand(&mut rng);
-                let (_, ciphertext) = poly.gen_share(i, *my_sk, *their_pk, nonce);
+                let (_, ciphertext) = poly.gen_share(i, my_sk, *their_pk, nonce);
                 nonces.push(nonce);
                 cipher.push(ciphertext);
             }
@@ -418,7 +418,7 @@ mod tests {
                 encryption_nonces.iter(),
                 party_pks.iter()
             ) {
-                let share = KeyGenPoly::decrypt_share(*my_sk, *their_pk, cipher[i], nonce[i])
+                let share = KeyGenPoly::decrypt_share(my_sk, *their_pk, cipher[i], nonce[i])
                     .expect("decryption should work");
                 my_shares.push(share);
             }
