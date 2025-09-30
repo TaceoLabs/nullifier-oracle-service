@@ -5,6 +5,7 @@ members = [
     "eddsa-babyjubjub",
     "oprf-client",
     "oprf-core",
+    "oprf-dev-client",
     "oprf-service",
     "oprf-test",
     "oprf-types",
@@ -61,6 +62,7 @@ num-traits = "0.2.18"
 oprf-client = { path = "oprf-client" }
 oprf-core = { path = "oprf-core" }
 oprf-service = { path = "oprf-service" }
+oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }
 parking_lot = "0.12.4"
 poseidon2 = { path = "poseidon2" }

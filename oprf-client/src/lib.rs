@@ -308,7 +308,6 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         .challenge_request
         .challenge
         .combine_proofs_shamir(&proofs, &challenges.lagrange);
-    tracing::info!("checking second proof");
     if !dlog_proof.verify(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),

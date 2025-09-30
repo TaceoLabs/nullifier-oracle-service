@@ -1,6 +1,7 @@
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
 
+#[derive(Clone)]
 pub struct CredentialsSignature {
     pub type_id: ark_babyjubjub::Fq,
     pub issuer: EdDSAPublicKey,
@@ -10,6 +11,7 @@ pub struct CredentialsSignature {
     pub expires_at: u64,
 }
 
+#[derive(Clone)]
 pub struct MerkleMembership {
     pub epoch: MerkleEpoch,
     pub root: MerkleRoot,
@@ -18,6 +20,7 @@ pub struct MerkleMembership {
     pub siblings: Vec<ark_babyjubjub::Fq>,
 }
 
+#[derive(Clone)]
 pub struct OprfQuery {
     pub rp_id: RpId,
     pub share_epoch: ShareEpoch,
@@ -27,6 +30,7 @@ pub struct OprfQuery {
     pub nonce_signature: k256::ecdsa::Signature,
 }
 
+#[derive(Clone)]
 pub struct UserKeyMaterial {
     pub pk_batch: UserPublicKeyBatch,
     pub pk_index: u64, // 0..6

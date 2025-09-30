@@ -1,0 +1,28 @@
+[package]
+name = "oprf-dev-client"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-ec.workspace = true
+ark-ff.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+eyre.workspace = true
+humantime = { workspace = true }
+nodes-telemetry.workspace = true
+oprf-client = { workspace = true }
+oprf-test = { workspace = true }
+oprf-types = { workspace = true }
+parking_lot = { workspace = true }
+rand.workspace = true
+rand_chacha.workspace = true
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

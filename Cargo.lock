@@ -3390,6 +3390,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "oprf-dev-client"
+version = "0.1.0"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "clap",
+ "eyre",
+ "humantime",
+ "nodes-telemetry",
+ "oprf-client",
+ "oprf-test",
+ "oprf-types",
+ "parking_lot",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+]
+
+[[package]]
 name = "oprf-service"
 version = "0.1.0"
 dependencies = [
