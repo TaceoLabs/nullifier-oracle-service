@@ -12,15 +12,15 @@ pub struct SmartContractMockConfig {
     pub bind_addr: SocketAddr,
 
     /// The max amount the registry stores merkle roots
-    #[clap(long, env = "OPRF_MAX_ROOT_CACHE_SIZE", default_value = "10")]
+    #[clap(long, env = "OPRF_SC_MAX_ROOT_CACHE_SIZE", default_value = "10")]
     pub max_root_cache_size: usize,
 
     /// The depth of the simulated merkle tree.
-    #[clap(long, env = "OPRF_SC_INIT_PK_REGISTRY_SIZE", default_value = "20")]
+    #[clap(long, env = "OPRF_SC_MERKLE_DEPTH", default_value = "30")]
     pub merkle_depth: usize,
 
     /// The interval in which new public keys are added to merkle tree
-    #[clap(long, env = "OPRF_SC_ADD_PK_INTERVAL", default_value = "10s", value_parser=humantime::parse_duration)]
+    #[clap(long, env = "OPRF_SC_ADD_PK_INTERVAL", default_value = "30s", value_parser=humantime::parse_duration)]
     pub add_pk_interval: Duration,
 
     /// The initial size of the RP registry. The secrets need to be computed.
@@ -40,7 +40,7 @@ pub struct SmartContractMockConfig {
     pub oprf_services: usize,
 
     /// The degree of the polynomial (the threshold).
-    #[clap(long, env = "OPRF_SC_THRESHOLD")]
+    #[clap(long, env = "OPRF_SC_OPRF_DEGREE")]
     pub oprf_degree: u16,
 
     /// The secret id where the mock finds the public keys in AWS
