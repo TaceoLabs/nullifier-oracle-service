@@ -9,13 +9,11 @@
 //! The `api` module uses `axum` for routing and request handling, and all routes are designed to be stateless,
 //! forwarding requests to the appropriate service (`OprfService`, `ChainWatcherService`, etc.).
 
-use std::sync::Arc;
-
 use axum::Router;
 use oprf_types::crypto::PartyId;
 use tower_http::trace::TraceLayer;
 
-use crate::{AppState, config::OprfPeerConfig, services::oprf::OprfService};
+use crate::{AppState, services::oprf::OprfService};
 
 #[cfg(test)]
 use axum_test::TestServer;
@@ -34,18 +32,13 @@ pub(crate) mod v1;
 ///
 /// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
 /// instances needed to handle requests.
-pub(crate) fn new_app(
-    config: Arc<OprfPeerConfig>,
-    party_id: PartyId,
-    oprf_service: OprfService,
-) -> Router {
+pub(crate) fn new_app(party_id: PartyId, oprf_service: OprfService) -> Router {
     let app_state = AppState {
-        config: Arc::clone(&config),
         oprf_service,
         party_id,
     };
     Router::new()
-        .nest("/api/v1", v1::build(config.input_max_body_limit))
+        .nest("/api/v1", v1::build())
         .merge(health::routes())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
@@ -57,12 +50,8 @@ pub(crate) fn new_app(
 /// to spin up the full API with mock services and expectations.
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) fn new_test_app(
-    config: Arc<OprfPeerConfig>,
-    party_id: PartyId,
-    oprf_service: OprfService,
-) -> TestServer {
-    let app = new_app(config, party_id, oprf_service);
+pub(crate) fn new_test_app(party_id: PartyId, oprf_service: OprfService) -> TestServer {
+    let app = new_app(party_id, oprf_service);
     TestServer::builder()
         .expect_success_by_default()
         .mock_transport()

@@ -8,11 +8,7 @@
 //! - `POST /finish` – Completes the OPRF session and returns the proof share.
 //!
 //! Both endpoints use the [`OprfService`] for application logic.
-use axum::{
-    Json, Router,
-    extract::{DefaultBodyLimit, State},
-    routing::post,
-};
+use axum::{Json, Router, extract::State, routing::post};
 use oprf_types::{
     api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse},
     crypto::PartyId,
@@ -65,9 +61,8 @@ async fn oprf_challenge(
 /// # Arguments
 ///
 /// * `input_max_body_limit` - Maximum allowed body size for requests in bytes.
-pub(crate) fn router(input_max_body_limit: usize) -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/init", post(oprf_request))
         .route("/finish", post(oprf_challenge))
-        .layer(DefaultBodyLimit::max(input_max_body_limit))
 }

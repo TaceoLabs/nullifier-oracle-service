@@ -18,10 +18,7 @@ use parking_lot::Mutex;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{
-    config::OprfPeerConfig,
-    metrics::{METRICS_KEY_DELETED_SESSION, METRICS_KEY_OPEN_SESSIONS},
-};
+use crate::metrics::{METRICS_KEY_DELETED_SESSION, METRICS_KEY_OPEN_SESSIONS};
 
 type SessionsMap = Arc<Mutex<HashMap<Uuid, Session>>>;
 
@@ -59,14 +56,10 @@ impl SessionStore {
     ///
     /// # Arguments
     /// * `config` - The service configuration providing cleanup interval and request lifetime.
-    pub(crate) fn init(config: Arc<OprfPeerConfig>) -> Self {
+    pub(crate) fn init(session_cleanup_interval: Duration, request_lifetime: Duration) -> Self {
         let sessions = Arc::new(Mutex::new(HashMap::new()));
         // start the periodic tasks for cleanup
-        start_cleanup_task(
-            sessions.clone(),
-            config.session_cleanup_interval,
-            config.request_lifetime,
-        );
+        start_cleanup_task(sessions.clone(), session_cleanup_interval, request_lifetime);
 
         Self { sessions }
     }
@@ -79,7 +72,7 @@ impl SessionStore {
     /// * `request_id` - Unique ID of the session.
     /// * `session` - The [`DLogEqualitySession`] to store.
     #[instrument(level = "debug", skip(self, session))]
-    pub(crate) fn store(&self, request_id: Uuid, session: DLogEqualitySession) {
+    pub(crate) fn insert(&self, request_id: Uuid, session: DLogEqualitySession) {
         tracing::debug!("storing session for {request_id}");
         tracing::trace!("trying to get lock...");
         let inc = {
@@ -108,7 +101,7 @@ impl SessionStore {
     /// # Returns
     /// Optionally returns the [`DLogEqualitySession`] if it exists.
     #[instrument(level = "debug", skip(self))]
-    pub(crate) fn retrieve(&self, request_id: Uuid) -> Option<DLogEqualitySession> {
+    pub(crate) fn remove(&self, request_id: Uuid) -> Option<DLogEqualitySession> {
         tracing::debug!("retrieving session {request_id}");
         tracing::trace!("trying to get lock...");
         let session = {
@@ -121,6 +114,24 @@ impl SessionStore {
         }
         // We return the randomness even if we exceeded the deadline. There is no problem with old sessions, we have the deadline only to not pollute the RAM with old sessions
         session.map(|s| s.randomness)
+    }
+
+    /// Checks if a session with the given request ID exists in the store without removing it.
+    ///
+    /// This method verifies the existence of a session with the specified request ID in the store.
+    /// It does not remove the session, regardless of whether it is past its lifetime.
+    ///
+    /// # Arguments
+    /// * `request_id` - Unique ID of the session.
+    ///
+    /// # Returns
+    /// `true` if the session exists, `false` otherwise.
+    #[instrument(level = "debug", skip(self))]
+    #[allow(dead_code)]
+    pub(crate) fn contains_key(&self, request_id: Uuid) -> bool {
+        let sessions = self.sessions.lock();
+        tracing::trace!("got lock");
+        sessions.contains_key(&request_id)
     }
 }
 

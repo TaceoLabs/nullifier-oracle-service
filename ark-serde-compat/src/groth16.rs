@@ -9,17 +9,17 @@ pub struct Groth16Proof {
     #[serde(rename = "pi_a")]
     #[serde(serialize_with = "crate::serialize_bn254_g1")]
     #[serde(deserialize_with = "crate::deserialize_bn254_g1")]
-    pub(crate) a: ark_bn254::G1Affine,
+    pub a: ark_bn254::G1Affine,
     /// The `B` element in `G2`.
     #[serde(rename = "pi_b")]
     #[serde(serialize_with = "crate::serialize_bn254_g2")]
     #[serde(deserialize_with = "crate::deserialize_bn254_g2")]
-    pub(crate) b: ark_bn254::G2Affine,
+    pub b: ark_bn254::G2Affine,
     /// The `C` element in `G1`.
     #[serde(rename = "pi_c")]
     #[serde(serialize_with = "crate::serialize_bn254_g1")]
     #[serde(deserialize_with = "crate::deserialize_bn254_g1")]
-    pub(crate) c: ark_bn254::G1Affine,
+    pub c: ark_bn254::G1Affine,
 }
 
 impl From<Groth16Proof> for ark_groth16::Proof<Bn254> {

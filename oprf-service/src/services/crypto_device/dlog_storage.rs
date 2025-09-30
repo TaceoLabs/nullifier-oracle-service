@@ -87,7 +87,7 @@ impl RpMaterialStore {
         dlog_share: DLogShare,
     ) {
         let mut shares = HashMap::new();
-        shares.insert(ShareEpoch::new(), dlog_share);
+        shares.insert(ShareEpoch::default(), dlog_share);
         if self
             .0
             .write()

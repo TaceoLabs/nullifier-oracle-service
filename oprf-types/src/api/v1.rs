@@ -46,7 +46,7 @@ pub struct OprfRequest {
     pub signature: k256::ecdsa::Signature,
     /// The credential public key
     pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
-    /// The current time stamp
+    /// The current time stamp (unix ms)
     pub current_time_stamp: u64,
     /// The depth of the credential in the merkle tree
     pub merkle_depth: u64,

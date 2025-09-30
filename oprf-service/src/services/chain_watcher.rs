@@ -31,7 +31,7 @@ use oprf_types::{
 };
 use tracing::instrument;
 
-use crate::{config::OprfPeerConfig, metrics::METRICS_MERKLE_COUNT};
+use crate::metrics::METRICS_MERKLE_COUNT;
 
 /// Dyn trait for the watcher service. Must be `Send` + `Sync` to work with Axum.
 pub(crate) type ChainWatcherService = Arc<dyn ChainWatcher + Send + Sync>;
@@ -88,7 +88,8 @@ pub(crate) trait ChainWatcher {
 pub(crate) struct MerkleRootStore {
     store: BTreeMap<MerkleEpoch, MerkleRoot>,
     current_epoch: MerkleEpoch,
-    config: Arc<OprfPeerConfig>,
+    max_merkle_store_size: usize,
+    chain_epoch_max_difference: u128,
 }
 
 impl MerkleRootStore {
@@ -100,9 +101,10 @@ impl MerkleRootStore {
     /// Fails if the store size is zero or no updates are provided.
     pub(crate) fn new(
         mut merkle_updates: Vec<MerkleRootUpdate>,
-        config: Arc<OprfPeerConfig>,
+        max_merkle_store_size: usize,
+        chain_epoch_max_difference: u128,
     ) -> eyre::Result<Self> {
-        if config.max_merkle_store_size == 0 {
+        if max_merkle_store_size == 0 {
             eyre::bail!("Max merkle store size must be > 0");
         }
         if merkle_updates.is_empty() {
@@ -111,11 +113,8 @@ impl MerkleRootStore {
         merkle_updates.sort_by_key(|m| m.epoch);
         let current_epoch = merkle_updates.last().expect("is there").epoch;
 
-        if merkle_updates.len() > config.max_merkle_store_size {
-            tracing::info!(
-                "will clip merkle store to size: {}",
-                config.max_merkle_store_size
-            );
+        if merkle_updates.len() > max_merkle_store_size {
+            tracing::info!("will clip merkle store to size: {max_merkle_store_size}");
         }
         let store = merkle_updates
             .into_iter()
@@ -130,7 +129,8 @@ impl MerkleRootStore {
         Ok(Self {
             store,
             current_epoch,
-            config,
+            max_merkle_store_size,
+            chain_epoch_max_difference,
         })
     }
 
@@ -144,7 +144,7 @@ impl MerkleRootStore {
             tracing::debug!("epoch {epoch} already registered - replaced");
         } else {
             tracing::trace!("registered new epoch: {epoch}");
-            if self.store.len() > self.config.max_merkle_store_size {
+            if self.store.len() > self.max_merkle_store_size {
                 // we need to drop one
                 let (dropped, _) = self.store.pop_first().expect("is there for sure");
                 tracing::trace!("dropped {dropped}");
@@ -164,8 +164,8 @@ impl MerkleRootStore {
     /// Returns an error if the epoch is too far in the future or past
     /// based on configured maximum differences.
     pub(crate) fn is_sane_epoch(&self, epoch: MerkleEpoch) -> Result<(), ChainWatcherError> {
-        let max_future_diff = self.config.chain_epoch_max_difference;
-        let max_past_diff = self.store.len() as u128 + self.config.chain_epoch_max_difference;
+        let max_future_diff = self.chain_epoch_max_difference;
+        let max_past_diff = self.store.len() as u128 + self.chain_epoch_max_difference;
         match self.current_epoch.cmp(&epoch) {
             std::cmp::Ordering::Less
                 if MerkleEpoch::diff(epoch, self.current_epoch) > max_future_diff =>

@@ -81,8 +81,12 @@ impl HttpMockWatcher {
             .context("while parsing first batch of merkle roots")?;
 
         let merkle_root_store = Arc::new(Mutex::new(
-            MerkleRootStore::new(merkle_roots, Arc::clone(&config))
-                .context("while building merkle root store")?,
+            MerkleRootStore::new(
+                merkle_roots,
+                config.max_merkle_store_size,
+                config.chain_epoch_max_difference,
+            )
+            .context("while building merkle root store")?,
         ));
 
         subscribe_merkle_updates(
