@@ -17,7 +17,6 @@ ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
 circom-types.workspace = true
-clap = { workspace = true, features = ["derive", "env"], optional = true }
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
 futures.workspace = true
@@ -35,15 +34,16 @@ tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 witness = { workspace = true }
 
+hex = "0.4"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
 
 [features]
-default = ["bin"]
+default = ["tokio"]
 
-# enables the binary client example
-bin = ["dep:clap", "dep:tokio"]
+tokio = ["dep:tokio"]
 
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]

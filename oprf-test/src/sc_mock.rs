@@ -1,12 +1,10 @@
 use std::time::Duration;
 
-use oprf_client::MAX_DEPTH;
+use oprf_client::{MAX_DEPTH, MerkleMembership};
 use oprf_types::{
-    MerkleEpoch, RpId,
+    RpId,
     crypto::{RpNullifierKey, UserPublicKeyBatch},
-    sc_mock::{
-        AddPublicKeyRequest, AddPublicKeyResponse, MerklePath, SignNonceRequest, SignNonceResponse,
-    },
+    sc_mock::{AddPublicKeyRequest, AddPublicKeyResponse, SignNonceRequest, SignNonceResponse},
 };
 use smart_contract_mock::config::SmartContractMockConfig;
 
@@ -43,6 +41,7 @@ pub async fn start_smart_contract_mock() -> String {
     .expect("cannot start smart contract mock");
     url
 }
+
 pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)> {
     let client = reqwest::Client::new();
     let rp_id = client
@@ -71,12 +70,14 @@ pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)
 
 pub async fn register_public_key(
     chain_url: &str,
-    public_key: UserPublicKeyBatch,
-) -> eyre::Result<(MerkleEpoch, MerklePath)> {
+    public_key: &UserPublicKeyBatch,
+) -> eyre::Result<MerkleMembership> {
     let client = reqwest::Client::new();
     let res = client
         .post(format!("{chain_url}/api/admin/register-new-public-key"))
-        .json(&AddPublicKeyRequest { public_key })
+        .json(&AddPublicKeyRequest {
+            public_key: public_key.to_owned(),
+        })
         .send()
         .await
         .expect("smart contract is online");
@@ -85,7 +86,13 @@ pub async fn register_public_key(
             .json::<AddPublicKeyResponse>()
             .await
             .expect("can get merkle path");
-        Ok((res.epoch, res.path))
+        Ok(MerkleMembership {
+            epoch: res.epoch,
+            root: res.path.root,
+            depth: MAX_DEPTH as u64,
+            mt_index: res.path.index,
+            siblings: res.path.siblings,
+        })
     } else {
         eyre::bail!("returned error: {:?}", res.text().await?);
     }

@@ -11,6 +11,7 @@ use oprf_types::{
 };
 use smart_contract_mock::config::SmartContractMockConfig;
 
+pub mod credentials;
 pub mod oprf;
 pub mod sc_mock;
 

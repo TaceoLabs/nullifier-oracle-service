@@ -7,7 +7,7 @@ use rand_chacha::{ChaCha12Rng, rand_core::SeedableRng};
 use std::array;
 use uuid::Uuid;
 
-use crate::{credentials::UserCredentials, oprf::OprfClient};
+use crate::oprf::OprfClient;
 
 type BaseField = ark_babyjubjub::Fq;
 type ScalarField = ark_babyjubjub::Fr;
@@ -162,72 +162,6 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
             merkle_root,
             depth: BaseField::from(MAX_DEPTH as u64),
             mt_index,
-            siblings,
-            beta: blinding_factor.factor,
-            rp_id,
-            action,
-            nonce,
-            q: [
-                blinded_request.blinded_query.x,
-                blinded_request.blinded_query.y,
-            ],
-        };
-
-        (result, blinding_factor.query)
-    }
-
-    // Also returns the query, since this is used in the nullifier proof input generation
-    #[expect(clippy::too_many_arguments)]
-    pub fn new<R: Rng + CryptoRng>(
-        user_credentials: UserCredentials,
-        request_id: Uuid,
-        sk: EdDSAPrivateKey,
-        pks: [[BaseField; 2]; MAX_PUBLIC_KEYS],
-        pk_index: u64,
-        merkle_root: BaseField,
-        mt_index: u64,
-        siblings: [BaseField; MAX_DEPTH],
-        rp_id: BaseField,
-        action: BaseField,
-        nonce: BaseField,
-        cred_type_id: BaseField,
-        cred_hashes: [BaseField; 2], // In practice, these are 2 hashes
-        genesis_issued_at: BaseField,
-        expired_at: BaseField,
-        current_time_stamp: BaseField,
-        rng: &mut R,
-    ) -> (Self, BaseField) {
-        let pk = sk.public();
-        let pk_index_ = BaseField::from(pk_index);
-        let mt_index_ = BaseField::from(mt_index);
-
-        let cred_signature = user_credentials.sign();
-        let cred_pk = user_credentials.pk();
-
-        // Calculate OPRF
-        let oprf_client = OprfClient::new(pk.pk);
-        let query = OprfClient::generate_query(mt_index_, rp_id, action);
-        let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query, rng);
-
-        // Sign the query
-        let signature = sk.sign(blinding_factor.query);
-
-        let result = Self {
-            pk: pks,
-            pk_index: pk_index_,
-            s: signature.s,
-            r: [signature.r.x, signature.r.y],
-            cred_type_id,
-            cred_pk: [cred_pk.pk.x, cred_pk.pk.y],
-            cred_hashes,
-            cred_genesis_issued_at: genesis_issued_at,
-            cred_expires_at: expired_at,
-            cred_s: cred_signature.s,
-            cred_r: [cred_signature.r.x, cred_signature.r.y],
-            current_time_stamp,
-            merkle_root,
-            depth: BaseField::from(MAX_DEPTH as u64),
-            mt_index: mt_index_,
             siblings,
             beta: blinding_factor.factor,
             rp_id,
