@@ -26,6 +26,7 @@ serde_json.workspace = true
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 zeroize = { workspace = true, features = ["derive"] }
+subtle = "2"
 
 [dev-dependencies]
 criterion = { workspace = true }

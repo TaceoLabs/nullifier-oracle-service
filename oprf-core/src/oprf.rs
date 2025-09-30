@@ -283,8 +283,33 @@ mod mappings {
     use ark_ec::{AffineRepr, CurveGroup};
     use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
     use poseidon2::Poseidon2;
+    use subtle::{Choice, ConstantTimeEq};
 
     use crate::oprf::{Affine, BaseField};
+
+    fn ct_eq<F: PrimeField>(lhs: F, rhs: F) -> Choice {
+        // Ideally the ark ecosystem would support subtle, so this is currently
+        // the best thing we can do. Serialize the elements and then compare the
+        // byte representation.
+        let mut lhs_v = Vec::with_capacity(lhs.uncompressed_size());
+        let mut rhs_v = Vec::with_capacity(rhs.uncompressed_size());
+        lhs.serialize_uncompressed(&mut lhs_v).unwrap();
+        rhs.serialize_uncompressed(&mut rhs_v).unwrap();
+        lhs_v.ct_eq(&rhs_v)
+    }
+
+    fn ct_select<F: PrimeField>(lhs: F, rhs: F, choice: Choice) -> F {
+        // Ideally the ark ecosystem would support subtle.
+        let choice = F::from(choice.unwrap_u8());
+        rhs + (lhs - rhs) * choice
+    }
+
+    fn ct_is_square<F: PrimeField>(x: F) -> Choice {
+        let x = x.pow(F::MODULUS_MINUS_ONE_DIV_TWO);
+        let c1 = ct_eq(x, F::ONE);
+        let c2 = ct_eq(x, F::ZERO);
+        c1 ^ c2
+    }
 
     /// A curve encoding function that maps a field element to a point on the curve, based on [RFC9380, Section 3](https://www.rfc-editor.org/rfc/rfc9380.html#name-encoding-byte-strings-to-el).
     ///
@@ -376,9 +401,8 @@ mod mappings {
         let z = BaseField::from(5);
         let tv1 = input * input;
         let tv1 = z * tv1;
-        // TODO: constant-time
-        let e = (tv1 + BaseField::one()).is_zero();
-        let tv1 = if e { BaseField::zero() } else { tv1 };
+        let e = ct_eq(tv1, -BaseField::ONE);
+        let tv1 = ct_select(BaseField::zero(), tv1, e); //  if e { BaseField::zero() } else { tv1 };
         let x1 = tv1 + BaseField::one();
         let x1 = inv0(x1);
         let x1 = -c1 * x1;
@@ -388,15 +412,13 @@ mod mappings {
         let gx1 = gx1 * x1;
         let x2 = -x1 - c1;
         let gx2 = tv1 * gx1;
-        // TODO: constant time
-        let e2 = gx1.sqrt().is_some();
-        let (x, y2) = if e2 { (x1, gx1) } else { (x2, gx2) };
+        let e2 = ct_is_square(gx1);
+        let (x, y2) = (ct_select(x1, x2, e2), ct_select(gx1, gx2, e2)); // if e2 { (x1, gx1) } else { (x2, gx2) };
         let y = y2
             .sqrt()
             .expect("y2 should be a square based on our conditional selection above");
-        let e3 = sgn0(y);
-        // TODO: constant-time
-        let y = if e2 ^ e3 { -y } else { y };
+        let e3 = Choice::from(sgn0(y) as u8);
+        let y = ct_select(-y, y, e2 ^ e3); // if e2 ^ e3 { -y } else { y };
         let s = x * k;
         let t = y * k;
         (s, t)
@@ -429,15 +451,17 @@ mod mappings {
         let w = tv2 * t;
         let tv1 = s - BaseField::one();
         let w = w * tv1;
-        // TODO: make constant-time
-        let e = tv2.is_zero();
-        let w = if e { BaseField::one() } else { w };
+        let e = ct_eq(tv2, BaseField::zero()); // tv2.is_zero();
+        let w = ct_select(BaseField::one(), w, e); // if e { BaseField::one() } else { w };
         (v, w)
     }
 
     /// Computes the inverse of a field element, returning zero if the element is zero.
     fn inv0<F: PrimeField>(x: F) -> F {
-        x.inverse().unwrap_or(F::zero())
+        // TODO: cache the exponent somewhere
+        let mut exp = F::MODULUS;
+        exp.sub_with_borrow(&F::BigInt::from(2u64));
+        x.pow(exp)
     }
 
     /// Computes the `sgn0` function for a field element, based on the definition in [RFC9380, Section 4.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-the-sgn0-function).
