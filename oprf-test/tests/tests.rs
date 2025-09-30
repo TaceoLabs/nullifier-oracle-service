@@ -15,55 +15,52 @@ pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
-    println!("==== OPRF-client example ====");
+    println!("==== OPRF Client Example ====");
 
-    println!("starting Smart Contract mock...");
+    println!("Starting Smart Contract mock...");
     let chain_url = sc_mock::start_smart_contract_mock().await;
-    println!("starting OPRF-peers...");
 
+    println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services().await;
-    println!("creating a new Rp Nullifier key..");
 
+    println!("Creating a new RP nullifier key...");
     let (rp_id, rp_nullifier_key) = sc_mock::register_rp(&chain_url).await?;
 
-    println!("creating dummy user credentials..");
+    println!("Creating dummy user credentials...");
     let mut rng = rand::thread_rng();
     let key_material = credentials::random_user_keys(&mut rng);
 
-    println!("registering at Smart Contract mock...");
+    println!("Registering public key at Smart Contract mock...");
     let merkle_membership =
         sc_mock::register_public_key(&chain_url, &key_material.pk_batch).await?;
 
-    println!("create nonce and let the mock sign the nonce..");
+    println!("Creating nonce and letting the mock sign it...");
     println!();
-    println!("In a real world scenario, this signing the nonce is done by the RP,");
-    println!("but for simplicity we let the Smart Contract mock sign it");
+    println!("In a real-world scenario, the RP would sign the nonce.");
+    println!("For simplicity, we let the Smart Contract mock do it here.");
     println!();
-    println!("IMPORTANT: The signature is computed as enc(nonce)|enc(timestamp)",);
-    println!("where enc(x) is the little-endian bytes representation of x ");
+    println!("IMPORTANT: The signature is computed as enc(nonce) | enc(timestamp),");
+    println!("where enc(x) is the little-endian byte representation of x.");
     let nonce = ark_babyjubjub::Fq::rand(&mut rng);
 
-    // move signature to query
     let SignNonceResponse {
         signature,
         current_time_stamp,
-    } = oprf_test::sign_nonce(&chain_url, rp_id, nonce).await?;
+    } = sc_mock::sign_nonce(&chain_url, rp_id, nonce).await?;
 
     println!();
-    println!("loading zkeys and matrices..");
+    println!("Loading zkeys and matrices...");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let groth16_material = Groth16Material::new(
         dir.join("../circom/main/OPRFQueryProof.zkey"),
         dir.join("../circom/main/OPRFNullifierProof.zkey"),
     )?;
-
     let nullifier_vk = groth16_material.nullifier_vk();
 
-    println!("generate a random query..");
+    println!("Generating a random query...");
     let query = random_query(rp_id, nonce, current_time_stamp, signature, &mut rng);
 
-    println!("create a random credential signature..");
-
+    println!("Creating a random credential signature...");
     let credential_signature = credentials::random_credential_signature(
         merkle_membership.mt_index,
         current_time_stamp,
@@ -73,7 +70,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
     let id_commitment_r = ark_babyjubjub::Fq::rand(&mut rng);
 
-    println!("lets go");
+    println!("Running OPRF client flow...");
     let time = Instant::now();
 
     let args = NullifierArgs {
@@ -88,16 +85,14 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     };
 
     let (proof, public, nullifier) =
-        oprf_client::nullifier(oprf_services.as_slice(), args, &mut rng).await?;
+        oprf_client::nullifier(oprf_services.as_slice(), 2, args, &mut rng).await?;
     let elapsed = time.elapsed();
 
-    println!("checking proof...");
-
+    println!("Verifying proof...");
     Groth16::verify(&nullifier_vk, &proof.clone().into(), &public).expect("verifies");
 
-    println!("success - took {:?}", elapsed);
-
-    println!("produced nullifier: {nullifier}");
+    println!("Success! Completed in {:?}", elapsed);
+    println!("Produced nullifier: {nullifier}");
 
     Ok(())
 }

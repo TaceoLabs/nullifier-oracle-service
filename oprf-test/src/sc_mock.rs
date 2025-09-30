@@ -102,7 +102,7 @@ pub async fn sign_nonce(
     chain_url: &str,
     rp_id: RpId,
     nonce: BaseField,
-) -> eyre::Result<k256::ecdsa::Signature> {
+) -> eyre::Result<SignNonceResponse> {
     let client = reqwest::Client::new();
     let res = client
         .post(format!("{chain_url}/api/rp/sign"))
@@ -115,7 +115,7 @@ pub async fn sign_nonce(
             .json::<SignNonceResponse>()
             .await
             .expect("can get merkle path");
-        Ok(res.signature)
+        Ok(res)
     } else {
         eyre::bail!("returned error: {:?}", res.text().await?);
     }

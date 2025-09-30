@@ -47,17 +47,13 @@ async fn list_rps(State(rp_registry): State<RpRegistry>) -> ApiResult<Json<Vec<R
 
 #[instrument(level = "debug", skip_all)]
 async fn sign_nonce(
-    State(key_gen_service): State<RpNullifierGenService>,
+    State(rp_registry): State<RpRegistry>,
     Json(req): Json<SignNonceRequest>,
 ) -> ApiResult<Json<SignNonceResponse>> {
     let mut rp_signing_key = SigningKey::from(
-        key_gen_service
-            .running_key_gens
-            .lock()
-            .get(&req.rp_id)
-            .ok_or_else(|| ApiErrors::NotFound(format!("unknown rp_id: {}", req.rp_id)))?
-            .rp_signing_key
-            .clone(),
+        rp_registry
+            .signing_key(req.rp_id)
+            .ok_or_else(|| ApiErrors::NotFound(format!("unknown rp_id: {}", req.rp_id)))?,
     );
     let current_time_stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

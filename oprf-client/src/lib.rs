@@ -11,8 +11,7 @@ use oprf_core::{
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
-use oprf_types::crypto::{PartyId, RpNullifierKey, UserPublicKeyBatch};
-use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
+use oprf_types::crypto::{PartyId, RpNullifierKey};
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
 
@@ -24,7 +23,13 @@ pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 use crate::zk::{Groth16Error, Groth16Material};
 
 pub mod nonblocking;
+mod types;
 pub mod zk;
+
+pub use types::CredentialsSignature;
+pub use types::MerkleMembership;
+pub use types::OprfQuery;
+pub use types::UserKeyMaterial;
 
 pub const MAX_DEPTH: usize = 30;
 
@@ -32,48 +37,6 @@ pub type ScalarField = ark_babyjubjub::Fr;
 pub type BaseField = ark_babyjubjub::Fq;
 pub type Affine = ark_babyjubjub::EdwardsAffine;
 pub type Projective = ark_babyjubjub::EdwardsProjective;
-
-pub struct CredentialsSignature {
-    // Credential Signature
-    pub type_id: BaseField,
-    pub issuer: EdDSAPublicKey,
-    pub hashes: [BaseField; 2], // [claims_hash, associated_data_hash]
-    pub signature: EdDSASignature,
-    pub genesis_issued_at: u64,
-    pub expires_at: u64,
-}
-
-pub struct MerkleMembership {
-    pub epoch: MerkleEpoch,
-    pub root: MerkleRoot,
-    pub depth: u64,
-    pub mt_index: u64,
-    pub siblings: Vec<BaseField>,
-}
-
-pub struct OprfQuery {
-    pub rp_id: RpId,
-    pub share_epoch: ShareEpoch,
-    pub action: BaseField,
-    pub nonce: BaseField,
-    pub current_time_stamp: u64,
-    pub nonce_signature: k256::ecdsa::Signature,
-}
-
-pub struct UserKeyMaterial {
-    pub pk_batch: UserPublicKeyBatch,
-    pub pk_index: u64, // 0..6
-    pub sk: EdDSAPrivateKey,
-}
-
-impl UserKeyMaterial {
-    pub fn public_key(&self) -> Affine {
-        if self.pk_index >= MAX_PUBLIC_KEYS as u64 {
-            panic!("out-of-bounds");
-        }
-        self.pk_batch.values[self.pk_index as usize]
-    }
-}
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -95,51 +58,6 @@ pub enum Error {
     ZkError(#[from] Groth16Error),
     #[error(transparent)]
     InternalError(#[from] eyre::Report),
-}
-
-pub struct NullifierArgs {
-    pub credential_signature: CredentialsSignature,
-    pub merkle_membership: MerkleMembership,
-    pub query: OprfQuery,
-    pub groth16_material: Groth16Material,
-    pub key_material: UserKeyMaterial,
-    pub rp_nullifier_key: RpNullifierKey,
-    pub signal_hash: BaseField,
-    pub id_commitment_r: BaseField,
-}
-
-pub async fn nullifier<R: Rng + CryptoRng>(
-    services: &[String],
-    args: NullifierArgs,
-    rng: &mut R,
-) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
-    let NullifierArgs {
-        credential_signature,
-        merkle_membership,
-        query,
-        groth16_material,
-        key_material,
-        signal_hash,
-        id_commitment_r,
-        rp_nullifier_key,
-    } = args;
-
-    let signed_query = sign_oprf_query(
-        credential_signature,
-        merkle_membership,
-        groth16_material,
-        query,
-        key_material,
-        rng,
-    )?;
-
-    let req = signed_query.get_request();
-    let sessions = nonblocking::init_sessions(services, 2, req).await?;
-
-    let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
-    let req = challenges.get_request();
-    let responses = nonblocking::finish_sessions(sessions, req).await?;
-    verify_challenges(challenges, responses, signal_hash, id_commitment_r, rng)
 }
 
 pub struct SignedOprfQuery {
@@ -170,45 +88,50 @@ pub struct Challenges {
     rp_nullifier_key: RpNullifierKey,
 }
 
-pub fn verify_challenges<R: Rng + CryptoRng>(
-    challenges: Challenges,
-    responses: Vec<ChallengeResponse>,
-    signal_hash: BaseField,
-    id_commitment_r: BaseField,
+pub struct NullifierArgs {
+    pub credential_signature: CredentialsSignature,
+    pub merkle_membership: MerkleMembership,
+    pub query: OprfQuery,
+    pub groth16_material: Groth16Material,
+    pub key_material: UserKeyMaterial,
+    pub rp_nullifier_key: RpNullifierKey,
+    pub signal_hash: BaseField,
+    pub id_commitment_r: BaseField,
+}
+
+pub async fn nullifier<R: Rng + CryptoRng>(
+    services: &[String],
+    threshold: usize,
+    args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
-    let proofs = responses
-        .into_iter()
-        .map(|res| res.proof_share)
-        .collect::<Vec<_>>();
-    let dlog_proof = challenges
-        .challenge_request
-        .challenge
-        .combine_proofs_shamir(&proofs, &challenges.lagrange);
-    tracing::info!("checking second proof");
-    if !dlog_proof.verify(
-        challenges.rp_nullifier_key.inner(),
-        challenges.blinded_request.blinded_query(),
-        challenges.blinded_response,
-        Affine::generator(),
-    ) {
-        return Err(Error::InvalidDLogProof);
-    }
-
-    let nullifier_input = NullifierProofInput::new(
-        challenges.request_id,
-        challenges.rp_nullifier_key.inner(),
+    let NullifierArgs {
+        credential_signature,
+        merkle_membership,
+        query,
+        groth16_material,
+        key_material,
         signal_hash,
-        challenges.query_proof_input,
-        challenges.query_hash,
-        challenges.blinded_response,
-        dlog_proof,
         id_commitment_r,
-    );
-    let (proof, public) = challenges
-        .groth16_material
-        .generate_nullifier_proof(&nullifier_input, rng)?;
-    Ok((proof, public, nullifier_input.nullifier))
+        rp_nullifier_key,
+    } = args;
+
+    let signed_query = sign_oprf_query(
+        credential_signature,
+        merkle_membership,
+        groth16_material,
+        query,
+        key_material,
+        rng,
+    )?;
+
+    let req = signed_query.get_request();
+    let sessions = nonblocking::init_sessions(services, threshold, req).await?;
+
+    let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
+    let req = challenges.get_request();
+    let responses = nonblocking::finish_sessions(sessions, req).await?;
+    verify_challenges(challenges, responses, signal_hash, id_commitment_r, rng)
 }
 
 impl Challenges {
@@ -368,4 +291,45 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         blinded_request,
         query,
     })
+}
+
+pub fn verify_challenges<R: Rng + CryptoRng>(
+    challenges: Challenges,
+    responses: Vec<ChallengeResponse>,
+    signal_hash: BaseField,
+    id_commitment_r: BaseField,
+    rng: &mut R,
+) -> Result<(Groth16Proof, Vec<BaseField>, BaseField)> {
+    let proofs = responses
+        .into_iter()
+        .map(|res| res.proof_share)
+        .collect::<Vec<_>>();
+    let dlog_proof = challenges
+        .challenge_request
+        .challenge
+        .combine_proofs_shamir(&proofs, &challenges.lagrange);
+    tracing::info!("checking second proof");
+    if !dlog_proof.verify(
+        challenges.rp_nullifier_key.inner(),
+        challenges.blinded_request.blinded_query(),
+        challenges.blinded_response,
+        Affine::generator(),
+    ) {
+        return Err(Error::InvalidDLogProof);
+    }
+
+    let nullifier_input = NullifierProofInput::new(
+        challenges.request_id,
+        challenges.rp_nullifier_key.inner(),
+        signal_hash,
+        challenges.query_proof_input,
+        challenges.query_hash,
+        challenges.blinded_response,
+        dlog_proof,
+        id_commitment_r,
+    );
+    let (proof, public) = challenges
+        .groth16_material
+        .generate_nullifier_proof(&nullifier_input, rng)?;
+    Ok((proof, public, nullifier_input.nullifier))
 }

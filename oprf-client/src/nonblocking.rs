@@ -14,6 +14,7 @@ async fn oprf_request(
         .json(&req)
         .send()
         .await?
+        .error_for_status()?
         .json::<OprfResponse>()
         .await?;
     Ok((service, response))
@@ -29,6 +30,7 @@ async fn oprf_challenge(
         .json(&req)
         .send()
         .await?
+        .error_for_status()?
         .json::<ChallengeResponse>()
         .await?)
 }
