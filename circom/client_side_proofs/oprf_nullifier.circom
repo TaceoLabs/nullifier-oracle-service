@@ -6,7 +6,7 @@ include "verify_dlog/verify_dlog.circom";
 // Checks outside of the ZK proof: The public key oprf_pk needs to be a valid BabyJubJub point in the correct subgroup.
 
 template OprfNullifier(MAX_DEPTH) {
-    // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
+    // Signature verification of the OPRF nonce (There such that sk corresponding to pk is never used in a proof directly)
     signal input user_pk[7][2];
     signal input pk_index; // 0..6
     signal input query_s;

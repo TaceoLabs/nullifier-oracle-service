@@ -1,3 +1,22 @@
+//! Zero-Knowledge proof helpers and Groth16 material for OPRF client.
+//!
+//! This module provides everything necessary to generate and verify
+//! zero-knowledge proofs for OPRFQuery and OPRFNullifier Circom circuits.
+//!
+//! Key points:
+//! - Holds Groth16 proving keys (`.zkey`) and their associated constraint matrices
+//!   for both the OPRFQuery and OPRFNullifier circuits.
+//! - Validates the fingerprint of the proving keys to prevent accidental use
+//!   of wrong keys.
+//! - Provides methods to generate proofs from prepared circuit inputs, and
+//!   immediately verifies the generated proof against the verifying key.
+//! - Includes helper functions to calculate witnesses and manage black-box
+//!   functions required by Circom circuits.
+//!
+//! We refer to the current SHA-256 fingerprints for the zkeys:
+//! - [`FINGERPRINT_QUERY`]
+//! - [`FINGERPRINT_NULLIFIER`]
+
 use std::ops::Shr;
 use std::str::FromStr;
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -16,39 +35,128 @@ use witness::{BlackBoxFunction, ruint::aliases::U256};
 const QUERY_BYTES: &[u8] = include_bytes!("../../query_graph.bin");
 const NULLIFIER_BYTES: &[u8] = include_bytes!("../../nullifier_graph.bin");
 
-const FINGERPRINT_QUERY: &str = "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
-const FINGERPRINT_NULLIFIER: &str =
+/// The SHA-256 fingerprint of the OPRFQuery ZKey.
+pub const FINGERPRINT_QUERY: &str =
+    "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
+/// The SHA-256 fingerprint of the OPRFNullifier ZKey.
+pub const FINGERPRINT_NULLIFIER: &str =
     "69195d6c04b0751b03109641c0b8aaf9367af2c1740909406deaefd24440dfb2";
 
 pub(crate) type ZkResult<T> = Result<T, Groth16Error>;
 
+/// Errors that can occur while loading or parsing a `.zkey` file.
 #[derive(Debug, thiserror::Error)]
 pub enum ZkeyError {
+    /// Any I/O error encountered while reading the `.zkey` file
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+    /// The SHA-256 fingerprint of the `.zkey` did not match the expected value.
     #[error("invalid zkey - wrong sha256 fingerprint")]
     ZKeyFingerprintMismatch,
 }
 
+/// Errors that can occur during Groth16 proof generation and verification.
 #[derive(Debug, thiserror::Error)]
 pub enum Groth16Error {
+    /// Failed to generate a witness for the circuit.
     #[error("failed to generate witness")]
     WitnessGeneration,
+    /// Failed to generate a Groth16 proof.
     #[error("failed to generate proof")]
     ProofGeneration,
-    #[error("invalid circuit graph")]
-    InvalidCircuitGraph,
+    /// Generated proof could not be verified against the verification key.
     #[error("prove could not be verified")]
     InvalidProof,
 }
 
+/// Core material for generating zero-knowledge proofs.
+///
+/// Holds the proving keys and constraint matrices for both OPRFQuery and OPRFNullifier
+/// circuits. Provides methods to:
+/// - Generate proofs from structured inputs
+/// - Verify proofs internally immediately after generation
 pub struct Groth16Material {
+    /// Proving key for the OPRFQuery circuit
     query_pk: ProvingKey<Bn254>,
+    /// Constraint matrices for the OPRFQuery circuit
     query_matrices: ConstraintMatrices<ark_bn254::Fr>,
+    /// Proving key for the OPRFNullifier circuit
     nullifier_pk: ProvingKey<Bn254>,
+    /// Constraint matrices for the OPRFNullifier circuit
     nullifier_matrices: ConstraintMatrices<ark_bn254::Fr>,
 }
 
+impl Groth16Material {
+    /// Loads the Groth16 material from `.zkey` files and verifies their fingerprints.
+    ///
+    /// # Arguments
+    ///
+    /// * `query_zkey_path` - Path to the OPRFQuery `.zkey` file
+    /// * `nullifier_zkey_path` - Path to the OPRFNullifier `.zkey` file
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ZkeyError`] if the file cannot be read or the fingerprint
+    /// does not match the expected value.
+    pub fn new(
+        query_zkey_path: impl AsRef<Path>,
+        nullifier_zkey_path: impl AsRef<Path>,
+    ) -> Result<Self, ZkeyError> {
+        let (query_matrices, query_pk) = parse_zkey(query_zkey_path, FINGERPRINT_QUERY)?;
+        let (nullifier_matrices, nullifier_pk) =
+            parse_zkey(nullifier_zkey_path, FINGERPRINT_NULLIFIER)?;
+        Ok(Self {
+            query_pk,
+            query_matrices,
+            nullifier_pk,
+            nullifier_matrices,
+        })
+    }
+
+    /// Generates an OPRFQuery Groth16 proof.
+    ///
+    /// Immediately verifies the generated proof against the verification key.
+    pub fn generate_query_proof<const MERKLE_DEPTH: usize, R: Rng + CryptoRng>(
+        &self,
+        input: &QueryProofInput<MERKLE_DEPTH>,
+        rng: &mut R,
+    ) -> ZkResult<(Groth16Proof, Vec<ark_babyjubjub::Fq>)> {
+        let inputs: HashMap<String, serde_json::Value> =
+            serde_json::from_value(input.json()).expect("can deserialize input");
+        let inputs = inputs
+            .into_iter()
+            .map(|(name, value)| (name, parse(value)))
+            .collect();
+        let witness = generate_witness(QUERY_BYTES, inputs)?;
+        generate_proof(&self.query_pk, &self.query_matrices, &witness, rng)
+    }
+
+    /// Generates an OPRFNullifier Groth16 proof.
+    ///
+    /// Immediately verifies the generated proof against the verification key.
+    pub fn generate_nullifier_proof<const MERKLE_DEPTH: usize, R: Rng + CryptoRng>(
+        &self,
+        input: &NullifierProofInput<MERKLE_DEPTH>,
+        rng: &mut R,
+    ) -> ZkResult<(Groth16Proof, Vec<ark_babyjubjub::Fq>)> {
+        let inputs: HashMap<String, serde_json::Value> =
+            serde_json::from_value(input.json()).expect("can deserialize input");
+        let inputs = inputs
+            .into_iter()
+            .map(|(name, value)| (name, parse(value)))
+            .collect();
+        let witness = generate_witness(NULLIFIER_BYTES, inputs)?;
+        generate_proof(&self.nullifier_pk, &self.nullifier_matrices, &witness, rng)
+    }
+
+    /// Returns the verification key of the nullifier circuit
+    pub fn nullifier_vk(&self) -> VerifyingKey<Bn254> {
+        self.nullifier_pk.vk.clone()
+    }
+}
+
+/// Loads a `.zkey` and returns its matrices and proving key.
+/// Checks the SHA-256 fingerprint.
 fn parse_zkey(
     path: impl AsRef<Path>,
     should_fingerprint: &'static str,
@@ -65,65 +173,12 @@ fn parse_zkey(
     Ok(query_zkey.into())
 }
 
-impl Groth16Material {
-    pub fn new(
-        query_zkey_path: impl AsRef<Path>,
-        nullifier_zkey_path: impl AsRef<Path>,
-    ) -> Result<Self, ZkeyError> {
-        let (query_matrices, query_pk) = parse_zkey(query_zkey_path, FINGERPRINT_QUERY)?;
-        let (nullifier_matrices, nullifier_pk) =
-            parse_zkey(nullifier_zkey_path, FINGERPRINT_NULLIFIER)?;
-        Ok(Self {
-            query_pk,
-            query_matrices,
-            nullifier_pk,
-            nullifier_matrices,
-        })
-    }
-
-    pub fn generate_query_proof<const MERKLE_DEPTH: usize, R: Rng + CryptoRng>(
-        &self,
-        input: &QueryProofInput<MERKLE_DEPTH>,
-        rng: &mut R,
-    ) -> ZkResult<(Groth16Proof, Vec<ark_babyjubjub::Fq>)> {
-        let inputs: HashMap<String, serde_json::Value> =
-            serde_json::from_value(input.json()).expect("can deserialize input");
-        let inputs = inputs
-            .into_iter()
-            .map(|(name, value)| (name, parse(value)))
-            .collect();
-        let witness = generate_witness(QUERY_BYTES, inputs)?;
-        generate_proof(&self.query_pk, &self.query_matrices, &witness, rng)
-    }
-
-    pub fn generate_nullifier_proof<const MERKLE_DEPTH: usize, R: Rng + CryptoRng>(
-        &self,
-        input: &NullifierProofInput<MERKLE_DEPTH>,
-        rng: &mut R,
-    ) -> ZkResult<(Groth16Proof, Vec<ark_babyjubjub::Fq>)> {
-        let inputs: HashMap<String, serde_json::Value> =
-            serde_json::from_value(input.json()).expect("can deserialize input");
-        let inputs = inputs
-            .into_iter()
-            .map(|(name, value)| (name, parse(value)))
-            .collect();
-        let witness = generate_witness(NULLIFIER_BYTES, inputs)?;
-        generate_proof(&self.nullifier_pk, &self.nullifier_matrices, &witness, rng)
-    }
-
-    pub fn nullifier_vk(&self) -> VerifyingKey<Bn254> {
-        self.nullifier_pk.vk.clone()
-    }
-}
-
+/// Computes a witness vector from a circuit graph and inputs.
 fn generate_witness(
     graph_bytes: &[u8],
     inputs: HashMap<String, Vec<U256>>,
 ) -> ZkResult<Vec<ark_bn254::Fr>> {
-    let graph = witness::init_graph(graph_bytes).map_err(|err| {
-        tracing::error!("error during init_graph: {err:?}");
-        Groth16Error::InvalidCircuitGraph
-    })?;
+    let graph = witness::init_graph(graph_bytes).expect("have correct graph baked in");
     let bbfs = black_box_functions();
     let witness = witness::calculate_witness(inputs, &graph, Some(&bbfs))
         .map_err(|err| {
@@ -136,6 +191,7 @@ fn generate_witness(
     Ok(witness)
 }
 
+/// Generates a Groth16 proof from a witness and verifies it.
 fn generate_proof<R: Rng + CryptoRng>(
     pk: &ProvingKey<Bn254>,
     matrices: &ConstraintMatrices<ark_bn254::Fr>,

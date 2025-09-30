@@ -91,7 +91,11 @@ pub async fn register_public_key(
             root: res.path.root,
             depth: MAX_DEPTH as u64,
             mt_index: res.path.index,
-            siblings: res.path.siblings,
+            siblings: res
+                .path
+                .siblings
+                .try_into()
+                .expect("siblings has correct length"),
         })
     } else {
         eyre::bail!("returned error: {:?}", res.text().await?);
