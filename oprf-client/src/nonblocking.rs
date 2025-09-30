@@ -72,7 +72,6 @@ pub async fn init_sessions(
             }
             Err(err) => {
                 eprintln!("Got error response: {err:?}");
-                tracing::info!("Got error response: {err:?}");
             }
         }
     }

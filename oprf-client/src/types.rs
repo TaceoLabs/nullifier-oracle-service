@@ -3,7 +3,6 @@ use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
 
 pub struct CredentialsSignature {
-    // Credential Signature
     pub type_id: ark_babyjubjub::Fq,
     pub issuer: EdDSAPublicKey,
     pub hashes: [ark_babyjubjub::Fq; 2], // [claims_hash, associated_data_hash]
@@ -37,9 +36,6 @@ pub struct UserKeyMaterial {
 
 impl UserKeyMaterial {
     pub fn public_key(&self) -> ark_babyjubjub::EdwardsAffine {
-        if self.pk_index >= MAX_PUBLIC_KEYS as u64 {
-            panic!("out-of-bounds");
-        }
         self.pk_batch.values[self.pk_index as usize]
     }
 }

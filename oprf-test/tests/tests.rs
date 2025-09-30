@@ -13,7 +13,7 @@ pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("==== OPRF Client Example ====");
 
@@ -58,7 +58,14 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let nullifier_vk = groth16_material.nullifier_vk();
 
     println!("Generating a random query...");
-    let query = random_query(rp_id, nonce, current_time_stamp, signature, &mut rng);
+    let query = OprfQuery {
+        rp_id,
+        share_epoch: ShareEpoch::default(),
+        action: ark_babyjubjub::Fq::rand(&mut rng),
+        nonce,
+        current_time_stamp,
+        nonce_signature: signature,
+    };
 
     println!("Creating a random credential signature...");
     let credential_signature = credentials::random_credential_signature(
@@ -95,21 +102,4 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Produced nullifier: {nullifier}");
 
     Ok(())
-}
-
-fn random_query<R: Rng>(
-    rp_id: RpId,
-    nonce: ark_babyjubjub::Fq,
-    current_time_stamp: u64,
-    nonce_signature: k256::ecdsa::Signature,
-    rng: &mut R,
-) -> OprfQuery {
-    OprfQuery {
-        rp_id,
-        share_epoch: ShareEpoch::default(),
-        action: ark_babyjubjub::Fq::rand(rng),
-        nonce,
-        current_time_stamp,
-        nonce_signature,
-    }
 }

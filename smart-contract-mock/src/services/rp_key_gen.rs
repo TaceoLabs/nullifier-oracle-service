@@ -170,7 +170,6 @@ impl RpNullifierGenService {
             return Err(RpNullifierGenServiceError::AlreadySubmitted);
         }
         key_gen_state.round2.insert(sender, contribution);
-        // check if we are done
         Ok(())
     }
 
