@@ -5,8 +5,7 @@ use ark_ff::UniformRand as _;
 use groth16::Groth16;
 use oprf_client::{NullifierArgs, OprfQuery, zk::Groth16Material};
 use oprf_test::{credentials, sc_mock};
-use oprf_types::{RpId, ShareEpoch, sc_mock::SignNonceResponse};
-use rand::Rng;
+use oprf_types::{ShareEpoch, sc_mock::SignNonceResponse};
 
 pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};

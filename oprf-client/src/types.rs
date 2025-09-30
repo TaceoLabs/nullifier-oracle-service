@@ -1,5 +1,4 @@
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
-use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
 
 pub struct CredentialsSignature {
