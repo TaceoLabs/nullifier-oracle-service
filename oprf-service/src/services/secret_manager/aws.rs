@@ -110,6 +110,9 @@ impl SecretManager for AwsSecretManager {
             .collect::<Vec<_>>();
 
         let mut shares = HashMap::with_capacity(rp_ids.len());
+        if rp_ids.is_empty() {
+            return Ok((private_key, shares));
+        }
         let mut stream = self
             .client
             .batch_get_secret_value()
