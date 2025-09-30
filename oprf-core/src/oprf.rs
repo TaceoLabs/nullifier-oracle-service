@@ -3,6 +3,7 @@ use ark_ff::{Field, PrimeField, UniformRand, Zero};
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use uuid::Uuid;
+use zeroize::ZeroizeOnDrop;
 
 use crate::dlog_equality::DLogEqualityProof;
 
@@ -21,6 +22,7 @@ pub enum OPrfError {
     InvalidProof,
 }
 
+#[derive(ZeroizeOnDrop)]
 pub struct OPrfKey {
     /// secret scalar for the OPRF
     key: ScalarField,
