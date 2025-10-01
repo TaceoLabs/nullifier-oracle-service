@@ -19,21 +19,6 @@
 //!
 //! Depending on future needs, we will add a blocking API as well.
 //!
-//! ## Example Usage
-//!
-//! ```no_run
-//! use your_crate::{nullifier, NullifierArgs};
-//! use rand::thread_rng;
-//! # tokio_test::block_on(async {
-//! let services = vec!["https://oprf1.example.com".to_string()];
-//! let threshold = 2;
-//! let args = NullifierArgs { /* fill in all fields */ };
-//! let mut rng = thread_rng();
-//!
-//! let (proof, public_inputs, nullifier) = nullifier(&services, threshold, args, &mut rng).await.unwrap();
-//! # });
-//! ```
-//!
 //! ## Notes and Best Practices
 //!
 //! - **Most users** only need [`nullifier`] for generating nullifiers in typical scenarios.
@@ -273,21 +258,6 @@ impl SignedOprfQuery {
 /// * `InvalidPublicKeyIndex` – the user key index is out of range.
 /// * `InvalidDLogProof` – the DLog equality proof could not be verified.
 /// * Other errors may propagate from network requests, proof generation, or Groth16 verification.
-///
-/// # Example
-///
-/// ```no_run
-/// # use your_crate::{NullifierArgs, nullifier};
-/// # use rand::thread_rng;
-/// # tokio_test::block_on(async {
-/// let services = vec!["https://oprf1.example.com".to_string()];
-/// let threshold = 1;
-/// let args = NullifierArgs { /* fill in all fields */ };
-/// let mut rng = thread_rng();
-///
-/// let (proof, public_inputs, nullifier) = nullifier(&services, threshold, args, &mut rng).await.unwrap();
-/// # });
-/// ```
 pub async fn nullifier<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
