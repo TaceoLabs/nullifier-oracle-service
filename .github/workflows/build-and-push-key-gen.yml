@@ -1,7 +1,7 @@
 name: Build and Push (key-gen)
 
 on:
-  pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
