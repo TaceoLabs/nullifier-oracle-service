@@ -244,7 +244,7 @@ mod tests {
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
     use oprf_client::zk::Groth16Material;
-    use oprf_client::{BaseField, MAX_DEPTH, MerkleMembership, OprfQuery, ScalarField};
+    use oprf_client::{MAX_DEPTH, MerkleMembership, OprfQuery};
     use oprf_core::ddlog_equality::DLogEqualityChallenge;
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
@@ -274,7 +274,8 @@ mod tests {
             let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
             let key_material = oprf_test::credentials::random_user_keys(&mut rng);
-            let siblings: [BaseField; MAX_DEPTH] = array::from_fn(|_| BaseField::rand(&mut rng));
+            let siblings: [ark_babyjubjub::Fq; MAX_DEPTH] =
+                array::from_fn(|_| ark_babyjubjub::Fq::rand(&mut rng));
             let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
             let merkle_root = MerkleRoot::new(QueryProofInput::merkle_root_from_pks(
                 &key_material.pk_batch.clone().into_proof_input(),
@@ -289,7 +290,7 @@ mod tests {
             let rp_public_key = rp_secret_key.public_key();
             let mut rp_signing_key = k256::ecdsa::SigningKey::from(rp_secret_key);
 
-            let nonce = BaseField::rand(&mut rng);
+            let nonce = ark_babyjubjub::Fq::rand(&mut rng);
             let current_time_stamp = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("system time is after unix epoch")
@@ -309,7 +310,7 @@ mod tests {
                 depth: MAX_DEPTH as u64, // TODO fix me
                 root: merkle_root,
                 mt_index,
-                siblings: siblings.to_vec(),
+                siblings,
             };
             let oprf_query = OprfQuery {
                 rp_id,
@@ -337,7 +338,7 @@ mod tests {
             let oprf_req = signed_query.get_request();
             let challenge_req = ChallengeRequest {
                 request_id,
-                challenge: DLogEqualityChallenge::new(BaseField::rand(&mut rng)),
+                challenge: DLogEqualityChallenge::new(ark_babyjubjub::Fq::rand(&mut rng)),
                 rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
             };
 
@@ -348,7 +349,7 @@ mod tests {
                     RpMaterial::new(
                         HashMap::from([(
                             ShareEpoch::default(),
-                            DLogShare::from(ScalarField::rand(&mut rng)),
+                            DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
                         )]),
                         rp_public_key.into(),
                     ),
