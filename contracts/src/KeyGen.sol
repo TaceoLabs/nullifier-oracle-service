@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract KeyGen {
+    address[] public participants;
+    mapping(address => uint256) public participantIndex; // participant -> index
+    mapping(uint128 => RpNullifierGenState) internal states;
+    uint128[] public activeIds;
+
+    bytes public peer_keys;
+
+    struct RpSecretGenCommitment { bytes data; }
+    struct RpSecretGenCiphertexts { bytes data; }
+
+    struct RpNullifierGenState {
+        bytes ecdsaPubKey; // session key
+        RpSecretGenCommitment[] round1; 
+        RpSecretGenCiphertexts[] round2;
+        bool round2EventEmitted;
+        bool finalizeEventEmitted;
+    }
+
+    // Events
+    event SecretGenRound1(uint128 indexed rpId, bytes ecdsaPubKey);
+    event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
+    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCiphertexts[] round2Contributions);
+
+    constructor(address[] memory _participants, bytes memory _peer_keys) {
+        require(_participants.length > 0, "Need participants");
+        participants = _participants;
+        for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
+        peer_keys = _peer_keys;
+    }
+
+    // Initialize a new session
+    function initKeyGen(uint128 id, bytes calldata ecdsaPubKey) external {
+        RpNullifierGenState storage st = states[id];
+        require(st.ecdsaPubKey.length == 0, "Session exists");
+
+        st.ecdsaPubKey = ecdsaPubKey;
+
+        uint n = participants.length;
+        delete st.round1;
+        delete st.round2;
+        for (uint i = 0;i<n;i++) {
+            st.round1.push(RpSecretGenCommitment({ data: "" }));
+        }
+
+        for (uint i = 0;i<n;i++) {
+            st.round2.push(RpSecretGenCiphertexts({ data: "" }));
+        }
+        st.round2EventEmitted = false;
+        st.finalizeEventEmitted = false;
+        activeIds.push(id);
+
+        // Emit Round1 event for everyone
+        emit SecretGenRound1(id, ecdsaPubKey);
+    }
+
+    // Round1 submission
+    function addRound1Commitment(uint128 id, bytes calldata commitment) external {
+        uint idx = participantIndex[msg.sender];
+        require(idx < participants.length, "Not a participant");
+
+        RpNullifierGenState storage st = states[id];
+        require(st.ecdsaPubKey.length != 0, "Session not initialized");
+        require(st.round1[idx].data.length == 0, "Already submitted");
+
+        st.round1[idx] = RpSecretGenCommitment(commitment);
+
+        // If all round1 submitted, emit Round2 event for everyone
+        if (allRound1Submitted(st) && !st.round2EventEmitted) {
+            st.round2EventEmitted = true;
+            emit SecretGenRound2(id, peer_keys);
+        }
+    }
+
+    // Round2 submission
+    function addRound2Contribution(uint128 id, bytes calldata ciphertext) external {
+        uint idx = participantIndex[msg.sender];
+        require(idx < participants.length, "Not a participant");
+
+        RpNullifierGenState storage st = states[id];
+        require(allRound1Submitted(st), "Round1 not complete");
+        require(st.round2[idx].data.length == 0, "Already submitted");
+
+        st.round2[idx] = RpSecretGenCiphertexts(ciphertext);
+
+        // If all round2 submitted, emit Finalize event for everyone
+        if (allRound2Submitted(st) && !st.finalizeEventEmitted) {
+            st.finalizeEventEmitted = true;
+            emit SecretGenFinalize(id, st.ecdsaPubKey, st.round2);
+        }
+    }
+
+    // --- Helpers ---
+    function allRound1Submitted(RpNullifierGenState storage st) internal view returns (bool) {
+        for (uint i = 0; i < participants.length; i++) {
+            if (st.round1[i].data.length == 0) return false;
+        }
+        return true;
+    }
+
+    function allRound2Submitted(RpNullifierGenState storage st) internal view returns (bool) {
+        for (uint i = 0; i < participants.length; i++) {
+            if (st.round2[i].data.length == 0) return false;
+        }
+        return true;
+    }
+}
