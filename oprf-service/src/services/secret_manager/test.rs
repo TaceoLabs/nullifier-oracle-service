@@ -35,7 +35,7 @@ impl SecretManager for TestSecretManager {
     }
 
     #[instrument(level = "info", skip(self, share))]
-    fn store_dlog_share(
+    async fn store_dlog_share(
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
@@ -51,7 +51,7 @@ impl SecretManager for TestSecretManager {
     }
 
     #[instrument(level = "info", skip(self, _share))]
-    fn update_dlog_share(
+    async fn update_dlog_share(
         &self,
         _rp_id: RpId,
         _epoch: ShareEpoch,

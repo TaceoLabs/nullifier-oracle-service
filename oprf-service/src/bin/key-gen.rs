@@ -1,14 +1,24 @@
+use std::path::PathBuf;
+
+use alloy::hex;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::UniformRand;
 use aws_sdk_secretsmanager::operation::create_secret::CreateSecretError;
 use clap::Parser;
+use eyre::Context;
 use oprf_types::crypto::{PeerPublicKey, PeerPublicKeyList};
 
 #[derive(Parser, Debug)]
 pub struct KeyGenConfig {
-    /// The secret ID prefix for SC to look for the public keys
-    #[clap(long, env = "PUBLIC_SC_ID_PREFIX", default_value = "oprf/sc/pubs")]
-    pub sc_mock_public_key_id: String,
+    /// The path where to store the public keys to then be loaded from smart-contract.
+    ///
+    /// Will append this Path to `CARGO_MANIFEST_DIR`.
+    #[clap(
+        long,
+        env = "PUBLIC_KEYS_FILE",
+        default_value = "../contracts/script/script-data/pubkey-list.hex"
+    )]
+    pub path_to_pubkey_file: PathBuf,
 
     /// The secret ID prefix
     ///
@@ -25,27 +35,9 @@ pub struct KeyGenConfig {
     pub overwrite_old_keys: bool,
 }
 
-fn install_tracing() {
-    use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{
-        EnvFilter,
-        fmt::{self},
-    };
-
-    let fmt_layer = fmt::layer().with_target(false).with_line_number(false);
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("warn,key_gen=debug"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
-}
-
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    install_tracing();
+    nodes_telemetry::install_tracing("key_gen=debug");
     let config = KeyGenConfig::parse();
     tracing::info!(
         "generating private keys for {} services",
@@ -64,15 +56,16 @@ async fn main() -> eyre::Result<()> {
             (ark_babyjubjub::EdwardsAffine::generator() * private_key).into_affine(),
         ));
     }
-    let pubs_json =
-        serde_json::to_string(&PeerPublicKeyList::from(public_keys)).expect("can serialize");
-    upload_to_aws(
-        &config,
-        &client,
-        config.sc_mock_public_key_id.clone(),
-        pubs_json,
-    )
-    .await?;
+    let key_list = PeerPublicKeyList::from(public_keys);
+    let hex = hex::encode_prefixed(
+        bincode::serde::encode_to_vec(&key_list, bincode::config::standard())
+            .context("while serializing pub keys")?,
+    );
+    let manifest_dir = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"));
+    let target_path = manifest_dir.join(config.path_to_pubkey_file);
+    tracing::debug!("writing hex string to {}", target_path.display());
+    std::fs::write(target_path, hex).context("while writing pubkey file")?;
+
     Ok(())
 }
 

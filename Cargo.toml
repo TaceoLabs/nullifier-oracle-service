@@ -24,6 +24,7 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
+alloy = "1.0.37"
 ark-algebra-test-templates = "0.5"
 ark-babyjubjub = { path = "ark-babyjubjub" }
 ark-bn254 = { version = "0.5.0" }
@@ -41,6 +42,7 @@ aws-config = "1"
 aws-sdk-secretsmanager = "1"
 axum = "0.8"
 axum-test = "18"
+bincode = "2"
 blake3 = "1.8"
 circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
 clap = "4.5.48"
@@ -70,6 +72,7 @@ rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
 reqwest = { version = "0.12" }
 rustls = "0.23.31"
+secrecy = "0.10"
 serde = { version = "1" }
 serde_json = { version = "1" }
 smart-contract-mock = { path = "smart-contract-mock" }

@@ -17,12 +17,14 @@
 //! - `metrics`: Metrics keys and helpers.
 //! - `services`: Core services like OPRF evaluation, chain watcher, and secret management.
 //! - `api`: REST API routes.
-use std::{fs::File, sync::Arc};
+use std::{fs::File, str::FromStr, sync::Arc};
 
+use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
 use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
+use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
@@ -30,6 +32,7 @@ use crate::services::{
     chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
+    key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
     oprf::OprfService,
     secret_manager::aws::AwsSecretManager,
 };
@@ -102,25 +105,32 @@ pub async fn start(
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
-    tracing::info!("spawn chain watcher..");
-    // spawn the chain watcher
-    let chain_watcher: ChainWatcherService = Arc::new(
-        HttpMockWatcher::init(
-            Arc::clone(&config),
-            Arc::clone(&crypto_device),
-            cancellation_token.clone(),
-        )
-        .await
-        .context("while starting chain watcher")?,
+    tracing::info!("connecting to wallet..");
+    let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
+        .context("while reading wallet private key")?;
+    let wallet = EthereumWallet::from(private_key);
+
+    tracing::info!("spawning chain event handler..");
+    let key_gen_watcher: KeyGenEventListenerService = Arc::new(
+        AlloyKeyGenWatcher::init(&config.key_gen_rpc_url, config.key_gen_contract, wallet)
+            .await
+            .context("while spawning alloy key-gen watcher")?,
     );
 
     tracing::info!("loading party id..");
     // load our party id
-    let party_id = chain_watcher
-        .get_party_id()
+    let party_id = key_gen_watcher
+        .fetch_party_id()
         .await
         .context("while loading partyID")?;
-    tracing::info!("we are party id: {party_id}");
+
+    tracing::info!("spawn chain watcher..");
+    // spawn the chain watcher
+    let chain_watcher: ChainWatcherService = Arc::new(
+        HttpMockWatcher::init(party_id, Arc::clone(&config), cancellation_token.clone())
+            .await
+            .context("while starting chain watcher")?,
+    );
 
     // start oprf-service service
     tracing::info!("init oprf-service...");
@@ -135,12 +145,10 @@ pub async fn start(
         config.signature_history_cleanup_interval,
     );
 
-    tracing::info!("spawning chain event handler..");
-    // spawn the periodic task
+    tracing::info!("we are party id: {party_id}");
     let event_handler = ChainEventHandler::spawn(
-        config.chain_check_interval,
         party_id,
-        Arc::clone(&chain_watcher),
+        key_gen_watcher,
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
     );

@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use eyre::{Context, ContextCompat};
 use oprf_types::{RpId, ShareEpoch};
 use serde::{Deserialize, Serialize};
-use tokio::runtime::{self, Handle};
 use tracing::instrument;
 
 use crate::services::crypto_device::dlog_storage::RpMaterial;
@@ -19,8 +18,6 @@ use crate::{
 pub(crate) struct AwsSecretManager {
     client: aws_sdk_secretsmanager::Client,
     config: Arc<OprfPeerConfig>,
-    // holds a handle of the runtime to have the store/update be sync interface.
-    runtime: runtime::Handle,
 }
 
 impl AwsSecretManager {
@@ -33,11 +30,7 @@ impl AwsSecretManager {
         tracing::info!("initializing AWS secret manager from env...");
         let aws_config = aws_config::load_from_env().await;
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
-        AwsSecretManager {
-            client,
-            config,
-            runtime: Handle::current(),
-        }
+        AwsSecretManager { client, config }
     }
 }
 
@@ -169,31 +162,29 @@ impl SecretManager for AwsSecretManager {
         Ok((private_key, shares))
     }
 
-    #[instrument(level = "info", skip(self, share))]
-    fn store_dlog_share(
+    #[instrument(level = "info", skip(self, public_key, share))]
+    async fn store_dlog_share(
         &self,
         rp_id: RpId,
-        pubic_key: k256::PublicKey,
+        public_key: k256::PublicKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
         let secret_id = to_secret_id(&self.config, rp_id);
         tracing::info!("creating new secret at AWS: {secret_id}");
-        let secret = AwsSecret::new(rp_id, pubic_key, share);
-        let create_fut = self
-            .client
+        let secret = AwsSecret::new(rp_id, public_key, share);
+        self.client
             .create_secret()
             .name(secret_id)
             .secret_string(serde_json::to_string(&secret).expect("can serialize"))
-            .send();
-        self.runtime
-            .block_on(create_fut)
+            .send()
+            .await
             .context("while creating secret")?;
         tracing::debug!("success");
         Ok(())
     }
 
     #[instrument(level = "info", skip(self, share))]
-    fn update_dlog_share(
+    async fn update_dlog_share(
         &self,
         rp_id: RpId,
         epoch: ShareEpoch,
@@ -202,14 +193,12 @@ impl SecretManager for AwsSecretManager {
         // Load old secret to preserve previous epoch
         let secret_id = to_secret_id(&self.config, rp_id);
         tracing::info!("loading old secret first at {secret_id}");
-        let send_fut = self
+        let secret_value = self
             .client
             .get_secret_value()
             .secret_id(secret_id.clone())
-            .send();
-        let secret_value = self
-            .runtime
-            .block_on(send_fut)
+            .send()
+            .await
             .context("while loading old secret")?
             .secret_string()
             .ok_or_else(|| eyre::eyre!("cannot find secret with provided name"))?
@@ -227,14 +216,12 @@ impl SecretManager for AwsSecretManager {
         };
 
         tracing::info!("Put new secret value with current: {epoch}, previous: {prev_epoch}");
-        let put_fut = self
-            .client
+        self.client
             .put_secret_value()
             .secret_id(secret_id)
             .secret_string(serde_json::to_string(&aws_secret).expect("can serialize"))
-            .send();
-        self.runtime
-            .block_on(put_fut)
+            .send()
+            .await
             .context("while storing new secret")?;
         tracing::debug!("success");
         Ok(())

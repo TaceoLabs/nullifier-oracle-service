@@ -11,8 +11,11 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
 ark-babyjubjub = { workspace = true }
+ark-ec.workspace = true
 ark-ff.workspace = true
+bincode = { workspace = true, features = ["serde"] }
 circom-types.workspace = true
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
@@ -27,3 +30,4 @@ rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 smart-contract-mock.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tracing.workspace = true

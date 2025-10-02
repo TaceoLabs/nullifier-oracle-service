@@ -1,5 +1,3 @@
-//! # ChainWatcher module
-//!
 //! Defines the trait and types for services that watch blockchains in the OPRF peer.
 //!
 //! The [`ChainWatcher`] trait is used by the service to:
@@ -55,6 +53,7 @@ pub(crate) enum ChainWatcherError {
 /// Implementations may poll the chain, subscribe to events, or
 /// otherwise track keygen/finalization contributions.
 #[async_trait]
+#[expect(dead_code)]
 pub(crate) trait ChainWatcher {
     /// Return the party’s own identifier as known to the chain.
     async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError>;

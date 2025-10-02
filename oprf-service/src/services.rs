@@ -15,6 +15,7 @@
 //! - [`secret_gen`] – handles multi-round secret generation protocols.
 //! - [`secret_manager`] – stores and retrieves secrets (AWS or local file based).
 //! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
+//! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the peer.
 pub(crate) mod chain_watcher;
 pub(crate) mod crypto_device;
 pub(crate) mod event_handler;
@@ -23,3 +24,5 @@ pub(crate) mod secret_gen;
 pub(crate) mod secret_manager;
 pub(crate) mod session_store;
 pub(crate) mod signature_history;
+
+pub(crate) mod key_event_watcher;

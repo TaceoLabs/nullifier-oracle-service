@@ -4,6 +4,7 @@ use oprf_service::config::{Environment, OprfPeerConfig};
 use smart_contract_mock::config::SmartContractMockConfig;
 
 pub mod credentials;
+pub mod key_gen_sc_mock;
 pub mod sc_mock;
 
 async fn start_service(id: usize) -> String {
@@ -19,8 +20,7 @@ async fn start_service(id: usize) -> String {
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
-        chain_url: "http://localhost:6789".to_string(),
-        chain_check_interval: Duration::from_millis(1000),
+        key_gen_rpc_url: "http://localhost:6789".to_string(),
         chain_epoch_max_difference: 10,
         private_key_secret_id: format!("oprf/sk/n{id}"),
         dlog_share_secret_id_suffix: format!("oprf/share/n{id}"),
@@ -28,6 +28,12 @@ async fn start_service(id: usize) -> String {
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
         max_merkle_depth: 30,
+        key_gen_contract: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+            .parse()
+            .expect("works"),
+        chain_url: "ws://localhost:8545".to_string(),
+        wallet_private_key: "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"
+            .into(),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {

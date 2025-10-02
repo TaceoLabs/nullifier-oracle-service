@@ -6,7 +6,8 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use k256::ecdsa::{SigningKey, signature::SignerMut as _};
+use k256::ecdsa::SigningKey;
+use k256::ecdsa::signature::Signer as _;
 use oprf_types::{
     RpId,
     chain::ChainEvent,
@@ -50,7 +51,7 @@ async fn sign_nonce(
     State(rp_registry): State<RpRegistry>,
     Json(req): Json<SignNonceRequest>,
 ) -> ApiResult<Json<SignNonceResponse>> {
-    let mut rp_signing_key = SigningKey::from(
+    let rp_signing_key = SigningKey::from(
         rp_registry
             .signing_key(req.rp_id)
             .ok_or_else(|| ApiErrors::NotFound(format!("unknown rp_id: {}", req.rp_id)))?,

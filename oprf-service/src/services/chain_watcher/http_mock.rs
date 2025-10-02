@@ -11,10 +11,7 @@ use oprf_types::{
         SecretGenRound2Contribution,
     },
     crypto::PartyId,
-    sc_mock::{
-        FetchRootsRequest, GetPartyIdRequest, GetPartyIdResponse, IsValidEpochRequest,
-        MerkleRootUpdate, ReadEventsRequest,
-    },
+    sc_mock::{FetchRootsRequest, IsValidEpochRequest, MerkleRootUpdate, ReadEventsRequest},
 };
 use parking_lot::Mutex;
 use tokio::task::JoinSet;
@@ -23,29 +20,24 @@ use tracing::instrument;
 
 use crate::{
     config::OprfPeerConfig,
-    services::{
-        chain_watcher::{
-            ChainEventResult, ChainWatcher, ChainWatcherError, MerkleEpoch, MerkleRoot,
-            MerkleRootStore,
-        },
-        crypto_device::CryptoDevice,
+    services::chain_watcher::{
+        ChainEventResult, ChainWatcher, ChainWatcherError, MerkleEpoch, MerkleRoot, MerkleRootStore,
     },
 };
 
 pub(crate) struct HttpMockWatcher {
     config: Arc<OprfPeerConfig>,
     client: reqwest::Client,
-    party_id: PartyId,
     _cancellation_token: CancellationToken,
     merkle_root_store: Arc<Mutex<MerkleRootStore>>,
-    read_request: ReadEventsRequest,
+    _read_request: ReadEventsRequest,
 }
 
 impl HttpMockWatcher {
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn init(
+        party_id: PartyId,
         config: Arc<OprfPeerConfig>,
-        crypto_device: Arc<CryptoDevice>,
         cancellation_token: CancellationToken,
     ) -> eyre::Result<Self> {
         tracing::info!("spawning MOCK watcher - THIS WILL NOT TALK TO A REAL CHAIN");
@@ -53,20 +45,6 @@ impl HttpMockWatcher {
         config.environment.assert_is_dev();
 
         let client = reqwest::Client::new();
-        // load my party ID
-
-        let party_id = client
-            .post(format!("{}/api/peers/id", config.chain_url))
-            .json(&GetPartyIdRequest {
-                key: crypto_device.public_key(),
-            })
-            .send()
-            .await
-            .context("while fetching merkle for first time")?
-            .json::<GetPartyIdResponse>()
-            .await
-            .context("while parsing GetPartyIdResponse")?
-            .party_id;
         // load a bunch of merkle roots
         let merkle_roots = client
             .get(format!("{}/api/merkle/fetch", config.chain_url))
@@ -97,12 +75,11 @@ impl HttpMockWatcher {
         .await
         .context("while subscribing to merkle updates")?;
         Ok(HttpMockWatcher {
-            party_id,
             config: Arc::clone(&config),
             _cancellation_token: cancellation_token.clone(),
             client: reqwest::Client::new(),
             merkle_root_store,
-            read_request: ReadEventsRequest { party_id },
+            _read_request: ReadEventsRequest { party_id },
         })
     }
 }
@@ -162,9 +139,7 @@ async fn subscribe_merkle_updates(
 impl ChainWatcher for HttpMockWatcher {
     #[instrument(level = "debug", skip(self))]
     async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError> {
-        // we load the party ID in init before we do anything
-        // a real implementation may wants to do this differently
-        Ok(self.party_id)
+        Ok(self._read_request.party_id)
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -215,7 +190,7 @@ impl ChainWatcher for HttpMockWatcher {
         Ok(self
             .client
             .get(format!("{}/api/rp/event", self.config.chain_url))
-            .query(&self.read_request)
+            .query(&self._read_request)
             .send()
             .await
             .context("while send request")?
@@ -230,7 +205,7 @@ impl ChainWatcher for HttpMockWatcher {
     ) -> Result<(), ChainWatcherError> {
         results
             .into_iter()
-            .map(|r| report_result(self.config.chain_url.clone(), self.client.clone(), r))
+            .map(|r| _report_result(self.config.chain_url.clone(), self.client.clone(), r))
             .collect::<JoinSet<_>>()
             .join_all()
             .await
@@ -240,25 +215,25 @@ impl ChainWatcher for HttpMockWatcher {
     }
 }
 
-async fn report_result(
+async fn _report_result(
     chain_url: String,
     client: reqwest::Client,
     chain_result: ChainEventResult,
 ) -> Result<(), ChainWatcherError> {
     match chain_result {
         ChainEventResult::SecretGenRound1(contribution) => {
-            contribute_secret_gen_round1(chain_url, client, contribution).await
+            _contribute_secret_gen_round1(chain_url, client, contribution).await
         }
         ChainEventResult::SecretGenRound2(contribution) => {
-            contribute_secret_gen_round2(chain_url, client, contribution).await
+            _contribute_secret_gen_round2(chain_url, client, contribution).await
         }
         ChainEventResult::SecretGenFinalize(contribution) => {
-            contribute_secret_gen_finalize(chain_url, client, contribution).await
+            _contribute_secret_gen_finalize(chain_url, client, contribution).await
         }
     }
 }
 
-async fn contribute_secret_gen_round1(
+async fn _contribute_secret_gen_round1(
     chain_url: String,
     client: reqwest::Client,
     contribution: SecretGenRound1Contribution,
@@ -275,7 +250,7 @@ async fn contribute_secret_gen_round1(
     Ok(())
 }
 
-async fn contribute_secret_gen_round2(
+async fn _contribute_secret_gen_round2(
     chain_url: String,
     client: reqwest::Client,
     contribution: SecretGenRound2Contribution,
@@ -292,7 +267,7 @@ async fn contribute_secret_gen_round2(
     Ok(())
 }
 
-async fn contribute_secret_gen_finalize(
+async fn _contribute_secret_gen_finalize(
     chain_url: String,
     client: reqwest::Client,
     contribution: SecretGenFinalizeContribution,
