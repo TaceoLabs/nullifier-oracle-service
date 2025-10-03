@@ -15,7 +15,9 @@ default = ["mock-chain-watcher"]
 mock-chain-watcher = ["rand"]
 
 [dependencies]
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
+ark-ff.workspace = true
 ark-serde-compat = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }

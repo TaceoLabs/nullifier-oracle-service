@@ -180,4 +180,20 @@ pub struct OprfPeerConfig {
     /// The max depth of the merkle tree
     #[clap(long, env = "OPRF_SERVICE_MAX_MERKLE_DEPTH", default_value = "30")]
     pub max_merkle_depth: u64,
+
+    /// The websocket rpc url of the chain
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
+        default_value = "ws://127.0.0.1:8545"
+    )]
+    pub chain_ws_rpc_url: String,
+
+    /// The address of the `AccountRegistry` smart contract
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT_ADDRESS",
+        default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    )]
+    pub account_registry_contract_address: String,
 }

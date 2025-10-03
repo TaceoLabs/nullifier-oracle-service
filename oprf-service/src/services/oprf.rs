@@ -34,6 +34,7 @@ use crate::{
     services::{
         chain_watcher::{ChainWatcherError, ChainWatcherService},
         crypto_device::{CryptoDevice, CryptoDeviceError},
+        merkle_watcher::{MerkleWatcherError, MerkleWatcherService},
         session_store::SessionStore,
         signature_history::{DuplicateSignatureError, SignatureHistory},
     },
@@ -54,6 +55,9 @@ pub(crate) enum OprfServiceError {
     /// An error returned from the chain watcher service during merkle look-up.
     #[error(transparent)]
     ChainWatcherError(#[from] ChainWatcherError),
+    /// An error returned from the merkle watcher service during merkle look-up.
+    #[error(transparent)]
+    MerkleWatcherError(#[from] MerkleWatcherError),
     /// The current time stamp difference between client and service is larger than allowed.
     #[error("the time stamp difference is too large")]
     TimeStampDifference,
@@ -63,6 +67,9 @@ pub(crate) enum OprfServiceError {
     /// The merkle tree depth is greater than the max
     #[error("merkle tree depth greater than max: {0}")]
     MerkleDepthGreaterThanMax(u64),
+    /// The provided merkle root is not valid
+    #[error("invalid merkle root")]
+    InvalidMerkleRoot,
     /// Internal server error
     #[error(transparent)]
     InternalServerErrpr(#[from] eyre::Report),
@@ -73,6 +80,7 @@ pub(crate) struct OprfService {
     crypto_device: Arc<CryptoDevice>,
     pub(crate) session_store: SessionStore,
     chain_watcher: ChainWatcherService,
+    merkle_watcher: MerkleWatcherService,
     signature_history: SignatureHistory,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
     max_merkle_depth: u64,
@@ -85,6 +93,7 @@ impl OprfService {
     pub(crate) fn init(
         crypto_device: Arc<CryptoDevice>,
         chain_watcher: ChainWatcherService,
+        merkle_watcher: MerkleWatcherService,
         vk: ark_groth16::VerifyingKey<Bn254>,
         request_lifetime: Duration,
         session_cleanup_interval: Duration,
@@ -100,6 +109,7 @@ impl OprfService {
             ),
             session_store: SessionStore::init(session_cleanup_interval, request_lifetime),
             chain_watcher,
+            merkle_watcher,
             vk: Arc::new(ark_groth16::prepare_verifying_key(&vk)),
             max_merkle_depth,
             current_time_stamp_max_difference,
@@ -153,11 +163,14 @@ impl OprfService {
         self.signature_history
             .add_signature(request.signature.to_vec(), req_time_stamp)?;
 
-        // get the merkle root identified by the epoch
-        let merkle_root = self
-            .chain_watcher
-            .get_merkle_root_by_epoch(request.merkle_epoch)
+        // check if the merkle root is valid
+        let valid = self
+            .merkle_watcher
+            .is_root_valid(request.merkle_epoch, request.merkle_root)
             .await?;
+        if !valid {
+            return Err(OprfServiceError::InvalidMerkleRoot)?;
+        }
 
         // verify the user proof
         let public = [
@@ -166,7 +179,7 @@ impl OprfService {
             request.cred_pk.pk.x,
             request.cred_pk.pk.y,
             request.current_time_stamp.into(),
-            merkle_root.into_inner(),
+            request.merkle_root.into_inner(),
             request.merkle_depth.into(),
             request.rp_identifier.rp_id.into(),
             request.action,

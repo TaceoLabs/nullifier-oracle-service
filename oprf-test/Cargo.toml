@@ -11,13 +11,19 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
+ark-bn254.workspace = true
 ark-babyjubjub = { workspace = true }
 ark-ff.workspace = true
+axum = { workspace = true }
 circom-types.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
 futures.workspace = true
 groth16 = { workspace = true }
+hex = {version = "0.4" }
+nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
 oprf-core = { workspace = true }
 oprf-service = { workspace = true }
@@ -25,5 +31,9 @@ oprf-types = { workspace = true, features = ["mock-chain-watcher"] }
 poseidon2 = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
+semaphore-rs-trees = "0.5.0"
+semaphore-rs-hasher = "0.5.0"
+serde = { workspace = true, features = ["derive"] }
 smart-contract-mock.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tracing.workspace = true

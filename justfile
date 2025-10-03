@@ -27,6 +27,12 @@ run-mock:
     trap "kill $pid_sc" SIGINT SIGTERM
     wait $pid_sc
 
+run-account-registry:
+    cd contracts && forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+run-create-account:
+    cd contracts && ACCOUNT_REGISTRY=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 forge script script/CreateAccount.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
 run-services:
     #!/usr/bin/env bash
     mkdir -p logs
@@ -42,6 +48,28 @@ run-services:
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
     wait $pid0 $pid1 $pid2
+
+run-setup:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    anvil &
+    anvil_pid=$!
+    echo "started anvil with PID $anvil_pid"
+    sleep 2
+    just run-account-registry
+    echo "started AccountRegistry"
+    RUST_LOG=debug cargo run --release --bin auth-tree-indexer > logs/auth_tree_indexer.log 2>&1 &
+    auth_tree_indexer=$!
+    echo "started AuthTreeIndexer with PID $auth_tree_indexer"
+    just run-mock & # TODO remove
+    echo "started mock"
+    sleep 2
+    just run-services &
+    echo "started services"
+    sleep 2
+    just run-create-account
+    trap "kill $auth_tree_indexer $anvil_pid" SIGINT SIGTERM
+    wait $auth_tree_indxer $anvil_pid
 
 run-dev-client *args:
     cargo run --release --bin oprf-dev-client -- {{args}}

@@ -20,7 +20,8 @@ use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::services::{
-    chain_watcher::ChainWatcherError, crypto_device::CryptoDeviceError, oprf::OprfServiceError,
+    chain_watcher::ChainWatcherError, crypto_device::CryptoDeviceError,
+    merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
 };
 
 /// A structured API error returned to clients.
@@ -78,6 +79,22 @@ impl From<ChainWatcherError> for ApiErrors {
     }
 }
 
+impl From<MerkleWatcherError> for ApiErrors {
+    fn from(value: MerkleWatcherError) -> Self {
+        tracing::debug!("{value:?}");
+        match value {
+            MerkleWatcherError::UnknownEpoch(epoch)
+            | MerkleWatcherError::TooFarInFuture(epoch)
+            | MerkleWatcherError::TooFarInPast(epoch) => {
+                ApiErrors::BadRequest(format!("Unknown merkle epoch: {epoch}"))
+            }
+            MerkleWatcherError::ChainCommunicationError(report) => {
+                ApiErrors::InternalSeverError(report)
+            }
+        }
+    }
+}
+
 impl From<OprfServiceError> for ApiErrors {
     fn from(value: OprfServiceError) -> Self {
         tracing::debug!("{value:?}");
@@ -97,6 +114,12 @@ impl From<OprfServiceError> for ApiErrors {
             }
             OprfServiceError::MerkleDepthGreaterThanMax(max) => {
                 ApiErrors::BadRequest(format!("merkle tree depth greater than max: {max}"))
+            }
+            OprfServiceError::MerkleWatcherError(merkle_watcher_error) => {
+                Self::from(merkle_watcher_error)
+            }
+            OprfServiceError::InvalidMerkleRoot => {
+                ApiErrors::BadRequest("invalid merkle root".to_string())
             }
         }
     }
