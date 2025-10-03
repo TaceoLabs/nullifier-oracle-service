@@ -1,44 +1,21 @@
-//! Defines the trait and types for services that watch blockchains in the OPRF peer.
-//!
-//! The [`ChainWatcher`] trait is used by the service to:
-//! - Load the [`PartyId`] of the peer.
-//! - Retrieve Merkle roots for given epochs.
-//! - Poll or receive new chain events (e.g., secret generation contributions, finalization events).
-//! - Report results of processed chain events back to the chain.
-//!
-//! Implementations may use the provided [`MerkleRootStore`] to track recent Merkle roots, which
-//! automatically maintains a capped, ordered store and handles epoch sanity checks. Custom
-//! stores can also be provided if needed.
-//!
-//! A dynamic [`ChainWatcherService`] type is provided for Arc-based usage with async runtimes
-//! such as Axum.
-
-#[cfg(feature = "mock-chain-watcher")]
-pub(crate) mod http_mock;
-#[cfg(test)]
-pub(crate) mod test;
-
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use oprf_types::{
-    MerkleEpoch, MerkleRoot,
-    chain::{ChainEvent, ChainEventResult},
-    crypto::PartyId,
-    sc_mock::MerkleRootUpdate,
-};
+use oprf_types::{MerkleEpoch, MerkleRoot, sc_mock::MerkleRootUpdate};
 use tracing::instrument;
 
 use crate::metrics::METRICS_MERKLE_COUNT;
 
+pub(crate) mod real;
+#[cfg(test)]
+pub(crate) mod test;
+
 /// Dyn trait for the watcher service. Must be `Send` + `Sync` to work with Axum.
-pub(crate) type ChainWatcherService = Arc<dyn ChainWatcher + Send + Sync>;
+pub(crate) type MerkleWatcherService = Arc<dyn MerkleWatcher + Send + Sync>;
 
 /// Errors returned by the [`ChainWatcher`] implementation.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ChainWatcherError {
-    #[error("Cannot find epoch: {0:?}")]
-    UnknownEpoch(MerkleEpoch),
+pub(crate) enum MerkleWatcherError {
     #[error("Refusing to check, too far in future: {0:?}")]
     TooFarInFuture(MerkleEpoch),
     #[error("Refusing to check, too far in past: {0:?}")]
@@ -53,30 +30,13 @@ pub(crate) enum ChainWatcherError {
 /// Implementations may poll the chain, subscribe to events, or
 /// otherwise track keygen/finalization contributions.
 #[async_trait]
-#[expect(dead_code)]
-pub(crate) trait ChainWatcher {
-    /// Return the party’s own identifier as known to the chain.
-    async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError>;
-
-    /// Retrieves a merkle root by epoch.
-    ///
-    /// May return immediately if the epoch is cached.
-    /// May refresh state if epoch is not too far in the future.
-    async fn get_merkle_root_by_epoch(
+pub(crate) trait MerkleWatcher {
+    /// Check if a merkle root is valid.
+    async fn is_root_valid(
         &self,
         epoch: MerkleEpoch,
-    ) -> Result<MerkleRoot, ChainWatcherError>;
-
-    /// Checks for new chain events, like keygen contributions or finalizations.
-    ///
-    /// This method should only return the events that it observes and not care about handling the events.
-    async fn check_chain_events(&self) -> Result<Vec<ChainEvent>, ChainWatcherError>;
-
-    /// Reports processed chain results back to the blockchain or monitoring system.
-    async fn report_chain_results(
-        &self,
-        results: Vec<ChainEventResult>,
-    ) -> Result<(), ChainWatcherError>;
+        root: MerkleRoot,
+    ) -> Result<bool, MerkleWatcherError>;
 }
 
 /// Stores Merkle roots with associated epochs.
@@ -106,11 +66,11 @@ impl MerkleRootStore {
         if max_merkle_store_size == 0 {
             eyre::bail!("Max merkle store size must be > 0");
         }
-        if merkle_updates.is_empty() {
-            eyre::bail!("Need to init store with at least one value");
-        }
         merkle_updates.sort_by_key(|m| m.epoch);
-        let current_epoch = merkle_updates.last().expect("is there").epoch;
+        let current_epoch = merkle_updates
+            .last()
+            .map(|update| update.epoch)
+            .unwrap_or_default();
 
         if merkle_updates.len() > max_merkle_store_size {
             tracing::info!("will clip merkle store to size: {max_merkle_store_size}");
@@ -162,19 +122,19 @@ impl MerkleRootStore {
     ///
     /// Returns an error if the epoch is too far in the future or past
     /// based on configured maximum differences.
-    pub(crate) fn is_sane_epoch(&self, epoch: MerkleEpoch) -> Result<(), ChainWatcherError> {
+    pub(crate) fn is_sane_epoch(&self, epoch: MerkleEpoch) -> Result<(), MerkleWatcherError> {
         let max_future_diff = self.chain_epoch_max_difference;
         let max_past_diff = self.store.len() as u128 + self.chain_epoch_max_difference;
         match self.current_epoch.cmp(&epoch) {
             std::cmp::Ordering::Less
                 if MerkleEpoch::diff(epoch, self.current_epoch) > max_future_diff =>
             {
-                Err(ChainWatcherError::TooFarInFuture(epoch))
+                Err(MerkleWatcherError::TooFarInFuture(epoch))
             }
             std::cmp::Ordering::Greater
                 if MerkleEpoch::diff(epoch, self.current_epoch) > max_past_diff =>
             {
-                Err(ChainWatcherError::TooFarInPast(epoch))
+                Err(MerkleWatcherError::TooFarInPast(epoch))
             }
             _ => Ok(()),
         }

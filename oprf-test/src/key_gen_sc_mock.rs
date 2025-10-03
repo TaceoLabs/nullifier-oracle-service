@@ -1,11 +1,11 @@
 use ark_ec::CurveGroup;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, path::PathBuf, process::Command, time::Duration};
 
 use k256::ecdsa::signature::Signer as _;
 
 use alloy::{
     network::EthereumWallet,
-    primitives::{Address, TxHash},
+    primitives::{Address, TxHash, address},
     providers::{DynProvider, PendingTransaction, Provider, ProviderBuilder, WsConnect},
     rpc::types::TransactionReceipt,
     signers::k256::{self},
@@ -17,6 +17,28 @@ use oprf_types::{
     RpId,
     crypto::{RpNullifierKey, RpSecretGenCommitment},
 };
+
+pub const DEFAULT_KEY_GEN_CONTRACT_ADDRESS: Address =
+    address!("0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9");
+
+pub fn deploy_key_gen_contract(rpc_url: &str) {
+    let mut cmd = Command::new("forge");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    cmd.current_dir(dir.join("../contracts"))
+        .arg("script")
+        .arg("script/KeyGen.s.sol")
+        .arg("--rpc-url")
+        .arg(rpc_url)
+        .arg("--broadcast")
+        .arg("--private-key")
+        .arg("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+    let output = cmd.output().expect("failed to run forge script");
+    assert!(
+        output.status.success(),
+        "forge script failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
 
 // Codegen from ABI file to interact with the contract.
 sol!(
@@ -40,7 +62,6 @@ impl KeyGenProxy {
         wallet: EthereumWallet,
     ) -> eyre::Result<Self> {
         tracing::debug!("connecting to {rpc_url}...");
-        tracing::debug!("trying to connect to key-gen contract at {contract_address}");
 
         let ws = WsConnect::new(rpc_url); // rpc-url of anvil
         let provider = ProviderBuilder::new()

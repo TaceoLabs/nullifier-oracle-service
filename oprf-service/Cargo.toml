@@ -12,7 +12,7 @@ readme.workspace = true
 
 [features]
 default = ["mock-chain-watcher"]
-mock-chain-watcher = ["oprf-types/mock-chain-watcher", "tokio-tungstenite", "futures"]
+mock-chain-watcher = ["oprf-types/mock-chain-watcher", "tokio-tungstenite"]
 
 [dependencies]
 alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
@@ -29,7 +29,7 @@ axum = { workspace = true }
 bincode = { workspace = true, features = ["serde"] } 
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-futures = { workspace = true, optional = true }
+futures = { workspace = true }
 git-version = { workspace = true }
 http = { workspace = true }
 humantime = { workspace = true }

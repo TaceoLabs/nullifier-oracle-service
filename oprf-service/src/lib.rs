@@ -29,10 +29,10 @@ use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::{
-    chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
     key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
+    merkle_watcher::{MerkleWatcherService, real::RealMerkleWatcher},
     oprf::OprfService,
     secret_manager::aws::AwsSecretManager,
 };
@@ -112,9 +112,22 @@ pub async fn start(
 
     tracing::info!("spawning chain event handler..");
     let key_gen_watcher: KeyGenEventListenerService = Arc::new(
-        AlloyKeyGenWatcher::init(&config.key_gen_rpc_url, config.key_gen_contract, wallet)
+        AlloyKeyGenWatcher::init(&config.chain_ws_rpc_url, config.key_gen_contract, wallet)
             .await
             .context("while spawning alloy key-gen watcher")?,
+    );
+
+    tracing::info!("spawn merkle watcher..");
+    // spawn the merkle watcher
+    let merkle_watcher: MerkleWatcherService = Arc::new(
+        RealMerkleWatcher::init(
+            config.account_registry_contract,
+            &config.chain_ws_rpc_url,
+            config.max_merkle_store_size,
+            config.chain_epoch_max_difference,
+        )
+        .await
+        .context("while starting merkle watcher")?,
     );
 
     tracing::info!("loading party id..");
@@ -124,19 +137,11 @@ pub async fn start(
         .await
         .context("while loading partyID")?;
 
-    tracing::info!("spawn chain watcher..");
-    // spawn the chain watcher
-    let chain_watcher: ChainWatcherService = Arc::new(
-        HttpMockWatcher::init(party_id, Arc::clone(&config), cancellation_token.clone())
-            .await
-            .context("while starting chain watcher")?,
-    );
-
     // start oprf-service service
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
         Arc::clone(&crypto_device),
-        Arc::clone(&chain_watcher),
+        Arc::clone(&merkle_watcher),
         vk.into(),
         config.request_lifetime,
         config.session_cleanup_interval,
@@ -261,8 +266,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::services::crypto_device::dlog_storage::RpMaterial;
+    use crate::services::merkle_watcher::test::TestMerkleWatcher;
     use crate::services::{
-        chain_watcher::test::TestWatcher,
         crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
         secret_manager::test::TestSecretManager,
     };
@@ -366,7 +371,7 @@ mod tests {
             let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
             let max_merkle_store_size = 10;
             let chain_epoch_max_difference = 10;
-            let chain_watcher = Arc::new(TestWatcher::new(
+            let merkle_watcher = Arc::new(TestMerkleWatcher::new(
                 vec![MerkleRootUpdate {
                     hash: merkle_root,
                     epoch: merkle_epoch,
@@ -384,7 +389,7 @@ mod tests {
             let signature_history_cleanup_interval = Duration::from_secs(60);
             let oprf_service = OprfService::init(
                 crypto_device,
-                chain_watcher,
+                merkle_watcher,
                 vk.into(),
                 request_lifetime,
                 session_cleanup_interval,

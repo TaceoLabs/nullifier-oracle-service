@@ -112,10 +112,6 @@ pub struct OprfPeerConfig {
     pub user_verification_key_path: PathBuf,
 
     /// The Address of the KeyGen contract.
-    #[clap(long, env = "OPRF_SERVICE_DUMMY_REMOVE_ME")]
-    pub chain_url: String,
-
-    /// The Address of the KeyGen contract.
     #[clap(
         long,
         env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
@@ -123,17 +119,25 @@ pub struct OprfPeerConfig {
     )]
     pub key_gen_contract: Address,
 
-    /// The websocket url to connect to for getting key-gen events.
+    /// The address of the `AccountRegistry` smart contract
     #[clap(
         long,
-        env = "OPRF_SERVICE_KEY_GEN_RPC",
-        default_value = "ws://localhost:8545"
+        env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT",
+        default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
     )]
-    pub key_gen_rpc_url: String,
+    pub account_registry_contract: Address,
 
     /// Wallet private key
     #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY")]
     pub wallet_private_key: SecretString,
+
+    /// The websocket rpc url of the chain
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
+        default_value = "ws://127.0.0.1:8545"
+    )]
+    pub chain_ws_rpc_url: String,
 
     /// Max epoch in the future.
     /// If an epoch is too far in the future, the service will not perform a manual check. This is defined by this value (no longer than this difference inclusive).
