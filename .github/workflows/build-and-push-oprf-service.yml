@@ -1,7 +1,7 @@
 name: Build and Push (oprf-service)
 
 on:
-  pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main

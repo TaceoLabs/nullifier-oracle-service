@@ -79,7 +79,7 @@ impl SessionStore {
             let mut sessions = self.sessions.lock();
             tracing::trace!("got lock");
             let old_session = sessions.insert(request_id, Session::from(session));
-            old_session.is_some()
+            old_session.is_none()
         };
         if inc {
             metrics::gauge!(METRICS_KEY_OPEN_SESSIONS).increment(1);

@@ -50,7 +50,7 @@ pub async fn register_rp(chain_url: &str) -> eyre::Result<(RpId, RpNullifierKey)
         .await?
         .json::<RpId>()
         .await?;
-    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(10), async {
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(100), async {
         loop {
             let res = client
                 .get(format!("{chain_url}/api/rp/{}", rp_id.into_inner()))

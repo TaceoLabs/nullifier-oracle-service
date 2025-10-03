@@ -159,6 +159,16 @@ fn avg(durations: &[Duration]) -> Duration {
     }
 }
 
+async fn health_check(health_url: String) {
+    loop {
+        if reqwest::get(&health_url).await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    tracing::info!("healthy: {health_url}");
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     nodes_telemetry::install_tracing("info");
@@ -168,6 +178,19 @@ async fn main() -> eyre::Result<()> {
         config.nullifier_num,
         config.nullifier_interval
     );
+
+    tracing::info!("health check for all peers and SC Mock...");
+    let mut health_checks = config
+        .services
+        .iter()
+        .map(|service| health_check(format!("{service}/health")))
+        .collect::<JoinSet<_>>();
+    health_checks.spawn(health_check(sc_health_url));
+
+    tokio::time::timeout(Duration::from_secs(5), health_checks.join_all())
+        .await
+        .context("while doing health checks")?;
+    tracing::info!("everyone online..");
 
     tracing::info!("connecting to ETH wallet...");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
