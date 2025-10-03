@@ -15,6 +15,7 @@ default = ["mock-chain-watcher"]
 mock-chain-watcher = ["oprf-types/mock-chain-watcher", "tokio-tungstenite", "futures"]
 
 [dependencies]
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
 ark-babyjubjub = { workspace = true }
 ark-bn254.workspace = true
 ark-ec.workspace = true
@@ -25,6 +26,7 @@ async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
+bincode = { workspace = true, features = ["serde"] } 
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true, optional = true }
@@ -40,6 +42,7 @@ parking_lot = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 rustls = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

@@ -20,6 +20,8 @@ pub(crate) mod http_mock;
 #[cfg(test)]
 pub(crate) mod test;
 
+pub(crate) mod dummy_chain_watcher;
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -55,6 +57,7 @@ pub(crate) enum ChainWatcherError {
 /// Implementations may poll the chain, subscribe to events, or
 /// otherwise track keygen/finalization contributions.
 #[async_trait]
+#[expect(dead_code)]
 pub(crate) trait ChainWatcher {
     /// Return the party’s own identifier as known to the chain.
     async fn get_party_id(&self) -> Result<PartyId, ChainWatcherError>;

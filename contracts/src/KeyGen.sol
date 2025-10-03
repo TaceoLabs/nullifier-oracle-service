@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "forge-std/console.sol";
+
 contract KeyGen {
     address[] public participants;
     mapping(address => uint256) public participantIndex; // participant -> index
@@ -8,6 +10,7 @@ contract KeyGen {
     uint128[] public activeIds;
 
     bytes public peer_keys;
+    uint16 public degree;
 
     struct RpSecretGenCommitment { bytes data; }
     struct RpSecretGenCiphertexts { bytes data; }
@@ -21,15 +24,22 @@ contract KeyGen {
     }
 
     // Events
-    event SecretGenRound1(uint128 indexed rpId, bytes ecdsaPubKey);
+    event SecretGenRound1(uint128 indexed rpId, uint16 degree);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
     event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCiphertexts[] round2Contributions);
 
-    constructor(address[] memory _participants, bytes memory _peer_keys) {
+    constructor(address[] memory _participants, uint16 _degree, bytes memory _peer_keys) {
         require(_participants.length > 0, "Need participants");
         participants = _participants;
         for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
         peer_keys = _peer_keys;
+        degree = _degree;
+    }
+
+    function getMyId() external view returns (uint256) {
+        uint256 idx = participantIndex[msg.sender];
+        require(idx < participants.length, "Not a participant");
+        return idx;
     }
 
     // Initialize a new session
@@ -54,12 +64,13 @@ contract KeyGen {
         activeIds.push(id);
 
         // Emit Round1 event for everyone
-        emit SecretGenRound1(id, ecdsaPubKey);
+        emit SecretGenRound1(id, degree);
     }
 
     // Round1 submission
-    function addRound1Commitment(uint128 id, bytes calldata commitment) external {
+    function addRound1Contribution(uint128 id, bytes calldata commitment) external {
         uint idx = participantIndex[msg.sender];
+        console.log(msg.sender, "has idx:", idx);
         require(idx < participants.length, "Not a participant");
 
         RpNullifierGenState storage st = states[id];
@@ -70,6 +81,7 @@ contract KeyGen {
 
         // If all round1 submitted, emit Round2 event for everyone
         if (allRound1Submitted(st) && !st.round2EventEmitted) {
+            console.log("I will emit secret gen round2");
             st.round2EventEmitted = true;
             emit SecretGenRound2(id, peer_keys);
         }

@@ -34,6 +34,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::services::chain_watcher::ChainWatcherService;
+use crate::services::key_event_watcher::KeyGenEventListener;
+use crate::services::key_event_watcher::KeyGenEventListenerService;
 use crate::services::{crypto_device::CryptoDevice, secret_gen::DLogSecretGenService};
 
 /// Handle for the chain event processing task.
@@ -54,9 +56,8 @@ impl ChainEventHandler {
     /// # Returns
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
     pub(crate) fn spawn(
-        period: Duration,
         party_id: PartyId,
-        watcher: ChainWatcherService,
+        watcher: KeyGenEventListenerService,
         crypto_device: Arc<CryptoDevice>,
         cancellation_token: CancellationToken,
     ) -> ChainEventHandler {
@@ -64,14 +65,7 @@ impl ChainEventHandler {
             DLogSecretGenService::init(party_id, Arc::clone(&crypto_device));
         // spawn the periodic update task
         Self(tokio::task::spawn(async move {
-            match run(
-                period,
-                watcher,
-                dlog_secret_gen_service,
-                cancellation_token.clone(),
-            )
-            .await
-            {
+            match run(watcher, dlog_secret_gen_service, cancellation_token.clone()).await {
                 Ok(_) => tracing::info!("shutdown of ChainEventHandler"),
                 Err(err) => tracing::error!("ChainEventHandler encountered an error: {err:?}"),
             }
@@ -88,56 +82,6 @@ impl ChainEventHandler {
     }
 }
 
-/// Processes a batch of chain events.
-///
-/// Returns a list of results corresponding to the processed events.
-///
-/// # Arguments
-/// * `secret_gen` - Mutable reference to the [`DLogSecretGenService`]. Must be single-owner.
-/// * `events` - List of chain events to handle.
-///
-/// # Returns
-/// Vector of [`ChainEventResult`] representing the results of processing each event.
-#[instrument(level = "info", skip_all)]
-pub(crate) fn handle_chain_events(
-    secret_gen: &mut DLogSecretGenService,
-    events: Vec<ChainEvent>,
-) -> eyre::Result<Vec<ChainEventResult>> {
-    // We potentially could to this in parallel, but we need mut references/locks and computing proofs has 100% CPU utilization anyways, so we stick with sequential execution for simplicity.
-    let results = tokio::task::block_in_place(|| {
-        let mut results = Vec::with_capacity(events.len());
-        for event in events {
-            match event {
-                ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, degree }) => {
-                    results.push(ChainEventResult::SecretGenRound1(
-                        secret_gen.round1(rp_id, degree),
-                    ));
-                }
-                ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, keys }) => {
-                    results.push(ChainEventResult::SecretGenRound2(
-                        secret_gen.round2(rp_id, keys),
-                    ));
-                }
-                ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
-                    rp_id,
-                    rp_public_key,
-                    ciphers,
-                }) => {
-                    secret_gen.finalize(rp_id, rp_public_key, ciphers);
-                    results.push(ChainEventResult::SecretGenFinalize(
-                        SecretGenFinalizeContribution {
-                            rp_id,
-                            sender: secret_gen.party_id,
-                        },
-                    ));
-                }
-            }
-        }
-        results
-    });
-    Ok(results)
-}
-
 /// Periodic execution loop for polling and processing chain events.
 ///
 /// # Arguments
@@ -146,34 +90,50 @@ pub(crate) fn handle_chain_events(
 /// * `secret_gen` - Secret generation service (single-owner, not thread-safe).
 /// * `cancellation_token` - Token to signal task shutdown.
 async fn run(
-    period: Duration,
-    watcher: ChainWatcherService,
+    event_listener: KeyGenEventListenerService,
     mut secret_gen: DLogSecretGenService,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
-    let mut interval = tokio::time::interval(period);
-    // ignore the first tick as we load it anyways during startup
-    interval.tick().await;
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
+    let mut channel = event_listener
+        .subscribe()
+        .await
+        .context("while subscribing to key gen events")?;
 
-            },
-            _ = cancellation_token.cancelled() => {
-                 return Ok(());
+    loop {
+        let event = tokio::select! {
+            event = channel.recv() => {
+                event.ok_or_else(||eyre::eyre!("subscribe channel was dropped in event handler"))?
             }
+            _ = cancellation_token.cancelled() => {
+                return Ok(());
+            }
+        };
+
+        let result = handle_chain_event(&mut secret_gen, event).await?;
+        event_listener.report_result(result).await;
+    }
+}
+
+pub(crate) async fn handle_chain_event(
+    secret_gen: &mut DLogSecretGenService,
+    event: ChainEvent,
+) -> eyre::Result<ChainEventResult> {
+    match event {
+        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, degree }) => {
+            tokio::task::block_in_place(|| {
+                Ok(ChainEventResult::SecretGenRound1(
+                    secret_gen.round1(rp_id, degree),
+                ))
+            })
         }
-        tracing::trace!("check chain event fired..");
-        let events = watcher
-            .check_chain_events()
-            .await
-            .context("while checking chain events")?;
-        tracing::info!("got {} chain events", events.len());
-        let results =
-            handle_chain_events(&mut secret_gen, events).context("while handling chain events")?;
-        watcher
-            .report_chain_results(results)
-            .await
-            .context("while reporting chain result")?;
+        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, keys }) => {
+            tokio::task::block_in_place(|| {
+                Ok(ChainEventResult::SecretGenRound2(
+                    secret_gen.round2(rp_id, keys),
+                ))
+            })
+        }
+        // todo make async again
+        ChainEvent::SecretGenFinalize(secret_gen_finalize_event) => todo!(),
     }
 }

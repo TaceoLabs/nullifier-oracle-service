@@ -19,14 +19,14 @@ contract KeyGenTest is Test {
 
         bytes memory peerKeys = hex"deadbeef"; // dummy peer keys
 
-        gen = new KeyGen(participants, peerKeys);
+        gen = new KeyGen(participants, 1, peerKeys);
     }
 
     function testInitKeyGenEmitsRound1() public {
         bytes memory ecdsaPubKey = hex"1234";
 
         vm.expectEmit(true, true, true, true);
-        emit KeyGen.SecretGenRound1(1, ecdsaPubKey);
+        emit KeyGen.SecretGenRound1(1, 1);
 
         gen.initKeyGen(1, ecdsaPubKey);
     }
@@ -38,18 +38,18 @@ contract KeyGenTest is Test {
 
         // Each participant submits round1
         vm.startPrank(alice);
-        gen.addRound1Commitment(sessionId, hex"aaa1");
+        gen.addRound1Contribution(sessionId, hex"aaa1");
         vm.stopPrank();
 
         vm.startPrank(bob);
-        gen.addRound1Commitment(sessionId, hex"aaa2");
+        gen.addRound1Contribution(sessionId, hex"aaa2");
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
         emit KeyGen.SecretGenRound2(sessionId, hex"deadbeef");
 
         vm.startPrank(carol);
-        gen.addRound1Commitment(sessionId, hex"aaa3");
+        gen.addRound1Contribution(sessionId, hex"aaa3");
         vm.stopPrank();
     }
 
@@ -59,9 +59,9 @@ contract KeyGenTest is Test {
         gen.initKeyGen(sessionId, pubKey);
 
         // All round1 first
-        vm.prank(alice); gen.addRound1Commitment(sessionId, hex"aaa1");
-        vm.prank(bob);   gen.addRound1Commitment(sessionId, hex"aaa2");
-        vm.prank(carol); gen.addRound1Commitment(sessionId, hex"aaa3");
+        vm.prank(alice); gen.addRound1Contribution(sessionId, hex"aaa1");
+        vm.prank(bob);   gen.addRound1Contribution(sessionId, hex"aaa2");
+        vm.prank(carol); gen.addRound1Contribution(sessionId, hex"aaa3");
 
         // Two round2 contributions already submitted
         vm.prank(alice); gen.addRound2Contribution(sessionId, hex"bbb1");
