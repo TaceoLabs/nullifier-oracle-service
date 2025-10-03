@@ -1,6 +1,6 @@
 use crate::{
     ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
+        DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
     },
     dlog_equality::DLogEqualityProof,
 };
@@ -14,17 +14,15 @@ type Projective = ark_babyjubjub::EdwardsProjective;
 
 // The Shamir version uses the same prover implementation as the additive version. The reason is that if each server samples the value k_i individually at random (instead of using the Shamir.rand() subroutine), then for each set of d servers, their k_i represent a valid random Shamir share. Since only d servers are ever required (e.g., we do not have a shared multiplication), we do not need all n random k_i to be on the same polynomial. Thus, we do not require an extra communication round to create shares of a random k.
 
-impl DLogEqualityChallenge {
-    /// The accumulating party (e.g., the verifier) combines the shares of d+1 parties and creates the challenge hash.
+impl DLogEqualityCommitments {
+    /// The accumulating party (e.g., the verifier) combines the shares of d+1 parties.
     ///
     /// # Panics
     /// Panics if the number of commitments does not match the number of Lagrange coefficients, i.e. `commitments.len() != lagrange.len()`.
-    pub fn combine_commitments_and_create_challenge_shamir(
+    pub fn combine_commitments_shamir(
         commitments: &[PartialDLogEqualityCommitments],
         lagrange: &[ScalarField], // Lagrange coefficients for each share
-        a: Affine,                // Combined public key of the provers
-        b: Affine,
-    ) -> (Affine, Self) {
+    ) -> Self {
         assert_eq!(
             commitments.len(),
             lagrange.len(),
@@ -41,15 +39,11 @@ impl DLogEqualityChallenge {
             r2 += comm.r2 * lambda;
         }
 
-        // Create the challenge hash
-        let d = Affine::generator();
         let c = c.into_affine();
         let r1 = r1.into_affine();
         let r2 = r2.into_affine();
 
-        let e = crate::dlog_equality::challenge_hash(a, b, c, d, r1, r2);
-
-        (c, DLogEqualityChallenge { e })
+        DLogEqualityCommitments { c, r1, r2 }
     }
 
     /// Combines the proof shares of d+1 parties into a full proof.
@@ -61,6 +55,8 @@ impl DLogEqualityChallenge {
         self,
         proofs: &[DLogEqualityProofShare],
         lagrange: &[ScalarField], // Lagrange coefficients for each share
+        a: Affine,
+        b: Affine,
     ) -> DLogEqualityProof {
         assert_eq!(
             proofs.len(),
@@ -73,7 +69,10 @@ impl DLogEqualityChallenge {
             s += proof.s * *lambda;
         }
 
-        DLogEqualityProof { e: self.e, s }
+        let d = Affine::generator();
+        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2);
+
+        DLogEqualityProof { e, s }
     }
 }
 
@@ -121,17 +120,14 @@ mod tests {
             .map(|&i| commitments[i - 1].clone())
             .collect::<Vec<_>>();
 
-        let (c, challenge) = DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
-            &used_commitments,
-            &lagrange,
-            public_key,
-            b,
-        );
+        let challenge =
+            DLogEqualityCommitments::combine_commitments_shamir(&used_commitments, &lagrange);
+        let c = challenge.blinded_response();
 
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, challenge.to_owned());
+            let proof = session.challenge(x_, public_key, challenge.to_owned());
             proofs.push(proof);
         }
 
@@ -141,7 +137,7 @@ mod tests {
             .iter()
             .map(|&i| proofs[i - 1].clone())
             .collect::<Vec<_>>();
-        let proof = challenge.combine_proofs_shamir(&used_proofs, &lagrange);
+        let proof = challenge.combine_proofs_shamir(&used_proofs, &lagrange, public_key, b);
 
         // Verify the result and the proof
         let d = Affine::generator();
