@@ -7,7 +7,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use oprf_types::{RpId, ShareEpoch, api::v1::NullifierShareIdentifier};
+use oprf_types::{RpId, ShareEpoch, api::v1::NullifierShareIdentifier, crypto::RpNullifierKey};
 use parking_lot::RwLock;
 
 use crate::services::crypto_device::DLogShare;
@@ -29,6 +29,7 @@ pub(super) struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 pub(crate) struct RpMaterial {
     pub(crate) shares: HashMap<ShareEpoch, DLogShare>,
     public_key: k256::ecdsa::VerifyingKey,
+    nullifier_key: RpNullifierKey,
 }
 
 impl RpMaterial {
@@ -37,8 +38,13 @@ impl RpMaterial {
     pub(crate) fn new(
         shares: HashMap<ShareEpoch, DLogShare>,
         public_key: k256::ecdsa::VerifyingKey,
+        nullifier_key: RpNullifierKey,
     ) -> Self {
-        Self { shares, public_key }
+        Self {
+            shares,
+            public_key,
+            nullifier_key,
+        }
     }
 
     /// Returns the [`DLogShare`] for the given epoch, or `None` if not found.
@@ -49,6 +55,11 @@ impl RpMaterial {
     /// Returns the RP's ECDSA `VerifyingKey`.
     pub(super) fn get_public_key(&self) -> k256::ecdsa::VerifyingKey {
         self.public_key
+    }
+
+    /// Returns the RP's `RpNullifierKey`.
+    pub(super) fn get_nullifier_key(&self) -> RpNullifierKey {
+        self.nullifier_key
     }
 }
 
@@ -77,6 +88,11 @@ impl RpMaterialStore {
         Some(self.0.read().get(&rp_id)?.get_public_key())
     }
 
+    /// Returns the `RpNullifierKey` of the specified RP, if registered.
+    pub(super) fn get_rp_nullifier_key(&self, rp_id: RpId) -> Option<RpNullifierKey> {
+        Some(self.0.read().get(&rp_id)?.get_nullifier_key())
+    }
+
     /// Adds a new RP entry with a secret share at epoch 0.
     ///
     /// Overwrites any existing entry.  
@@ -85,6 +101,7 @@ impl RpMaterialStore {
         &self,
         rp_id: RpId,
         public_key: k256::ecdsa::VerifyingKey,
+        nullifier_key: RpNullifierKey,
         dlog_share: DLogShare,
     ) {
         let mut shares = HashMap::new();
@@ -92,7 +109,14 @@ impl RpMaterialStore {
         if self
             .0
             .write()
-            .insert(rp_id, RpMaterial { shares, public_key })
+            .insert(
+                rp_id,
+                RpMaterial {
+                    shares,
+                    public_key,
+                    nullifier_key,
+                },
+            )
             .is_some()
         {
             tracing::warn!("overwriting share for {rp_id}");

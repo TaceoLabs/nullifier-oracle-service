@@ -18,7 +18,7 @@ use oprf_types::{
         SecretGenRound1Contribution, SecretGenRound1Event, SecretGenRound2Contribution,
         SecretGenRound2Event,
     },
-    crypto::{PartyId, PeerPublicKeyList, RpSecretGenCiphertexts},
+    crypto::{PartyId, PeerPublicKeyList, RpSecretGenCiphertexts, RpSecretGenCommitment},
 };
 use tokio::sync::mpsc;
 
@@ -230,9 +230,20 @@ async fn subscribe_task(
                 let KeyGenContract::SecretGenFinalize {
                     rpId,
                     rpPublicKey,
+                    round1Contributions,
                     round2Contributions,
                 } = finalize.inner.data;
 
+                let commitments = round1Contributions
+                    .into_iter()
+                    .map(|commitment| {
+                        let (x, _) = bincode::serde::decode_from_slice(
+                            &commitment.data,
+                            bincode::config::standard(),
+                        )?;
+                        eyre::Ok(x)
+                    })
+                    .collect::<eyre::Result<Vec<RpSecretGenCommitment>>>()?;
                 let ciphers = round2Contributions
                     .into_iter()
                     .map(|ciphers| {
@@ -258,6 +269,7 @@ async fn subscribe_task(
                 let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
                     rp_id: RpId::from(rpId),
                     rp_public_key,
+                    commitments,
                     ciphers,
                 });
                 if tx.send(event).await.is_err() {

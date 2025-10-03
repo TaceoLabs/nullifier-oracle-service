@@ -63,6 +63,8 @@ pub struct SecretGenFinalizeEvent {
     pub rp_id: RpId,
     /// The public key of the RP to check the signature nonce.
     pub rp_public_key: k256::PublicKey,
+    /// Commitments submitted in round 1.
+    pub commitments: Vec<RpSecretGenCommitment>,
     /// Ciphertexts submitted in round 2.
     pub ciphers: Vec<RpSecretGenCiphertext>,
 }

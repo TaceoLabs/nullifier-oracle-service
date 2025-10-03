@@ -29,7 +29,7 @@ contract KeyGen {
     // Events
     event SecretGenRound1(uint128 indexed rpId, uint16 degree);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
-    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCiphertexts[] round2Contributions);
+    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCommitment[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
 
     constructor(address[] memory _participants, uint16 _degree, bytes memory _peer_keys) {
         require(_participants.length > 0, "Need participants");
@@ -108,7 +108,7 @@ contract KeyGen {
         // If all round2 submitted, emit Finalize event for everyone
         if (allRound2Submitted(st) && !st.finalizeEventEmitted) {
             st.finalizeEventEmitted = true;
-            emit SecretGenFinalize(id, st.ecdsaPubKey, st.round2);
+            emit SecretGenFinalize(id, st.ecdsaPubKey, st.round1, st.round2);
         }
     }
 
