@@ -307,22 +307,22 @@ In this section we describe how to distribute @alg:prover to multiple provers, w
     LineBreak
     Comment([The accumulator with input from all $n$ servers:])
     Function(
-      "create_challenge",
-      $A, B, D, (C_1, R_(1,1), R_(1,2)), dots, (C_n, R_(n,1), R_(n,2))$,
+      "recombine_commitments",
+      $(C_1, R_(1,1), R_(1,2)), dots, (C_n, R_(n,1), R_(n,2))$,
       {
         Assign[$R_1$][$R_(1,1) + dots + R_(n, 1)$]
         Assign[$R_2$][$R_(1,2) + dots + R_(n, 2)$]
         Assign[$C$][$C_1 + dots + C_n$]
-        Assign[$e$][$H(A,B, C,D,R_1, R_2) in bb(F)_q$]
-        Return[$e$]
+        Return[$R_1,R_2,C$]
       },
     )
     LineBreak
-    Comment([Each server $i$ on input $e$ from the client:])
+    Comment([Each server $i$ on input $(R_1,R_2,C)$ from the client:])
     Function(
-      "challenge",
-      $k_i, r_i, e$,
+      "answer_challenge",
+      $k_i, r_i, A, B, D, R_1, R_2, C$,
       {
+        Assign[$e$][$H(A, B, C, D,R_1, R_2) in bb(F)_q$]
         Assign[$s_i$][$r_i + e dot k_i$]
         Return[$s_i$]
       },
@@ -369,22 +369,22 @@ In order to rewrite @alg:add_prover from additive to Shamir secret-sharing, we h
     LineBreak
     Comment([The accumulator with input from $t = d+1$ out of $n$ servers:])
     Function(
-      "create_challenge",
-      $A, B, D, (C_1, R_(1,1), R_(1,2)), dots, (C_t, R_(t,1), R_(t,2))$,
+      "recombine_commitments",
+      $(C_1, R_(1,1), R_(1,2)), dots, (C_t, R_(t,1), R_(t,2))$,
       {
         Assign[$R_1$][$lambda_1 dot R_(1,1) + dots + lambda_t dot R_(t, 1)$]
         Assign[$R_2$][$lambda_1 dot R_(1,2) + dots + lambda_t dot R_(t, 2)$]
         Assign[$C$][$lambda_1 dot C_1 + dots + lambda_t dot C_t$]
-        Assign[$e$][$H(A,B, C,D,R_1, R_2) in bb(F)_q$]
-        Return[$e$]
+        Return[$R_1,R_2,C$]
       },
     )
     LineBreak
-    Comment([Each server $i$ on input $e$ from the client:])
+    Comment([Each server $i$ on input $(R_1,R_2,C)$ from the client:])
     Function(
       "challenge",
-      $k_i, r_i, e$,
+      $k_i, r_i, A,B,D,R_1,R_2,C$,
       {
+        Assign[$e$][$H(A,B, C, D,R_1, R_2) in bb(F)_q$]
         Assign[$s_i$][$r_i + e dot k_i$]
         Return[$s_i$]
       },
@@ -424,10 +424,10 @@ We give the full verifiable OPRF based distributed nullifier service constructio
     [], [], [$(r_i, C_i, R_(i,1), R_(i,2)) <- #linebreak() mono("dlog.partial_commitments")(k_i, A, B)$],
     [$C <-mono("Reconstruct")([C])$], math.attach($arrow.l$, t: $[C], [R_1], [R_2]$), [],
     [$R_1 <-mono("Reconstruct")([R_1])$], [], [],
-    [$R_2 <-mono("Reconstruct")([R_2])$], [], [],
-    [$e <- H_3(K, A, C, B,R_1, R_2) in bb(F)_p$], math.attach($arrow.r$, t: $e$), [$s_i <- r_i + e dot k_i$],
-    [], math.attach($arrow.l$, t: $[s]$), [],
-    [$s <-mono("Reconstruct")([s])$], [], [],
+    [$R_2 <-mono("Reconstruct")([R_2])$], math.attach($arrow.r$, t: $C, R_1, R_2$), [],
+    [], [], [$e <- H_3(K, A, C, B,R_1, R_2) in bb(F)_p$],
+    [], [], [$s_i <- r_i + e dot k_i$],
+    [$s <-mono("Reconstruct")([s])$], math.attach($arrow.l$, t: $[s]$), [],
     [$n <- H_4(q, (beta^(-1) dot C))$], [], [],
     [$pi_2 <-mono("prove")(sigma, A, #linebreak() mono("valid")(pk), mono("dlog.verify")(e,s), n)$], [], [],
     [Output $(n, pi_2)$],
