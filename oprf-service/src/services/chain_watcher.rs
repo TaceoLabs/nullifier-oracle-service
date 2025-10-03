@@ -20,8 +20,6 @@ pub(crate) mod http_mock;
 #[cfg(test)]
 pub(crate) mod test;
 
-pub(crate) mod dummy_chain_watcher;
-
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
