@@ -3,7 +3,7 @@ use alloy::{
     network::EthereumWallet,
     primitives::{Address, TxHash},
     providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
-    rpc::types::Filter,
+    rpc::types::{Filter, TransactionReceipt},
     sol,
     sol_types::SolEvent,
     transports::RpcError,
@@ -108,10 +108,14 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                     .register()
                     .await
                     .context("while registering watcher for transaction")?;
-                let tx = watch_receipt(self.provider.clone(), pending_tx)
+                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
                     .await
                     .context("while waiting for receipt")?;
-                tracing::info!("round 1 done with transaction hash: {tx}",);
+                if receipt.status() {
+                    tracing::info!("round 1 done with transaction hash: {tx_hash}",);
+                } else {
+                    eyre::bail!("cannot finish transaction: {receipt:?}");
+                }
             }
             ChainEventResult::SecretGenRound2(SecretGenRound2Contribution {
                 rp_id,
@@ -130,10 +134,14 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                     .register()
                     .await
                     .context("while registering watcher for transaction")?;
-                let tx = watch_receipt(self.provider.clone(), pending_tx)
+                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
                     .await
                     .context("while waiting for receipt")?;
-                tracing::info!("round 2 done with transaction hash: {tx}",);
+                if receipt.status() {
+                    tracing::info!("round 2 done with transaction hash: {tx_hash}",);
+                } else {
+                    eyre::bail!("cannot finish transaction: {receipt:?}");
+                }
             }
             ChainEventResult::SecretGenFinalize(SecretGenFinalizeContribution {
                 rp_id,
@@ -141,16 +149,21 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
             }) => {
                 let pending_tx = contract
                     .addFinalizeContribtion(rp_id.into_inner())
+                    .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
                     .register()
                     .await
                     .context("while registering watcher for transaction")?;
-                let tx = watch_receipt(self.provider.clone(), pending_tx)
+                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
                     .await
                     .context("while waiting for receipt")?;
-                tracing::info!("finalize done with transaction hash: {tx}",);
+                if receipt.status() {
+                    tracing::info!("finalize done with transaction hash: {tx_hash}",);
+                } else {
+                    eyre::bail!("cannot finish transaction: {receipt:?}");
+                }
             }
         };
         Ok(())
@@ -263,7 +276,7 @@ async fn subscribe_task(
 async fn watch_receipt(
     provider: DynProvider,
     mut pending_tx: PendingTransaction,
-) -> Result<TxHash, alloy::contract::Error> {
+) -> Result<(TransactionReceipt, TxHash), alloy::contract::Error> {
     let tx_hash = pending_tx.tx_hash().to_owned();
     // FIXME: this is a hotfix to prevent a race condition where the heartbeat would miss the
     // block the tx was mined in
@@ -282,9 +295,8 @@ async fn watch_receipt(
         }
 
         // try to fetch the receipt
-        let receipt = provider.get_transaction_receipt(tx_hash).await?;
-        if receipt.is_some() {
-            return Ok(tx_hash);
+        if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
+            return Ok((receipt, tx_hash));
         }
 
         if confirmed {

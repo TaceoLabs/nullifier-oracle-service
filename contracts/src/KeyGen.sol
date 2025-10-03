@@ -45,6 +45,10 @@ contract KeyGen {
         return idx;
     }
 
+    function getRpNullifierKey(uint128 id) external view returns (RpSecretGenCommitment[] memory) {
+        return key_storage[id];
+    }
+
     // Initialize a new session
     function initKeyGen(uint128 id, bytes calldata ecdsaPubKey) external {
         RpNullifierGenState storage st = states[id];
@@ -126,6 +130,7 @@ contract KeyGen {
         }
     }
 
+
     // --- Helpers ---
     function allRound1Submitted(RpNullifierGenState storage st) internal view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
@@ -147,4 +152,5 @@ contract KeyGen {
         }
         return true;
     }
+
 }

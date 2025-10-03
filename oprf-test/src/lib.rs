@@ -4,6 +4,7 @@ use oprf_service::config::{Environment, OprfPeerConfig};
 use smart_contract_mock::config::SmartContractMockConfig;
 
 pub mod credentials;
+pub mod key_gen_sc_mock;
 pub mod sc_mock;
 
 async fn start_service(id: usize) -> String {

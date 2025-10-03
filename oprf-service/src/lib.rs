@@ -19,7 +19,7 @@
 //! - `api`: REST API routes.
 use std::{fs::File, str::FromStr, sync::Arc};
 
-use alloy::{hex, network::EthereumWallet, signers::local::PrivateKeySigner};
+use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
 use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
@@ -29,7 +29,7 @@ use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::{
-    chain_watcher::{ChainWatcherService, dummy_chain_watcher::DummyWatcher},
+    chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
     key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
@@ -105,23 +105,6 @@ pub async fn start(
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
-    tracing::info!("spawn chain watcher..");
-    // spawn the chain watcher
-    let chain_watcher: ChainWatcherService = Arc::new(DummyWatcher);
-
-    // start oprf-service service
-    tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(
-        Arc::clone(&crypto_device),
-        Arc::clone(&chain_watcher),
-        vk.into(),
-        config.request_lifetime,
-        config.session_cleanup_interval,
-        config.max_merkle_depth,
-        config.current_time_stamp_max_difference,
-        config.signature_history_cleanup_interval,
-    );
-
     tracing::info!("connecting to wallet..");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
         .context("while reading wallet private key")?;
@@ -140,6 +123,27 @@ pub async fn start(
         .fetch_party_id()
         .await
         .context("while loading partyID")?;
+
+    tracing::info!("spawn chain watcher..");
+    // spawn the chain watcher
+    let chain_watcher: ChainWatcherService = Arc::new(
+        HttpMockWatcher::init(party_id, Arc::clone(&config), cancellation_token.clone())
+            .await
+            .context("while starting chain watcher")?,
+    );
+
+    // start oprf-service service
+    tracing::info!("init oprf-service...");
+    let oprf_service = OprfService::init(
+        Arc::clone(&crypto_device),
+        Arc::clone(&chain_watcher),
+        vk.into(),
+        config.request_lifetime,
+        config.session_cleanup_interval,
+        config.max_merkle_depth,
+        config.current_time_stamp_max_difference,
+        config.signature_history_cleanup_interval,
+    );
 
     tracing::info!("we are party id: {party_id}");
     let event_handler = ChainEventHandler::spawn(

@@ -6,7 +6,8 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use k256::ecdsa::{SigningKey, signature::SignerMut as _};
+use k256::ecdsa::SigningKey;
+use k256::ecdsa::signature::Signer as _;
 use oprf_types::{
     RpId,
     chain::ChainEvent,

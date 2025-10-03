@@ -116,6 +116,32 @@
   },
   {
     "type": "function",
+    "name": "getRpNullifierKey",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct KeyGen.RpSecretGenCommitment[]",
+        "components": [
+          {
+            "name": "data",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "initKeyGen",
     "inputs": [
       {
