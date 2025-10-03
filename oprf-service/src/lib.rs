@@ -30,6 +30,7 @@ use crate::services::{
     chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
+    merkle_watcher::{MerkleWatcherService, real::RealMerkleWatcher},
     oprf::OprfService,
     secret_manager::aws::AwsSecretManager,
 };
@@ -102,6 +103,19 @@ pub async fn start(
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
+    tracing::info!("spawn merkle watcher..");
+    // spawn the merkle watcher
+    let merkle_watcher: MerkleWatcherService = Arc::new(
+        RealMerkleWatcher::init(
+            &config.account_registry_contract_address,
+            &config.chain_ws_rpc_url,
+            config.max_merkle_store_size,
+            config.chain_epoch_max_difference,
+        )
+        .await
+        .context("while starting merkle watcher")?,
+    );
+
     tracing::info!("spawn chain watcher..");
     // spawn the chain watcher
     let chain_watcher: ChainWatcherService = Arc::new(
@@ -127,6 +141,7 @@ pub async fn start(
     let oprf_service = OprfService::init(
         Arc::clone(&crypto_device),
         Arc::clone(&chain_watcher),
+        Arc::clone(&merkle_watcher),
         vk.into(),
         config.request_lifetime,
         config.session_cleanup_interval,
@@ -253,6 +268,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::services::crypto_device::dlog_storage::RpMaterial;
+    use crate::services::merkle_watcher::test::TestMerkleWatcher;
     use crate::services::{
         chain_watcher::test::TestWatcher,
         crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
@@ -366,6 +382,14 @@ mod tests {
                 max_merkle_store_size,
                 chain_epoch_max_difference,
             )?);
+            let merkle_watcher = Arc::new(TestMerkleWatcher::new(
+                vec![MerkleRootUpdate {
+                    hash: merkle_root,
+                    epoch: merkle_epoch,
+                }],
+                max_merkle_store_size,
+                chain_epoch_max_difference,
+            )?);
             let user_verification_key_path = dir.join("../circom/main/OPRFQueryProof.vk.json");
             let vk = File::open(&user_verification_key_path)?;
             let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
@@ -377,6 +401,7 @@ mod tests {
             let oprf_service = OprfService::init(
                 crypto_device,
                 chain_watcher,
+                merkle_watcher,
                 vk.into(),
                 request_lifetime,
                 session_cleanup_interval,

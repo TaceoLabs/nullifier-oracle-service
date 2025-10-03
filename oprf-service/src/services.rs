@@ -9,6 +9,7 @@
 //! # Services overview
 //!
 //! - [`chain_watcher`] – watches the blockchain for events relevant to the peer.
+//! - [`merkle_root_watcher`] – watches the blockchain for merkle root updates.
 //! - [`crypto_device`] – manages cryptographic operations and key material.
 //! - [`event_handler`] – handles chain events sequentially to avoid locks.
 //! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
@@ -18,6 +19,7 @@
 pub(crate) mod chain_watcher;
 pub(crate) mod crypto_device;
 pub(crate) mod event_handler;
+pub(crate) mod merkle_watcher;
 pub(crate) mod oprf;
 pub(crate) mod secret_gen;
 pub(crate) mod secret_manager;

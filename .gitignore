@@ -7,3 +7,9 @@ perf.data.old
 codebook.toml
 logs
 *.ptau
+
+# Foundry (forge)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/

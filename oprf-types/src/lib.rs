@@ -22,6 +22,8 @@
 
 use std::{fmt, ops::Sub, str::FromStr};
 
+use alloy::primitives::U256;
+use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
@@ -140,6 +142,18 @@ impl FromStr for MerkleRoot {
     }
 }
 
+impl From<U256> for MerkleRoot {
+    fn from(value: U256) -> Self {
+        Self(ark_babyjubjub::Fq::new(ark_ff::BigInt(value.into_limbs())))
+    }
+}
+
+impl From<MerkleRoot> for U256 {
+    fn from(value: MerkleRoot) -> Self {
+        U256::from_limbs(value.0.into_bigint().0)
+    }
+}
+
 impl From<u128> for RpId {
     fn from(value: u128) -> Self {
         Self(value)
@@ -149,6 +163,12 @@ impl From<u128> for RpId {
 impl From<u128> for MerkleEpoch {
     fn from(value: u128) -> Self {
         Self(value)
+    }
+}
+
+impl From<U256> for MerkleEpoch {
+    fn from(value: U256) -> Self {
+        Self(u128::try_from(value).unwrap())
     }
 }
 

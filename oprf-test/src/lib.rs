@@ -5,8 +5,9 @@ use smart_contract_mock::config::SmartContractMockConfig;
 
 pub mod credentials;
 pub mod sc_mock;
+pub mod world_id_protocol_mock;
 
-async fn start_service(id: usize) -> String {
+async fn start_service(id: usize, chain_ws_rpc_url: &str) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
     let config = OprfPeerConfig {
@@ -28,6 +29,8 @@ async fn start_service(id: usize) -> String {
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
         max_merkle_depth: 30,
+        chain_ws_rpc_url: chain_ws_rpc_url.to_string(),
+        account_registry_contract_address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0".to_string(),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
@@ -79,10 +82,10 @@ pub async fn start_smart_contract_mock() -> String {
     url
 }
 
-pub async fn start_services() -> [String; 3] {
+pub async fn start_services(chain_ws_rpc_url: &str) -> [String; 3] {
     [
-        start_service(0).await,
-        start_service(1).await,
-        start_service(2).await,
+        start_service(0, chain_ws_rpc_url).await,
+        start_service(1, chain_ws_rpc_url).await,
+        start_service(2, chain_ws_rpc_url).await,
     ]
 }
