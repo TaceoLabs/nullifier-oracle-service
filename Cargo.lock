@@ -1102,7 +1102,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1293,7 +1293,7 @@ dependencies = [
 [[package]]
 name = "circom-types"
 version = "0.9.0"
-source = "git+https://github.com/TaceoLabs/co-snarks.git#b9821e5202855bb9cd931ae32fe9e7d3e5b01378"
+source = "git+https://github.com/TaceoLabs/co-snarks.git#3588af1a257a466c74039beaad5f5e078d8cfd23"
 dependencies = [
  "ark-bn254",
  "ark-ec",
