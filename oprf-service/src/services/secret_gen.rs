@@ -18,7 +18,9 @@ use ark_ff::UniformRand;
 use oprf_core::keys::keygen::KeyGenPoly;
 use oprf_types::{
     RpId,
-    chain::{SecretGenRound1Contribution, SecretGenRound2Contribution},
+    chain::{
+        SecretGenFinalizeContribution, SecretGenRound1Contribution, SecretGenRound2Contribution,
+    },
     crypto::{
         PartyId, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
         RpSecretGenCommitment,
@@ -133,27 +135,27 @@ impl DLogSecretGenService {
     /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
     /// * `ciphers` - Ciphertexts received from other parties in round 2.
     #[instrument(level = "info", skip(self, rp_public, ciphers))]
-    pub(crate) fn finalize(
+    pub(crate) async fn finalize(
         &self,
         rp_id: RpId,
         rp_public: k256::PublicKey,
         ciphers: Vec<RpSecretGenCiphertext>,
-    ) {
+    ) -> SecretGenFinalizeContribution {
         tracing::info!("calling finalize with {}", ciphers.len());
         let shares = ciphers
             .into_iter()
             .map(|x| self.crypto_device.decrypt_key_gen_ciphertext(x))
             .collect::<eyre::Result<Vec<_>>>()
             .expect("TODO");
-        let my_share = KeyGenPoly::accumulate_shares(&shares);
+        let my_share = DLogShare::from(KeyGenPoly::accumulate_shares(&shares));
         self.crypto_device
-            .register_nullifier_share(
-                rp_id,
-                k256::ecdsa::VerifyingKey::from(rp_public),
-                DLogShare::from(my_share),
-            )
+            .register_nullifier_share(rp_id, k256::ecdsa::VerifyingKey::from(rp_public), my_share)
+            .await
             .expect("TODO");
-        tracing::info!("my share: {my_share}");
+        SecretGenFinalizeContribution {
+            rp_id,
+            sender: self.party_id,
+        }
     }
 }
 

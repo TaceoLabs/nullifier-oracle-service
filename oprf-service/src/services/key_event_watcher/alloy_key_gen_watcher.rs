@@ -1,14 +1,12 @@
-use std::{time::Duration, u64};
-
 use alloy::{
     eips::BlockNumberOrTag,
     network::EthereumWallet,
-    primitives::{Address, Log, TxHash},
+    primitives::{Address, TxHash},
     providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
-    pubsub::Subscription,
     rpc::types::Filter,
     sol,
     sol_types::SolEvent,
+    transports::RpcError,
 };
 use async_trait::async_trait;
 use eyre::Context;
@@ -16,12 +14,13 @@ use futures::StreamExt as _;
 use oprf_types::{
     RpId,
     chain::{
-        ChainEvent, ChainEventResult, SecretGenRound1Contribution, SecretGenRound1Event,
-        SecretGenRound2Contribution, SecretGenRound2Event,
+        ChainEvent, ChainEventResult, SecretGenFinalizeContribution, SecretGenFinalizeEvent,
+        SecretGenRound1Contribution, SecretGenRound1Event, SecretGenRound2Contribution,
+        SecretGenRound2Event,
     },
-    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList},
+    crypto::{PartyId, PeerPublicKeyList, RpSecretGenCiphertexts},
 };
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 
 use crate::services::key_event_watcher::KeyGenEventListener;
 
@@ -34,6 +33,7 @@ sol!(
 );
 
 pub(crate) struct AlloyKeyGenWatcher {
+    party_id: PartyId,
     contract_address: Address,
     provider: DynProvider,
 }
@@ -41,7 +41,7 @@ pub(crate) struct AlloyKeyGenWatcher {
 impl AlloyKeyGenWatcher {
     pub(crate) async fn init(
         rpc_url: &str,
-        address: Address,
+        contract_address: Address,
         wallet: EthereumWallet,
     ) -> eyre::Result<Self> {
         // Create the provider.
@@ -52,23 +52,25 @@ impl AlloyKeyGenWatcher {
             .await
             .context("while connecting to RPC")?;
 
+        let contract = KeyGenContract::new(contract_address, provider.clone());
+        let party_id = contract
+            .getMyId()
+            .call()
+            .await
+            .context("while fetching party ID from chain")?;
+        let party_id = u16::try_from(party_id).map_err(|_| eyre::eyre!("got partyID > 65536"))?;
+
         Ok(Self {
+            party_id: PartyId::from(party_id),
             provider: provider.erased(),
-            contract_address: address,
+            contract_address,
         })
     }
 }
 #[async_trait]
 impl KeyGenEventListener for AlloyKeyGenWatcher {
     async fn fetch_party_id(&self) -> eyre::Result<PartyId> {
-        let contract = KeyGenContract::new(self.contract_address, self.provider.clone());
-        let my_id = contract
-            .getMyId()
-            .call()
-            .await
-            .context("while fetching party ID from chain")?;
-        let party_id = u16::try_from(my_id).map_err(|_| eyre::eyre!("got partyID > 65536"))?;
-        Ok(PartyId::from(party_id))
+        Ok(self.party_id)
     }
 
     async fn subscribe(&self) -> eyre::Result<mpsc::Receiver<ChainEvent>> {
@@ -77,8 +79,9 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         let (tx, rx) = mpsc::channel(1);
         let provider = self.provider.clone();
         let address = self.contract_address;
+        let party_id = self.party_id;
         tokio::spawn(async move {
-            match subscribe_task(provider, address, tx).await {
+            match subscribe_task(party_id, provider, address, tx).await {
                 Ok(_) => tracing::info!("subscribe task shutdown"),
                 Err(err) => tracing::error!("subscribe task encountered an error: {err}"),
             }
@@ -96,22 +99,19 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                 let contribution =
                     bincode::serde::encode_to_vec(&contribution, bincode::config::standard())
                         .expect("can serialize");
-                let receipt = contract
+                let pending_tx = contract
                     .addRound1Contribution(rp_id.into_inner(), contribution.into())
-                    .gas(1000000) // FIXME this is only for dummy smart contract
+                    .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
-                    .with_required_confirmations(2)
-                    .with_timeout(Some(Duration::from_secs(60)))
-                    .get_receipt()
+                    .register()
+                    .await
+                    .context("while registering watcher for transaction")?;
+                let tx = watch_receipt(self.provider.clone(), pending_tx)
                     .await
                     .context("while waiting for receipt")?;
-                if receipt.status() {
-                    tracing::info!("done with transaction hash: {}", receipt.transaction_hash);
-                } else {
-                    eyre::bail!("could not post contribution1 to chain: {receipt:?}");
-                }
+                tracing::info!("round 1 done with transaction hash: {tx}",);
             }
             ChainEventResult::SecretGenRound2(SecretGenRound2Contribution {
                 rp_id,
@@ -121,31 +121,44 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                 let contribution =
                     bincode::serde::encode_to_vec(&contribution, bincode::config::standard())
                         .expect("can serialize");
-                let receipt = contract
+                let pending_tx = contract
                     .addRound2Contribution(rp_id.into_inner(), contribution.into())
-                    .gas(1000000) // FIXME this is only for dummy smart contract
+                    .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
-                    .with_required_confirmations(2)
-                    .with_timeout(Some(Duration::from_secs(60)))
-                    .get_receipt()
+                    .register()
+                    .await
+                    .context("while registering watcher for transaction")?;
+                let tx = watch_receipt(self.provider.clone(), pending_tx)
                     .await
                     .context("while waiting for receipt")?;
-                if receipt.status() {
-                    tracing::info!("done with transaction hash: {}", receipt.transaction_hash);
-                } else {
-                    eyre::bail!("could not post contribution1 to chain: {receipt:?}");
-                }
-                todo!()
+                tracing::info!("round 2 done with transaction hash: {tx}",);
             }
-            ChainEventResult::SecretGenFinalize(contribution) => todo!(),
+            ChainEventResult::SecretGenFinalize(SecretGenFinalizeContribution {
+                rp_id,
+                sender: _,
+            }) => {
+                let pending_tx = contract
+                    .addFinalizeContribtion(rp_id.into_inner())
+                    .send()
+                    .await
+                    .context("while broadcasting to network")?
+                    .register()
+                    .await
+                    .context("while registering watcher for transaction")?;
+                let tx = watch_receipt(self.provider.clone(), pending_tx)
+                    .await
+                    .context("while waiting for receipt")?;
+                tracing::info!("finalize done with transaction hash: {tx}",);
+            }
         };
         Ok(())
     }
 }
 
 async fn subscribe_task(
+    party_id: PartyId,
     provider: DynProvider,
     contract_address: Address,
     tx: mpsc::Sender<ChainEvent>,
@@ -182,7 +195,6 @@ async fn subscribe_task(
                     rpId,
                     peerPublicKeyList,
                 } = round2.inner.data;
-                tracing::info!("str: {peerPublicKeyList}");
                 let public_key_bytes = Vec::<u8>::from(peerPublicKeyList);
                 let (pub_keys, _) = bincode::serde::decode_from_slice::<PeerPublicKeyList, _>(
                     &public_key_bytes,
@@ -198,9 +210,7 @@ async fn subscribe_task(
                     break;
                 }
             }
-
             Some(&KeyGenContract::SecretGenFinalize::SIGNATURE_HASH) => {
-                tracing::info!("i have finalaize uwu");
                 let finalize = log
                     .log_decode()
                     .context("while decoding secret-gen round2 event")?;
@@ -210,10 +220,75 @@ async fn subscribe_task(
                     round2Contributions,
                 } = finalize.inner.data;
 
-                let bytes = Vec::<u8>::from(round2Contributions);
+                let ciphers = round2Contributions
+                    .into_iter()
+                    .map(|ciphers| {
+                        let (x, _) = bincode::serde::decode_from_slice(
+                            &ciphers.data,
+                            bincode::config::standard(),
+                        )?;
+                        eyre::Ok(x)
+                    })
+                    .collect::<eyre::Result<Vec<RpSecretGenCiphertexts>>>()?;
+                // filter so that I can find my ciphers
+                let ciphers = ciphers
+                    .into_iter()
+                    .filter_map(|cipher| cipher.get_cipher_text(party_id))
+                    .collect::<Vec<_>>();
+                let rp_verification_key = Vec::<u8>::from(rpPublicKey);
+                let (rp_public_key, _) = bincode::serde::decode_from_slice(
+                    &rp_verification_key,
+                    bincode::config::standard(),
+                )
+                .context("while parsing verification key")?;
+
+                let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
+                    rp_id: RpId::from(rpId),
+                    rp_public_key,
+                    ciphers,
+                });
+                if tx.send(event).await.is_err() {
+                    tracing::debug!("subscriber dropped channel - will shutdown");
+                    break;
+                }
             }
-            _ => todo!(),
+            x => {
+                tracing::info!("unknown event: {x:?}");
+            }
         }
     }
     Ok(())
+}
+
+async fn watch_receipt(
+    provider: DynProvider,
+    mut pending_tx: PendingTransaction,
+) -> Result<TxHash, alloy::contract::Error> {
+    let tx_hash = pending_tx.tx_hash().to_owned();
+    // FIXME: this is a hotfix to prevent a race condition where the heartbeat would miss the
+    // block the tx was mined in
+
+    let mut interval = tokio::time::interval(provider.client().poll_interval());
+
+    loop {
+        let mut confirmed = false;
+
+        tokio::select! {
+            _ = interval.tick() => {},
+            res = &mut pending_tx => {
+                let _ = res?;
+                confirmed = true;
+            }
+        }
+
+        // try to fetch the receipt
+        let receipt = provider.get_transaction_receipt(tx_hash).await?;
+        if receipt.is_some() {
+            return Ok(tx_hash);
+        }
+
+        if confirmed {
+            return Err(alloy::contract::Error::TransportError(RpcError::NullResp));
+        }
+    }
 }

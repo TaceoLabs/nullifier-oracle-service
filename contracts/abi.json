@@ -41,6 +41,19 @@
   },
   {
     "type": "function",
+    "name": "addFinalizeContribtion",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "addRound1Contribution",
     "inputs": [
       {

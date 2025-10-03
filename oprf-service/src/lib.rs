@@ -19,7 +19,7 @@
 //! - `api`: REST API routes.
 use std::{fs::File, str::FromStr, sync::Arc};
 
-use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
+use alloy::{hex, network::EthereumWallet, signers::local::PrivateKeySigner};
 use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
@@ -140,6 +140,7 @@ pub async fn start(
         .fetch_party_id()
         .await
         .context("while loading partyID")?;
+
     tracing::info!("we are party id: {party_id}");
     let event_handler = ChainEventHandler::spawn(
         party_id,

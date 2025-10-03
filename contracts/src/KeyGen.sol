@@ -7,6 +7,7 @@ contract KeyGen {
     address[] public participants;
     mapping(address => uint256) public participantIndex; // participant -> index
     mapping(uint128 => RpNullifierGenState) internal states;
+    mapping(uint128 => RpSecretGenCommitment[]) internal key_storage;
     uint128[] public activeIds;
 
     bytes public peer_keys;
@@ -19,8 +20,10 @@ contract KeyGen {
         bytes ecdsaPubKey; // session key
         RpSecretGenCommitment[] round1; 
         RpSecretGenCiphertexts[] round2;
+        bool[] finalizeDone;
         bool round2EventEmitted;
         bool finalizeEventEmitted;
+        bool storedNullifier;
     }
 
     // Events
@@ -52,13 +55,13 @@ contract KeyGen {
         uint n = participants.length;
         delete st.round1;
         delete st.round2;
+        delete st.finalizeDone;
         for (uint i = 0;i<n;i++) {
             st.round1.push(RpSecretGenCommitment({ data: "" }));
+            st.round2.push(RpSecretGenCiphertexts({ data: "" }));
+            st.finalizeDone.push(false);
         }
 
-        for (uint i = 0;i<n;i++) {
-            st.round2.push(RpSecretGenCiphertexts({ data: "" }));
-        }
         st.round2EventEmitted = false;
         st.finalizeEventEmitted = false;
         activeIds.push(id);
@@ -105,6 +108,24 @@ contract KeyGen {
         }
     }
 
+    // Finalize submission
+    function addFinalizeContribtion(uint128 id) external {
+        uint idx = participantIndex[msg.sender];
+        require(idx < participants.length, "Not a participant");
+
+        RpNullifierGenState storage st = states[id];
+        require(allRound2Submitted(st), "Round2 not complete");
+        require(!st.finalizeDone[idx], "Already submitted");
+
+        st.finalizeDone[idx] = true;
+        // If all round2 submitted, emit Finalize event for everyone
+        if (allFinalizeSubmitted(st) && !st.storedNullifier) {
+            st.storedNullifier = true;
+            key_storage[id] = st.round1;
+            console.log("created nullifier key uwu");
+        }
+    }
+
     // --- Helpers ---
     function allRound1Submitted(RpNullifierGenState storage st) internal view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
@@ -116,6 +137,13 @@ contract KeyGen {
     function allRound2Submitted(RpNullifierGenState storage st) internal view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
             if (st.round2[i].data.length == 0) return false;
+        }
+        return true;
+    }
+
+    function allFinalizeSubmitted(RpNullifierGenState storage st) internal view returns (bool) {
+        for (uint i = 0; i < participants.length; i++) {
+            if (!st.finalizeDone[i]) return false;
         }
         return true;
     }

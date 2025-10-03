@@ -21,13 +21,14 @@ bench:
 run-all:
     #!/usr/bin/env bash
     killall -9 anvil
-    anvil & 
+    anvil  &
+    pid_anvil=$!  
     sleep 1
+    cargo build --workspace
+    cargo run --bin key-gen -- --overwrite-old-keys
     cd contracts && forge script script/KeyGen.s.sol --broadcast --fork-url http://127.0.0.1:8545  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
     cd ..
     mkdir -p logs
-    cargo build --workspace
-    cargo run --bin key-gen -- --overwrite-old-keys
     RUST_LOG="oprf_service=trace,warn" ./target/debug/oprf-service --key-gen-contract 0x5FbDB2315678afecb367f032d93F642f64180aa3 --key-gen-rpc-url ws://localhost:8545 --user-verification-key-path ./circom/main/OPRFQueryProof.vk.json --bind-addr 127.0.0.1:10000 --private-key-secret-id oprf/sk/n0 --environment dev --dlog-share-secret-id-suffix oprf/share/n0 --chain-url http://localhost:6789 --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356> logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
@@ -38,10 +39,9 @@ run-all:
     pid2=$!
     echo "started service2 with PID $pid2"
     sleep 2
-
     cd contracts && KEYGEN_CONTRACT=0x5FbDB2315678afecb367f032d93F642f64180aa3 forge script script/InitKeyGen.s.sol --broadcast --fork-url http://127.0.0.1:8545  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-    trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
-    wait $pid0 $pid1 $pid2
+    trap "kill $pid0 $pid1 $pid2 $pid_anvil" SIGINT SIGTERM
+    wait $pid0 $pid1 $pid2 $pid_anvil
 
 init-kengen:
     cd contracts && KEYGEN_CONTRACT=0x5FbDB2315678afecb367f032d93F642f64180aa3 forge script script/InitKeyGen.s.sol --broadcast --fork-url http://127.0.0.1:8545  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

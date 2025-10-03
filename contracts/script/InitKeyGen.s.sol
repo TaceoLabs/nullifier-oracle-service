@@ -20,7 +20,8 @@ contract InitKeyGenScript is Script {
             keccak256(abi.encodePacked(block.timestamp, msg.sender))
         ));
 
-        bytes memory ecdsaPubKey = hex"deadbeef";
+        string memory filePath = "script/script-data/rp-public-key.hex";
+        bytes memory ecdsaPubKey = vm.parseBytes(vm.readFile(filePath));
 
         vm.startBroadcast();
         keyGenContract.initKeyGen(sessionId, ecdsaPubKey);

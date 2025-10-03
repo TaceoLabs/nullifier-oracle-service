@@ -16,7 +16,7 @@ pub struct KeyGenConfig {
     #[clap(
         long,
         env = "PUBLIC_KEYS_FILE",
-        default_value = "../contracts/script/script-data/pubkey-list.hx"
+        default_value = "../contracts/script/script-data/pubkey-list.hex"
     )]
     pub path_to_pubkey_file: PathBuf,
 

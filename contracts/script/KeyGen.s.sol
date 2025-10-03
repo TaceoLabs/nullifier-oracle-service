@@ -19,7 +19,7 @@ contract KeyGenScript is Script {
         participants[2] = address(0xa0Ee7A142d267C1f36714E4a8F75612F20a79720);
 
 
-        string memory filePath = "script/script-data/pubkey-list.hx";
+        string memory filePath = "script/script-data/pubkey-list.hex";
         bytes memory peerKeys = vm.parseBytes(vm.readFile(filePath));
 
         gen = new KeyGen(participants, 1, peerKeys);

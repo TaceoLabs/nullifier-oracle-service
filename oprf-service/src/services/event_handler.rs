@@ -109,8 +109,13 @@ async fn run(
             }
         };
 
-        let result = handle_chain_event(&mut secret_gen, event).await?;
-        event_listener.report_result(result).await;
+        let result = handle_chain_event(&mut secret_gen, event)
+            .await
+            .context("while handling chain event")?;
+        event_listener
+            .report_result(result)
+            .await
+            .context("while reporting chain result")?;
     }
 }
 
@@ -133,7 +138,12 @@ pub(crate) async fn handle_chain_event(
                 ))
             })
         }
-        // todo make async again
-        ChainEvent::SecretGenFinalize(secret_gen_finalize_event) => todo!(),
+        ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
+            rp_id,
+            rp_public_key,
+            ciphers,
+        }) => Ok(ChainEventResult::SecretGenFinalize(
+            secret_gen.finalize(rp_id, rp_public_key, ciphers).await,
+        )),
     }
 }

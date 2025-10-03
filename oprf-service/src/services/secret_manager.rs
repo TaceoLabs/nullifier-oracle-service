@@ -43,13 +43,7 @@ pub(crate) trait SecretManager {
     ///
     /// This method is intended **only** for initializing a new RP. For updating
     /// existing shares, use [`Self::update_dlog_share`].
-    ///
-    /// This method is synchronous by design: [`crate::services::event_handler::handle_chain_events`]
-    /// runs CPU-bound work, but needs to call this method during
-    /// the finalize event of nullifier secret-gen. Internally, can
-    /// bridge into `async` land again but for simplicity at callsite,
-    /// we provide this `sync` interface.
-    fn store_dlog_share(
+    async fn store_dlog_share(
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
@@ -60,14 +54,8 @@ pub(crate) trait SecretManager {
     ///
     /// Use this method for updating existing shares. For creating a new share,
     /// use [`Self::store_dlog_share`].
-    ///
-    /// This method is synchronous by design: [`crate::services::event_handler::handle_chain_events`]
-    /// runs CPU-bound work, but needs to call this method during
-    /// the finalize event of share refresh.
-    /// Internally, can bridge into `async` land again but for
-    /// simplicity at callsite, we provide this `sync` interface.
     #[expect(dead_code)]
-    fn update_dlog_share(
+    async fn update_dlog_share(
         &self,
         rp_id: RpId,
         epoch: ShareEpoch,
