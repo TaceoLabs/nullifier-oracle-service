@@ -20,7 +20,7 @@ use tracing::instrument;
 use eyre::Context;
 use oprf_core::{
     ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, DLogEqualitySession,
+        DLogEqualityCommitments, DLogEqualityProofShare, DLogEqualitySession,
         PartialDLogEqualityCommitments,
     },
     keys::keygen::KeyGenPoly,
@@ -28,7 +28,7 @@ use oprf_core::{
 use oprf_types::{
     RpId,
     api::v1::NullifierShareIdentifier,
-    crypto::{PeerPublicKey, RpSecretGenCiphertext},
+    crypto::{PeerPublicKey, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
 
@@ -225,15 +225,19 @@ impl CryptoDevice {
     pub(crate) fn challenge(
         &self,
         session: DLogEqualitySession,
-        challenge: DLogEqualityChallenge,
+        challenge: DLogEqualityCommitments,
         share_identifier: &NullifierShareIdentifier,
     ) -> CryptoDeviceResult<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
+        let rp_nullifier_key = self
+            .shares
+            .get_rp_nullifier_key(share_identifier.rp_id)
+            .ok_or_else(|| CryptoDeviceError::NoSuchRp(share_identifier.rp_id))?;
         let share = self
             .shares
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
-        Ok(session.challenge(share, challenge))
+        Ok(session.challenge(share, rp_nullifier_key.inner(), challenge))
     }
 
     /// Registers a new nullifier share for the given relying-party.
@@ -243,12 +247,14 @@ impl CryptoDevice {
         &self,
         rp_id: RpId,
         rp_public_key: k256::ecdsa::VerifyingKey,
+        rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
-        self.shares.add(rp_id, rp_public_key, share);
+        self.shares
+            .add(rp_id, rp_public_key, rp_nullifier_key, share);
         let result = self
             .secret_manager
-            .store_dlog_share(rp_id, rp_public_key.into(), share)
+            .store_dlog_share(rp_id, rp_public_key.into(), rp_nullifier_key, share)
             .await;
         metrics::counter!(METRICS_RP_SECRETS).increment(1);
         result

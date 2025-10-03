@@ -12,7 +12,7 @@ use std::fmt;
 use ark_serde_compat::groth16::Groth16Proof;
 use eddsa_babyjubjub::EdDSAPublicKey;
 use oprf_core::ddlog_equality::{
-    DLogEqualityChallenge, DLogEqualityProofShare, PartialDLogEqualityCommitments,
+    DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -80,7 +80,7 @@ pub struct ChallengeRequest {
     /// ID of the original OPRF request.
     pub request_id: Uuid,
     /// The challenge to respond to.
-    pub challenge: DLogEqualityChallenge,
+    pub challenge: DLogEqualityCommitments,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
 }

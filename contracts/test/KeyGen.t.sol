@@ -68,16 +68,21 @@ contract KeyGenTest is Test {
         vm.prank(bob);   gen.addRound2Contribution(sessionId, hex"bbb2");
 
         // Build expected array exactly as contract will have it
-        KeyGen.RpSecretGenCiphertexts[] memory expected = 
-            new KeyGen.RpSecretGenCiphertexts[](3);
+        KeyGen.RpSecretGenCommitment[] memory expectedRound1 = 
+            new KeyGen.RpSecretGenCommitment[](3);
+        expectedRound1[0] = KeyGen.RpSecretGenCommitment({ data: hex"aaa1" });
+        expectedRound1[1] = KeyGen.RpSecretGenCommitment({ data: hex"aaa2" });
+        expectedRound1[2] = KeyGen.RpSecretGenCommitment({ data: hex"aaa3" });
 
-        expected[0] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb1" });
-        expected[1] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb2" });
-        expected[2] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb3" });
+        KeyGen.RpSecretGenCiphertexts[] memory expectedRound2 = 
+            new KeyGen.RpSecretGenCiphertexts[](3);
+        expectedRound2[0] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb1" });
+        expectedRound2[1] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb2" });
+        expectedRound2[2] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb3" });
 
         // Expect the Finalize event — check indexed rpId (topic1) and full data (last boolean = true)
         vm.expectEmit(true, false, false, true);
-        emit KeyGen.SecretGenFinalize(sessionId, pubKey, expected);
+        emit KeyGen.SecretGenFinalize(sessionId, pubKey, expectedRound1, expectedRound2);
 
         // Trigger final submission (this call should emit the Finalize event)
         vm.prank(carol);

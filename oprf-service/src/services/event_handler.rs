@@ -150,9 +150,12 @@ pub(crate) async fn handle_chain_event(
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
             rp_id,
             rp_public_key,
+            commitments,
             ciphers,
         }) => Ok(ChainEventResult::SecretGenFinalize(
-            secret_gen.finalize(rp_id, rp_public_key, ciphers).await,
+            secret_gen
+                .finalize(rp_id, rp_public_key, commitments, ciphers)
+                .await,
         )),
     }
 }

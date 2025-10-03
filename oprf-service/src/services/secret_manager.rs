@@ -11,7 +11,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use oprf_types::{RpId, ShareEpoch};
+use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
 
 use crate::services::crypto_device::{DLogShare, PeerPrivateKey, dlog_storage::RpMaterial};
 
@@ -44,6 +44,7 @@ pub(crate) trait SecretManager {
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
+        rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()>;
 

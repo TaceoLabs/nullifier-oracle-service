@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use oprf_types::crypto::RpNullifierKey;
 use oprf_types::{RpId, ShareEpoch};
 use parking_lot::Mutex;
 use tracing::instrument;
@@ -36,12 +37,17 @@ impl SecretManager for TestSecretManager {
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
+        rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
         self.rp_materials
             .lock()
             .entry(rp_id)
-            .or_insert(RpMaterial::new(HashMap::new(), public_key.into()))
+            .or_insert(RpMaterial::new(
+                HashMap::new(),
+                public_key.into(),
+                rp_nullifier_key,
+            ))
             .shares
             .insert(ShareEpoch::default(), share);
         Ok(())

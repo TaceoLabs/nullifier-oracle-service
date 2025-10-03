@@ -41,7 +41,7 @@ use ark_ec::AffineRepr;
 use ark_serde_compat::groth16::Groth16Proof;
 use oprf_core::shamir;
 use oprf_core::{
-    ddlog_equality::DLogEqualityChallenge,
+    ddlog_equality::DLogEqualityCommitments,
     proof_input_gen::{nullifier::NullifierProofInput, query::QueryProofInput},
 };
 use oprf_types::api::v1::{
@@ -448,13 +448,9 @@ pub fn compute_challenges(
     // Compute Lagrange coefficients for Shamir reconstruction
     let lagrange = shamir::lagrange_from_coeff(&coeffs);
     // Combine commitments from all sessions and create a single challenge
-    let (blinded_response, challenge) =
-        DLogEqualityChallenge::combine_commitments_and_create_challenge_shamir(
-            &sessions.commitments,
-            &lagrange,
-            rp_nullifier_key.inner(),
-            query.blinded_request.blinded_query(),
-        );
+    let challenge =
+        DLogEqualityCommitments::combine_commitments_shamir(&sessions.commitments, &lagrange);
+    let blinded_response = challenge.blinded_response();
     Ok(Challenge {
         groth16_material: query.groth16_material,
         query_proof_input: query.query_proof_input,
@@ -517,7 +513,12 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     let dlog_proof = challenges
         .challenge_request
         .challenge
-        .combine_proofs_shamir(&proofs, &challenges.lagrange);
+        .combine_proofs_shamir(
+            &proofs,
+            &challenges.lagrange,
+            challenges.rp_nullifier_key.inner(),
+            challenges.blinded_request.blinded_query(),
+        );
     if !dlog_proof.verify(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),

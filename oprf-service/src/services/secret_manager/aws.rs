@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use eyre::Context;
+use oprf_types::crypto::RpNullifierKey;
 use oprf_types::{RpId, ShareEpoch};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -41,6 +42,7 @@ impl AwsSecretManager {
 struct AwsSecret {
     rp_id: RpId,
     rp_public: k256::PublicKey,
+    rp_nullifier_key: RpNullifierKey,
     current: EpochSecret,
     // Is none for first secret
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,10 +60,16 @@ impl AwsSecret {
     /// Creates a new secret for a given `RpId`.
     ///
     /// Current epoch is set to 0, previous is `None`.
-    fn new(rp_id: RpId, rp_public: k256::PublicKey, secret: DLogShare) -> Self {
+    fn new(
+        rp_id: RpId,
+        rp_public: k256::PublicKey,
+        rp_nullifier_key: RpNullifierKey,
+        secret: DLogShare,
+    ) -> Self {
         Self {
             rp_id,
             rp_public,
+            rp_nullifier_key,
             current: EpochSecret {
                 epoch: ShareEpoch::default(),
                 secret,
@@ -103,11 +111,12 @@ impl SecretManager for AwsSecretManager {
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
+        rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
         let secret_id = to_secret_id(&self.config, rp_id);
         tracing::info!("creating new secret at AWS: {secret_id}");
-        let secret = AwsSecret::new(rp_id, public_key, share);
+        let secret = AwsSecret::new(rp_id, public_key, rp_nullifier_key, share);
         self.client
             .create_secret()
             .name(secret_id)

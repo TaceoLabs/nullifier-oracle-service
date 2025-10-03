@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use ark_ec::CurveGroup as _;
 use ark_ff::UniformRand;
 use oprf_core::keys::keygen::KeyGenPoly;
 use oprf_types::{
@@ -22,7 +23,7 @@ use oprf_types::{
         SecretGenFinalizeContribution, SecretGenRound1Contribution, SecretGenRound2Contribution,
     },
     crypto::{
-        PartyId, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
+        PartyId, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCiphertexts,
         RpSecretGenCommitment,
     },
 };
@@ -139,6 +140,7 @@ impl DLogSecretGenService {
         &self,
         rp_id: RpId,
         rp_public: k256::PublicKey,
+        commitments: Vec<RpSecretGenCommitment>,
         ciphers: Vec<RpSecretGenCiphertext>,
     ) -> SecretGenFinalizeContribution {
         tracing::info!("calling finalize with {}", ciphers.len());
@@ -148,8 +150,17 @@ impl DLogSecretGenService {
             .collect::<eyre::Result<Vec<_>>>()
             .expect("TODO");
         let my_share = DLogShare::from(KeyGenPoly::accumulate_shares(&shares));
+        let rp_nullifier_key = RpNullifierKey::from(commitments.into_iter().fold(
+            ark_babyjubjub::EdwardsAffine::zero(),
+            |acc, contribution| (acc + contribution.comm_share).into_affine(),
+        ));
         self.crypto_device
-            .register_nullifier_share(rp_id, k256::ecdsa::VerifyingKey::from(rp_public), my_share)
+            .register_nullifier_share(
+                rp_id,
+                k256::ecdsa::VerifyingKey::from(rp_public),
+                rp_nullifier_key,
+                my_share,
+            )
             .await
             .expect("TODO");
         SecretGenFinalizeContribution {
@@ -209,7 +220,7 @@ mod tests {
             |acc, contribution| (acc + contribution.comm_share).into_affine(),
         );
         let peers = round1_contributions
-            .into_iter()
+            .iter()
             .map(|contribution| contribution.sender)
             .collect::<Vec<_>>();
 
@@ -244,6 +255,7 @@ mod tests {
             .finalize(
                 rp_id,
                 k256::SecretKey::random(&mut rng).public_key(),
+                round1_contributions.clone(),
                 ciphers0,
             )
             .await;
@@ -251,6 +263,7 @@ mod tests {
             .finalize(
                 rp_id,
                 k256::SecretKey::random(&mut rng).public_key(),
+                round1_contributions.clone(),
                 ciphers1,
             )
             .await;
@@ -258,6 +271,7 @@ mod tests {
             .finalize(
                 rp_id,
                 k256::SecretKey::random(&mut rng).public_key(),
+                round1_contributions.clone(),
                 ciphers2,
             )
             .await;
