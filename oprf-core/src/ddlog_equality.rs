@@ -101,6 +101,9 @@ impl DLogEqualitySession {
 }
 
 impl DLogEqualityCommitments {
+    pub fn new(c: Affine, r1: Affine, r2: Affine) -> Self {
+        DLogEqualityCommitments { c, r1, r2 }
+    }
     /// The accumulating party (e.g., the verifier) combines all the shares of all parties.
     /// The returned points are the combined commitments C, R1, R2.
     pub fn combine_commitments(commitments: &[PartialDLogEqualityCommitments]) -> Self {

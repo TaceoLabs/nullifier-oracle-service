@@ -20,7 +20,7 @@ use tracing::instrument;
 use eyre::Context;
 use oprf_core::{
     ddlog_equality::{
-        DLogEqualityChallenge, DLogEqualityProofShare, DLogEqualitySession,
+        DLogEqualityCommitments, DLogEqualityProofShare, DLogEqualitySession,
         PartialDLogEqualityCommitments,
     },
     keys::keygen::KeyGenPoly,
@@ -228,7 +228,8 @@ impl CryptoDevice {
     pub(crate) fn challenge(
         &self,
         session: DLogEqualitySession,
-        challenge: DLogEqualityChallenge,
+        challenge: DLogEqualityCommitments,
+        public_key: Affine,
         share_identifier: &NullifierShareIdentifier,
     ) -> CryptoDeviceResult<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
@@ -236,7 +237,7 @@ impl CryptoDevice {
             .shares
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
-        Ok(session.challenge(share, challenge))
+        Ok(session.challenge(share, public_key, challenge))
     }
 
     /// Registers a new nullifier share for the given relying-party.
