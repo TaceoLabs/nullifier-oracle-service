@@ -178,7 +178,7 @@ mod tests {
             HashMap::new(),
         ));
         let secret_manager_ = Arc::clone(&secret_manager);
-        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+        let crypto_device = Arc::new(CryptoDevice::init(secret_manager).await?);
         let dlog_secret_gen = DLogSecretGenService::init(party_id, crypto_device);
         Ok((secret_manager_, dlog_secret_gen))
     }

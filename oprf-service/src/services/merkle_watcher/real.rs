@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use alloy::{
+    eips::BlockNumberOrTag,
     primitives::Address,
     providers::{DynProvider, Provider, ProviderBuilder, WsConnect},
     rpc::types::Filter,
@@ -55,6 +56,7 @@ impl RealMerkleWatcher {
         tracing::info!("listening for events...");
         let filter = Filter::new()
             .address(contract_address)
+            .from_block(BlockNumberOrTag::Latest)
             .event_signature(RootRecorded::SIGNATURE_HASH);
         let sub = provider.subscribe_logs(&filter).await?;
         let mut stream = sub.into_stream();

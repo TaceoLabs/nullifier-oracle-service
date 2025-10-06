@@ -94,11 +94,9 @@ pub async fn start(
     // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
     let secret_manager = Arc::new(AwsSecretManager::init(Arc::clone(&config)).await);
 
-    // TODO load all RP_ids from SC
-
     tracing::info!("init crypto device..");
     let crypto_device = Arc::new(
-        CryptoDevice::init(secret_manager, vec![])
+        CryptoDevice::init(secret_manager)
             .await
             .context("while initiating crypto-device")?,
     );
@@ -117,8 +115,14 @@ pub async fn start(
             .context("while spawning alloy key-gen watcher")?,
     );
 
-    tracing::info!("spawn merkle watcher..");
-    // spawn the merkle watcher
+    tracing::info!("loading party id..");
+    let party_id = key_gen_watcher
+        .fetch_party_id()
+        .await
+        .context("while loading partyID")?;
+    tracing::info!("we are party id: {party_id}");
+
+    tracing::info!("spawning merkle watcher..");
     let merkle_watcher: MerkleWatcherService = Arc::new(
         RealMerkleWatcher::init(
             config.account_registry_contract,
@@ -130,14 +134,6 @@ pub async fn start(
         .context("while starting merkle watcher")?,
     );
 
-    tracing::info!("loading party id..");
-    // load our party id
-    let party_id = key_gen_watcher
-        .fetch_party_id()
-        .await
-        .context("while loading partyID")?;
-
-    // start oprf-service service
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
         Arc::clone(&crypto_device),
@@ -150,7 +146,6 @@ pub async fn start(
         config.signature_history_cleanup_interval,
     );
 
-    tracing::info!("we are party id: {party_id}");
     let event_handler = ChainEventHandler::spawn(
         party_id,
         key_gen_watcher,
@@ -368,7 +363,7 @@ mod tests {
                     ),
                 )]),
             ));
-            let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+            let crypto_device = Arc::new(CryptoDevice::init(secret_manager).await?);
             let max_merkle_store_size = 10;
             let chain_epoch_max_difference = 10;
             let merkle_watcher = Arc::new(TestMerkleWatcher::new(

@@ -142,13 +142,10 @@ impl CryptoDevice {
     ///
     /// Returns an error if loading secrets fails.
     #[instrument(level = "info", skip_all)]
-    pub(crate) async fn init(
-        secret_manager: SecretManagerService,
-        rp_ids: Vec<RpId>,
-    ) -> eyre::Result<Self> {
+    pub(crate) async fn init(secret_manager: SecretManagerService) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
         let (private_key, shares) = secret_manager
-            .load_secrets(rp_ids)
+            .load_secrets()
             .await
             .context("while loading secrets from AWS")?;
         metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);

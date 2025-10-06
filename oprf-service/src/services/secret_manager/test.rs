@@ -27,10 +27,7 @@ impl TestSecretManager {
 #[async_trait]
 impl SecretManager for TestSecretManager {
     #[instrument(level = "info", skip_all)]
-    async fn load_secrets(
-        &self,
-        _rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
+    async fn load_secrets(&self) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
         Ok((self.private_key, self.rp_materials.lock().clone()))
     }
 

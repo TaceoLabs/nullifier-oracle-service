@@ -12,7 +12,13 @@ dev-down:
 unit-tests:
     cargo test --release --all-features --lib
 
-check-pr: lint unit-tests
+integration-tests:
+    cargo test --release --package oprf-test
+
+all-tests:
+    cargo test --release --all-features
+
+check-pr: lint all-tests
 
 bench:
     cargo bench --all-features

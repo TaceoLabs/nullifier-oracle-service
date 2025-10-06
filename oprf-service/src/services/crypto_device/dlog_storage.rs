@@ -33,6 +33,7 @@ pub(crate) struct RpMaterial {
 
 impl RpMaterial {
     /// Creates a new [`RpMaterial`] from the provided shares and ECDSA public key.
+    #[allow(dead_code)]
     pub(crate) fn new(
         shares: HashMap<ShareEpoch, DLogShare>,
         public_key: k256::ecdsa::VerifyingKey,

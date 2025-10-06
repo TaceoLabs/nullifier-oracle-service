@@ -1,6 +1,7 @@
 use std::{collections::HashSet, path::PathBuf, process::Command, sync::Arc};
 
 use alloy::{
+    eips::BlockNumberOrTag,
     primitives::{Address, U256, address},
     providers::{DynProvider, Provider as _, ProviderBuilder, WsConnect},
     rpc::types::Filter,
@@ -95,6 +96,7 @@ impl AuthTreeIndexer {
 
         let filter = Filter::new()
             .address(contract_address)
+            .from_block(BlockNumberOrTag::Latest)
             .event_signature(AccountCreated::SIGNATURE_HASH);
         let sub = provider.subscribe_logs(&filter).await?;
         let mut stream = sub.into_stream();

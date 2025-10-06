@@ -34,10 +34,7 @@ pub(crate) trait SecretManager {
     /// Each RP has a dedicated share per epoch and an associated
     /// `ECDSA PublicKey`. Implementations must return
     /// an error if any required `RpMaterial` is missing.
-    async fn load_secrets(
-        &self,
-        rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)>;
+    async fn load_secrets(&self) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)>;
 
     /// Stores the provided [`DLogShare`] and the RP's ECDSA public key for the given [`RpId`] at epoch 0.
     ///
