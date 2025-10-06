@@ -18,6 +18,7 @@ env:
   AWS_ENDPOINT_URL: http://localhost:4566
   AWS_ACCESS_KEY_ID: test
   AWS_SECRET_ACCESS_KEY: test
+  FOUNDRY_PROFILE: ci
 
 jobs:
   test:
@@ -32,9 +33,13 @@ jobs:
           - "/var/run/docker.sock:/var/run/docker.sock" 
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && forge install
       - run: sudo apt-get install lld git-lfs
       - run: git lfs pull
       - run: cargo run --bin key-gen
