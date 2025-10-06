@@ -378,8 +378,10 @@ mod mappings {
         // constant c1 = J/K;
         let j = BaseField::from(168698);
         let k = BaseField::from(1);
+        // TODO: this is a noop (k == 1)
         let c1 = j / k;
         // constant c2 = 1/ K^2
+        // TODO: this is a noop (k == 1) and c2 == 1
         let c2 = (k * k).inverse().unwrap();
         // constant Z = 5, based on RFC9380, Appendix H.3.
         // ```sage
@@ -407,6 +409,7 @@ mod mappings {
         let x1 = inv0(x1);
         let x1 = -c1 * x1;
         let gx1 = x1 + c1;
+        // TODO: since c2 == 1, this can be replaced with ((gx1 * x1) + 1) * x1 == gx1 * x1.square() + x1
         let gx1 = gx1 * x1;
         let gx1 = gx1 + c2;
         let gx1 = gx1 * x1;
@@ -419,6 +422,7 @@ mod mappings {
             .expect("y2 should be a square based on our conditional selection above");
         let e3 = Choice::from(sgn0(y) as u8);
         let y = ct_select(-y, y, e2 ^ e3); // if e2 ^ e3 { -y } else { y };
+        // TODO: k == 1, so can be skipped
         let s = x * k;
         let t = y * k;
         (s, t)
