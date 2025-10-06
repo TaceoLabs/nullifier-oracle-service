@@ -126,7 +126,7 @@ contract KeyGen {
         if (allFinalizeSubmitted(st) && !st.storedNullifier) {
             st.storedNullifier = true;
             key_storage[id] = st.round1;
-            console.log("created nullifier key uwu");
+            console.log("created nullifier key");
         }
     }
 

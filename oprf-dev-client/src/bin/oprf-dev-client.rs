@@ -55,7 +55,7 @@ pub struct OprfDevClientConfig {
     #[clap(
         long,
         env = "OPRF_DEV_CLIENT_KEY_GEN_ADDRESS",
-        default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
     )]
     pub key_gen_contract: Address,
 
