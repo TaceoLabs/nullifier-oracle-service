@@ -17,7 +17,7 @@
 
 use std::{fmt, ops::Sub, str::FromStr};
 
-use alloy::primitives::U256;
+use alloy::primitives::{U256, ruint::FromUintError};
 use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
@@ -159,9 +159,10 @@ impl From<u128> for MerkleEpoch {
     }
 }
 
-impl From<U256> for MerkleEpoch {
-    fn from(value: U256) -> Self {
-        Self(u128::try_from(value).unwrap())
+impl TryFrom<U256> for MerkleEpoch {
+    type Error = FromUintError<u128>;
+    fn try_from(value: U256) -> Result<Self, FromUintError<u128>> {
+        Ok(Self(u128::try_from(value)?))
     }
 }
 

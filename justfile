@@ -53,6 +53,25 @@ run-world-auth-tree-indexer:
     trap "kill $auth_tree_indexer" SIGINT SIGTERM
     wait $auth_tree_indexer
 
+run-taceo-setup:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    cargo build --workspace
+    echo "generating keys..."
+    cargo run --bin key-gen -- --overwrite-old-keys
+    anvil &
+    anvil_pid=$!
+    echo "started anvil with PID $anvil_pid"
+    sleep 2
+    echo "starting KeyGen contract..."
+    just run-key-gen
+    just run-services &
+    sleep 2
+    echo "ready to run dev-client"
+    trap "kill $anvil_pid" SIGINT SIGTERM
+    wait $anvil_pid
+    
+
 run-services:
     #!/usr/bin/env bash
     mkdir -p logs

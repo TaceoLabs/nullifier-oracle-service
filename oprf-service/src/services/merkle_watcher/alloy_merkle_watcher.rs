@@ -65,9 +65,13 @@ impl AlloyMerkleWatcher {
                 match RootRecorded::decode_log(log.as_ref()) {
                     Ok(event) => {
                         tracing::info!("got epoch {} root {}", event.rootEpoch, event.root);
-                        merkle_root_store_clone
-                            .lock()
-                            .insert(event.rootEpoch.into(), event.root.into());
+                        if let Ok(epoch) = MerkleEpoch::try_from(event.rootEpoch) {
+                            merkle_root_store_clone
+                                .lock()
+                                .insert(epoch, event.root.into());
+                        } else {
+                            tracing::warn!("AccountRegistry send root epoch > u128");
+                        }
                     }
                     Err(err) => {
                         tracing::info!("failed to decode contract event: {err:?}");
@@ -106,7 +110,6 @@ impl MerkleWatcher for AlloyMerkleWatcher {
                 // is sane epoch - need to check on chain
             }
         }
-        // TODO is it fine to reconstruct this every time?
         let contract = AccountRegistry::new(self.contract_address, self.provider.clone());
         let valid = contract
             .isValidRoot(root.into())
