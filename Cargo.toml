@@ -9,8 +9,8 @@ members = [
     "oprf-service",
     "oprf-test",
     "oprf-types",
-    "poseidon2",
-    "smart-contract-mock"]
+    "poseidon2"
+]
 resolver = "3"
 
 [workspace.package]
@@ -75,11 +75,9 @@ rustls = "0.23.31"
 secrecy = "0.10"
 serde = { version = "1" }
 serde_json = { version = "1" }
-smart-contract-mock = { path = "smart-contract-mock" }
 tempfile = "3"
 thiserror = { version = "2" }
 tokio = { version = "1" }
-tokio-tungstenite = "0.27"
 tokio-util = "0.7"
 tower-http = "0.6"
 tracing = { version = "0.1" }

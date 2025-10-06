@@ -95,7 +95,7 @@ pub enum Error {
         expected: usize,
     },
     /// The DLog equality proof failed verification.
-    #[error("DLog prove could not be verified")]
+    #[error("DLog proof could not be verified")]
     InvalidDLogProof,
     /// Provided public key index is out of valid range.
     #[error("Index in public-key batch must be in range [0..6], but is {0}")]

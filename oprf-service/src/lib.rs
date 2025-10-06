@@ -32,7 +32,7 @@ use crate::services::{
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
     key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
-    merkle_watcher::{MerkleWatcherService, real::RealMerkleWatcher},
+    merkle_watcher::{MerkleWatcherService, alloy_merkle_watcher::AlloyMerkleWatcher},
     oprf::OprfService,
     secret_manager::aws::AwsSecretManager,
 };
@@ -124,7 +124,7 @@ pub async fn start(
 
     tracing::info!("spawning merkle watcher..");
     let merkle_watcher: MerkleWatcherService = Arc::new(
-        RealMerkleWatcher::init(
+        AlloyMerkleWatcher::init(
             config.account_registry_contract,
             &config.chain_ws_rpc_url,
             config.max_merkle_store_size,
@@ -244,6 +244,7 @@ pub async fn default_shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use std::array;
+    use std::collections::BTreeMap;
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
@@ -256,7 +257,7 @@ mod tests {
     use oprf_core::ddlog_equality::DLogEqualityChallenge;
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
-    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, sc_mock::MerkleRootUpdate};
+    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
 
@@ -367,10 +368,7 @@ mod tests {
             let max_merkle_store_size = 10;
             let chain_epoch_max_difference = 10;
             let merkle_watcher = Arc::new(TestMerkleWatcher::new(
-                vec![MerkleRootUpdate {
-                    hash: merkle_root,
-                    epoch: merkle_epoch,
-                }],
+                BTreeMap::from([(merkle_epoch, merkle_root)]),
                 max_merkle_store_size,
                 chain_epoch_max_difference,
             )?);

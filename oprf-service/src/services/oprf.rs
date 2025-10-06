@@ -83,7 +83,7 @@ pub(crate) struct OprfService {
 }
 
 impl OprfService {
-    /// Builds an [`OprfService`] from configuration, a [`CryptoDevice`], a [`ChainWatcherService`], and a Groth16 verifying key for the client proof.
+    /// Builds an [`OprfService`] from its core services and config values.
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn init(
         crypto_device: Arc<CryptoDevice>,
@@ -113,7 +113,7 @@ impl OprfService {
     ///
     /// This method executes the first step of the OPRF protocol:
     /// 1. Verifies the RP's nonce signature via the [`CryptoDevice`]. **The nonce is converted to le_bytes representation for signature verification**.
-    /// 2. Retrieves the Merkle root for the epoch specified in the request via the [`ChainWatcherService`].
+    /// 2. Check the Merkle root for the epoch specified in the request via the [`MerkleWatcherService`].
     /// 3. Verifies the client's Groth16 proof.
     /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`CryptoDevice`].
     /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.

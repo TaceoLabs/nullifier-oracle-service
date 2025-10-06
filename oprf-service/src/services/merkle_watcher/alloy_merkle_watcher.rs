@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -25,13 +25,13 @@ sol! {
     event RootRecorded(uint256 indexed root, uint256 timestamp, uint256 indexed rootEpoch);
 }
 
-pub(crate) struct RealMerkleWatcher {
+pub(crate) struct AlloyMerkleWatcher {
     merkle_root_store: Arc<Mutex<MerkleRootStore>>,
     provider: DynProvider, // do not drop provider while we want to stay subscribed
     contract_address: Address,
 }
 
-impl RealMerkleWatcher {
+impl AlloyMerkleWatcher {
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn init(
         contract_address: Address,
@@ -45,7 +45,7 @@ impl RealMerkleWatcher {
 
         let merkle_root_store = Arc::new(Mutex::new(
             MerkleRootStore::new(
-                Vec::new(),
+                BTreeMap::new(),
                 max_merkle_store_size,
                 chain_epoch_max_difference,
             )
@@ -85,7 +85,7 @@ impl RealMerkleWatcher {
 }
 
 #[async_trait]
-impl MerkleWatcher for RealMerkleWatcher {
+impl MerkleWatcher for AlloyMerkleWatcher {
     #[instrument(level = "debug", skip(self))]
     async fn is_root_valid(
         &self,

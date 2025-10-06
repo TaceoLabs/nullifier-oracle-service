@@ -115,11 +115,11 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
-        default_value = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
     )]
     pub key_gen_contract: Address,
 
-    /// The address of the `AccountRegistry` smart contract
+    /// The address of the AccountRegistry smart contract
     #[clap(
         long,
         env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT",

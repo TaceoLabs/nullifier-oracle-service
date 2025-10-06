@@ -31,19 +31,14 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
 witness = { workspace = true }
-
 
 [dev-dependencies]
 tempfile = { workspace = true }
 
-
 [features]
 default = ["tokio"]
-
 tokio = ["dep:tokio"]
-
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]

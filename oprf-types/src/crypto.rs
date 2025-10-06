@@ -57,6 +57,7 @@ pub struct UserPublicKeyBatch {
 }
 
 impl UserPublicKeyBatch {
+    /// Converts this batch into a proof input format, which is an array of pairs of coordinates.
     pub fn into_proof_input(self) -> [[ark_babyjubjub::Fq; 2]; 7] {
         self.values.map(|p| [p.x, p.y])
     }

@@ -1,19 +1,19 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use oprf_types::{MerkleEpoch, MerkleRoot, sc_mock::MerkleRootUpdate};
+use oprf_types::{MerkleEpoch, MerkleRoot};
 use tracing::instrument;
 
 use crate::metrics::METRICS_MERKLE_COUNT;
 
-pub(crate) mod real;
+pub(crate) mod alloy_merkle_watcher;
 #[cfg(test)]
 pub(crate) mod test;
 
 /// Dyn trait for the watcher service. Must be `Send` + `Sync` to work with Axum.
 pub(crate) type MerkleWatcherService = Arc<dyn MerkleWatcher + Send + Sync>;
 
-/// Errors returned by the [`ChainWatcher`] implementation.
+/// Errors returned by the [`MerkleWatcher`] implementation.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum MerkleWatcherError {
     #[error("Refusing to check, too far in future: {0:?}")]
@@ -24,11 +24,8 @@ pub(crate) enum MerkleWatcherError {
     ChainCommunicationError(#[from] eyre::Report),
 }
 
-/// Trait for services that watch blockchains for OPRF-related events.
-/// Handling of those events checkout [`crate::services::event_handler::ChainEventHandler`].
-///
-/// Implementations may poll the chain, subscribe to events, or
-/// otherwise track keygen/finalization contributions.
+/// Trait for services that watch blockchains for merkle root updates
+/// and provide functionality to check if a given root is valid,
 #[async_trait]
 pub(crate) trait MerkleWatcher {
     /// Check if a merkle root is valid.
@@ -52,33 +49,27 @@ pub(crate) struct MerkleRootStore {
 }
 
 impl MerkleRootStore {
-    /// Creates a new Merkle root store from an initial list of [`MerkleRootUpdate`]s.
+    /// Creates a new Merkle root store.
     ///
-    /// Sorts updates by epoch, sets the current epoch to the latest one,
-    /// and clips the store if it exceeds `max_merkle_store_size` from
-    /// the config.
-    /// Fails if the store size is zero or no updates are provided.
+    /// Clips the store if it exceeds `max_merkle_store_size`.
+    /// Fails if `max_merkle_store_size` is 0.
     pub(crate) fn new(
-        mut merkle_updates: Vec<MerkleRootUpdate>,
+        init_store: BTreeMap<MerkleEpoch, MerkleRoot>,
         max_merkle_store_size: usize,
         chain_epoch_max_difference: u128,
     ) -> eyre::Result<Self> {
         if max_merkle_store_size == 0 {
             eyre::bail!("Max merkle store size must be > 0");
         }
-        merkle_updates.sort_by_key(|m| m.epoch);
-        let current_epoch = merkle_updates
-            .last()
-            .map(|update| update.epoch)
-            .unwrap_or_default();
+        let current_epoch = init_store.keys().last().copied().unwrap_or_default();
 
-        if merkle_updates.len() > max_merkle_store_size {
+        if init_store.len() > max_merkle_store_size {
             tracing::info!("will clip merkle store to size: {max_merkle_store_size}");
         }
-        let store = merkle_updates
+        let store = init_store
             .into_iter()
             .rev()
-            .map(|mu| (mu.epoch, mu.hash))
+            .take(max_merkle_store_size)
             .collect::<BTreeMap<_, _>>();
         metrics::counter!(METRICS_MERKLE_COUNT).absolute(store.len() as u64);
         tracing::info!(

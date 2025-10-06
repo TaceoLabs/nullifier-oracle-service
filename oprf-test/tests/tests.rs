@@ -7,7 +7,7 @@ use alloy::{node_bindings::Anvil, signers::local::PrivateKeySigner};
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use groth16::Groth16;
-use oprf_client::{MAX_DEPTH, MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
+use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
 use oprf_test::{
     credentials,
     key_gen_sc_mock::{self, DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy},
@@ -15,7 +15,7 @@ use oprf_test::{
         self, ACCOUNT_REGISTRY_TREE_DEPTH, AuthTreeIndexer, DEFAULT_ACCOUNT_REGISTRY_ADDRESS,
     },
 };
-use oprf_types::{MerkleEpoch, ShareEpoch};
+use oprf_types::ShareEpoch;
 
 pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
@@ -71,24 +71,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Get InclusionProof for account...");
     let account_index = auth_tree_indexer.account_idx().await;
     let merkle_proof = auth_tree_indexer.get_proof(account_index).await?;
-    // TODO cleanup conversion of merkle_proof/merkle_membership
-    let depth = merkle_proof.proof.len() as u64;
-    let mut siblings = merkle_proof
-        .proof
-        .into_iter()
-        .map(|p| ark_babyjubjub::Fq::from_be_bytes_mod_order(&p.to_be_bytes::<32>()))
-        .collect::<Vec<_>>();
-    // pad sibling to max depth
-    for _ in 0..MAX_DEPTH as u64 - depth {
-        siblings.push(ark_babyjubjub::Fq::default());
-    }
-    let merkle_membership = MerkleMembership {
-        epoch: MerkleEpoch::default(),
-        root: merkle_proof.root.into(),
-        depth, // send actual depth of contract merkle tree
-        mt_index: merkle_proof.leaf_index,
-        siblings: siblings.try_into().unwrap(),
-    };
+    let merkle_membership = MerkleMembership::from(merkle_proof);
 
     println!("Creating nonce and and sign it...");
     println!("In a real-world scenario, the RP would sign the nonce.");

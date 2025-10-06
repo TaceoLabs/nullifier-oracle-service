@@ -1,7 +1,6 @@
 use std::{path::PathBuf, time::Duration};
 
 use oprf_service::config::{Environment, OprfPeerConfig};
-use smart_contract_mock::config::SmartContractMockConfig;
 
 use crate::{
     key_gen_sc_mock::DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
@@ -10,7 +9,6 @@ use crate::{
 
 pub mod credentials;
 pub mod key_gen_sc_mock;
-pub mod sc_mock;
 pub mod world_id_protocol_mock;
 
 async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &str) -> String {
@@ -42,38 +40,6 @@ async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &s
     tokio::spawn(async move {
         let res = oprf_service::start(config, never).await;
         eprintln!("service failed to start: {res:?}");
-    });
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            if reqwest::get(url.clone() + "/health").await.is_ok() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .expect("can start");
-    url
-}
-
-pub async fn start_smart_contract_mock() -> String {
-    let url = "http://localhost:6789".to_string();
-    let config = SmartContractMockConfig {
-        bind_addr: "0.0.0.0:6789".parse().expect("can parse"),
-        max_root_cache_size: 10,
-        add_pk_interval: Duration::from_secs(30),
-        init_rp_registry: 1,
-        add_rp_interval: Duration::from_secs(30),
-        seed: 42,
-        oprf_services: 3,
-        oprf_degree: 1,
-        oprf_public_keys_secret_id: "oprf/sc/pubs".to_string(),
-        merkle_depth: 30,
-    };
-    let never = async { futures::future::pending::<()>().await };
-    tokio::spawn(async move {
-        let res = smart_contract_mock::start(config, never).await;
-        eprintln!("smart contract mock failed to start: {res:?}");
     });
     tokio::time::timeout(Duration::from_secs(1), async {
         loop {

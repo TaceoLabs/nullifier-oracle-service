@@ -10,7 +10,7 @@ pub struct AuthTreeIndexerConfig {
     #[clap(
         long,
         env = "AUTH_TREE_INDEXER_BIND_ADDR",
-        default_value = "0.0.0.0:8585"
+        default_value = "0.0.0.0:8080"
     )]
     pub bind_addr: SocketAddr,
 

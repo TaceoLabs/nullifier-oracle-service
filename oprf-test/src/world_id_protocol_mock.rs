@@ -9,10 +9,10 @@ use alloy::{
     sol,
     sol_types::SolEvent as _,
 };
-use ark_ff::{AdditiveGroup as _, PrimeField as _};
+use ark_ff::{AdditiveGroup as _, BigInt, PrimeField as _};
 use futures::StreamExt as _;
-use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, UserKeyMaterial};
-use oprf_types::crypto::UserPublicKeyBatch;
+use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MAX_DEPTH, MerkleMembership, UserKeyMaterial};
+use oprf_types::{MerkleEpoch, crypto::UserPublicKeyBatch};
 use poseidon2::{POSEIDON2_BN254_T2_PARAMS, Poseidon2};
 use semaphore_rs_hasher::Hasher;
 use semaphore_rs_trees::{Branch, InclusionProof, imt::MerkleTree};
@@ -53,21 +53,50 @@ pub struct DecodedAccountCreated {
     pub offchain_signer_commitment_hex: String,
 }
 
+/// The response from an inclusion proof request.
+/// Copied from [here](https://github.com/worldcoin/world-id-protocol/blob/main/crates/world-id-core/src/types.rs).
 #[derive(Serialize, Deserialize)]
-pub struct ProofResponse {
+pub struct InclusionProofResponse {
+    /// The account index
     pub account_index: u64,
+    /// The index of the leaf in the tree.
     pub leaf_index: u64,
+    /// The hash root of the tree.
     pub root: U256,
+    /// The entire proof of inclusion for all the nodes in the path.
     pub proof: Vec<U256>,
 }
 
-impl ProofResponse {
-    pub fn new(account_index: u64, leaf_index: u64, root: U256, proof: Vec<U256>) -> Self {
+impl InclusionProofResponse {
+    /// Instantiates a new inclusion proof response.
+    pub const fn new(account_index: u64, leaf_index: u64, root: U256, proof: Vec<U256>) -> Self {
         Self {
             account_index,
             leaf_index,
             root,
             proof,
+        }
+    }
+}
+
+impl From<InclusionProofResponse> for MerkleMembership {
+    fn from(value: InclusionProofResponse) -> Self {
+        let depth = value.proof.len() as u64;
+        let mut siblings = value
+            .proof
+            .into_iter()
+            .map(|p| ark_babyjubjub::Fq::new(BigInt(p.into_limbs())))
+            .collect::<Vec<_>>();
+        // pad siblings to max depth
+        for _ in 0..MAX_DEPTH as u64 - depth {
+            siblings.push(ark_babyjubjub::Fq::default());
+        }
+        MerkleMembership {
+            epoch: MerkleEpoch::default(),
+            root: value.root.into(),
+            depth, // send actual depth of contract merkle tree
+            mt_index: value.leaf_index,
+            siblings: siblings.try_into().expect("padded ot correct len"),
         }
     }
 }
@@ -124,7 +153,7 @@ impl AuthTreeIndexer {
         })
     }
 
-    pub async fn get_proof(&self, account_index: u64) -> eyre::Result<ProofResponse> {
+    pub async fn get_proof(&self, account_index: u64) -> eyre::Result<InclusionProofResponse> {
         if account_index == 0 {
             eyre::bail!("account index cannot be zero");
         }
@@ -132,7 +161,7 @@ impl AuthTreeIndexer {
         let tree = self.tree.read().await;
         match tree.proof(leaf_index) {
             Some(proof) => {
-                let resp = ProofResponse::new(
+                let resp = InclusionProofResponse::new(
                     account_index,
                     leaf_index as u64,
                     tree.root(),

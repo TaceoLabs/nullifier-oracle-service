@@ -29,13 +29,12 @@ nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
 oprf-core = { workspace = true }
 oprf-service = { workspace = true }
-oprf-types = { workspace = true, features = ["mock-chain-watcher"] }
+oprf-types = { workspace = true }
 poseidon2 = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 semaphore-rs-hasher = "0.5.0"
 semaphore-rs-trees = "0.5.0"
 serde = { workspace = true, features = ["derive"] }
-smart-contract-mock.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true

@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
-use oprf_types::{MerkleEpoch, MerkleRoot, sc_mock::MerkleRootUpdate};
+use oprf_types::{MerkleEpoch, MerkleRoot};
 use parking_lot::Mutex;
 use tracing::instrument;
 
@@ -11,13 +13,13 @@ pub(crate) struct TestMerkleWatcher {
 
 impl TestMerkleWatcher {
     pub(crate) fn new(
-        merkle_updates: Vec<MerkleRootUpdate>,
+        init_store: BTreeMap<MerkleEpoch, MerkleRoot>,
         max_merkle_store_size: usize,
         chain_epoch_max_difference: u128,
     ) -> eyre::Result<Self> {
         Ok(Self {
             merkle_root_store: Mutex::new(MerkleRootStore::new(
-                merkle_updates,
+                init_store,
                 max_merkle_store_size,
                 chain_epoch_max_difference,
             )?),

@@ -11,7 +11,9 @@ const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ+DLBE-v1";
 pub fn random_user_keys<R: Rng + CryptoRng>(rng: &mut R) -> UserKeyMaterial {
     let sk = EdDSAPrivateKey::random(rng);
     let pk_index = rng.gen_range(0..MAX_PUBLIC_KEYS) as u64;
-    let mut pks = UserPublicKeyBatch::random(rng);
+    let mut pks = UserPublicKeyBatch {
+        values: rng.r#gen(),
+    };
     pks.values[pk_index as usize] = sk.public().pk;
     UserKeyMaterial {
         pk_batch: pks,

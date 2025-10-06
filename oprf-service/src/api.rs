@@ -5,9 +5,6 @@
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health, readiness, and liveness endpoints (`/health`, `/ready`, `/live`).
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/oprf/init` and `/oprf/finish`.
-//!
-//! The `api` module uses `axum` for routing and request handling, and all routes are designed to be stateless,
-//! forwarding requests to the appropriate service (`OprfService`, `ChainWatcherService`, etc.).
 
 use axum::Router;
 use oprf_types::crypto::PartyId;

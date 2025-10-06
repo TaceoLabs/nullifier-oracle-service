@@ -1,6 +1,4 @@
-//#![deny(missing_docs)]
-//! # oprf-types
-//!
+#![deny(missing_docs)]
 //! Core type definitions for the OPRF service and client.
 //!
 //! This crate groups together the strongly-typed values and message
@@ -13,9 +11,6 @@
 //! * On-chain contribution types exchanged during key generation (see
 //!   [`chain`] module).
 //! * API versioned types for client/server communication (see [`api`] module).
-//! * Optional types for communicating with the mock smart contract used in
-//!   staging tests (see [`sc_mock`] module, enabled with the
-//!   `mock-chain-watcher` feature).
 //!
 //! Use these types to pass, store, and (de)serialize identifiers and
 //! cryptographic values in a type-safe way throughout your application.
@@ -29,8 +24,6 @@ use serde::{Deserialize, Serialize};
 pub mod api;
 pub mod chain;
 pub mod crypto;
-#[cfg(feature = "mock-chain-watcher")]
-pub mod sc_mock;
 
 /// Represents an epoch of a merkle-root. Users will provide a `MerkleEpoch` and retrieve the associated [`MerkleRoot`].
 #[derive(

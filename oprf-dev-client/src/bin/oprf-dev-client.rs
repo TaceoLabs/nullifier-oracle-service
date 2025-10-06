@@ -14,12 +14,15 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::Parser;
 use eyre::Context as _;
 use oprf_client::{
-    MAX_DEPTH, MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
+    MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
     zk::Groth16Material,
 };
-use oprf_test::key_gen_sc_mock::{DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy};
-use oprf_test::world_id_protocol_mock::{self, ProofResponse};
-use oprf_types::{MerkleEpoch, RpId, ShareEpoch, crypto::RpNullifierKey};
+use oprf_test::world_id_protocol_mock::{self};
+use oprf_test::{
+    key_gen_sc_mock::{DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy},
+    world_id_protocol_mock::InclusionProofResponse,
+};
+use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
 use parking_lot::Mutex;
 use rand::SeedableRng;
 use secrecy::{ExposeSecret, SecretString};
@@ -43,14 +46,6 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_THRESHOLD", default_value = "2")]
     pub threshold: usize,
 
-    /// Chain URL.
-    #[clap(
-        long,
-        env = "OPRF_DEV_CLIENT_CHAIN_URL",
-        default_value = "http://localhost:6789"
-    )]
-    pub chain_url: String,
-
     /// The Address of the KeyGen contract.
     #[clap(
         long,
@@ -62,10 +57,10 @@ pub struct OprfDevClientConfig {
     /// The RPC for chain communication
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_RPC_URL",
+        env = "OPRF_DEV_CLIENT_CHAIN_WS_RPC_URL",
         default_value = "ws://localhost:8545"
     )]
-    pub key_gen_rpc_url: String,
+    pub chain_ws_rpc_url: String,
 
     /// Wallet private key
     #[clap(long, env = "OPRF_DEV_CLIENT_WALLET_PRIVATE_KEY")]
@@ -97,7 +92,7 @@ pub struct OprfDevClientConfig {
     #[clap(
         long,
         env = "OPRF_DEV_CLIENT_AUTH_TREE_INDEXER_API_URL",
-        default_value = "http://localhost:8585"
+        default_value = "http://localhost:8080"
     )]
     pub auth_tree_indexer_api_url: String,
 
@@ -211,7 +206,7 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("init key gen..");
     let mut key_gen_contract = KeyGenProxy::connect(
-        &config.key_gen_rpc_url,
+        &config.chain_ws_rpc_url,
         DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
         wallet,
     )
@@ -222,33 +217,18 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("while creating key-gen")?;
 
+    tracing::info!("crating account..");
     let key_material = world_id_protocol_mock::fetch_key_material()?;
+    world_id_protocol_mock::create_account(&config.chain_ws_rpc_url);
 
     let merkle_proof = reqwest::get(format!(
         "{}/proof/{}",
         config.auth_tree_indexer_api_url, config.account_id
     ))
     .await?
-    .json::<ProofResponse>()
+    .json::<InclusionProofResponse>()
     .await?;
-    // TODO cleanup conversion of merkle_proof/merkle_membership
-    let depth = merkle_proof.proof.len() as u64;
-    let mut siblings = merkle_proof
-        .proof
-        .into_iter()
-        .map(|p| ark_babyjubjub::Fq::from_be_bytes_mod_order(&p.to_be_bytes::<32>()))
-        .collect::<Vec<_>>();
-    // pad sibling to max depth
-    for _ in 0..MAX_DEPTH as u64 - depth {
-        siblings.push(ark_babyjubjub::Fq::default());
-    }
-    let merkle_membership = MerkleMembership {
-        epoch: MerkleEpoch::default(),
-        root: merkle_proof.root.into(),
-        depth, // send actual depth of contract merkle tree
-        mt_index: merkle_proof.leaf_index,
-        siblings: siblings.try_into().unwrap(),
-    };
+    let merkle_membership = MerkleMembership::from(merkle_proof);
 
     let mut nullifier_results = JoinSet::new();
     let durations = Arc::new(Mutex::new(Vec::new()));

@@ -10,10 +10,6 @@ license.workspace = true
 publish.workspace = true
 readme.workspace = true
 
-[features]
-default = ["mock-chain-watcher"]
-mock-chain-watcher = ["oprf-types/mock-chain-watcher", "tokio-tungstenite"]
-
 [dependencies]
 alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
 ark-babyjubjub = { workspace = true }
@@ -40,17 +36,14 @@ oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
-reqwest = { workspace = true, features = ["json"] }
 rustls = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
-tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"], optional = true }
 tokio-util = { workspace = true }
 tower-http = { workspace = true, features = ["set-header", "cors", "trace"] }
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 
