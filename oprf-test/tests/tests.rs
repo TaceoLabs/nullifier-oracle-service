@@ -82,7 +82,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let current_time_stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("system time is after unix epoch")
-        .as_millis() as u64;
+        .as_secs();
 
     let mut msg = Vec::new();
     msg.extend(nonce.into_bigint().to_bytes_le());

@@ -23,9 +23,9 @@ pub struct CredentialsSignature {
     pub type_id: ark_babyjubjub::Fq,
     /// The `claims hash` + `associated data hash`.
     pub hashes: [ark_babyjubjub::Fq; 2], // [claims_hash, associated_data_hash]
-    /// Timestamp of original issuance (unix ms).
+    /// Timestamp of original issuance (unix secs).
     pub genesis_issued_at: u64,
-    /// Expiration timestamp (unix ms).
+    /// Expiration timestamp (unix secs).
     pub expires_at: u64,
     /// The issuer of the credential.  
     /// Currently this is a public input to the Groth16 proof.  
