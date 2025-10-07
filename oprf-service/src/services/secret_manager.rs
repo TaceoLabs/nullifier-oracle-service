@@ -4,9 +4,10 @@
 //! persist and retrieve cryptographic material such as
 //! [`PeerPrivateKey`]s and [`RpMaterial`]s.
 //!
-//! Current implementations:
+//! Current `SecretManager` implementations:
 //! - AWS (cloud storage)
-//! - Local file storage (optional, behind `file-secret-manager` feature)
+//! - test secret manager (contains initially provided secrets)
+
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;

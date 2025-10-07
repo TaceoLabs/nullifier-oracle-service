@@ -1,3 +1,13 @@
+//! This module provides functionality for watching and validating Merkle roots associated with
+//! blockchain epochs. It includes:
+//!
+//! - A `MerkleWatcher` trait for services that validate Merkle roots.
+//! - A `MerkleRootStore` for storing and Merkle roots with associated epochs.
+//!
+//! Current `MerkleWatcher` implementations:
+//! - alloy (uses the alloy crate to interact with smart contracts)
+//! - test (contains initially provided merkle roots)
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
