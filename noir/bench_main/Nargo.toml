@@ -1,0 +1,7 @@
+[package]
+name = "bench_main"
+type = "bin"
+authors = ["TACEO <hello@taceo.io>"]
+
+[dependencies]
+oprf_query = { path = "../oprf_query" }
