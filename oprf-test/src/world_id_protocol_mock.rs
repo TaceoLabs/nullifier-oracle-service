@@ -261,11 +261,12 @@ pub const DEFAULT_ACCOUNT_REGISTRY_ADDRESS: Address =
     address!("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
 pub const ACCOUNT_REGISTRY_TREE_DEPTH: usize = 10;
 
-// forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-pub fn deploy_account_registry(rpc_url: &str) {
+// TREE_DEPTH=10 forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cmd.current_dir(dir.join("../contracts"))
+        .env("TREE_DEPTH", tree_depth.to_string())
         .arg("script")
         .arg("script/AccountRegistry.s.sol")
         .arg("--rpc-url")

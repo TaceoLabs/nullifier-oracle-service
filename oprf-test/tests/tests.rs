@@ -34,7 +34,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let anvil = Anvil::new().spawn();
 
     println!("Deploying AccountRegistry contract...");
-    world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
+    world_id_protocol_mock::deploy_account_registry(&anvil.endpoint(), ACCOUNT_REGISTRY_TREE_DEPTH);
 
     println!("Deploying KeyGen contract...");
     key_gen_sc_mock::deploy_key_gen_contract(&anvil.endpoint());

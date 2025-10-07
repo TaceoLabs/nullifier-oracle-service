@@ -29,7 +29,7 @@ sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
     KeyGenContract,
-    "../contracts/abi.json"
+    "../contracts/KeyGen.json"
 );
 
 pub(crate) struct AlloyKeyGenWatcher {

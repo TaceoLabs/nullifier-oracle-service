@@ -45,7 +45,7 @@ sol!(
     #[allow(missing_docs)]
     #[sol(rpc)]
     KeyGenContract,
-    "../contracts/abi.json"
+    "../contracts/KeyGen.json"
 );
 
 pub struct KeyGenProxy {

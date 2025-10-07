@@ -1,17 +1,14 @@
 {
   "lib/forge-std": {
-    "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+    "rev": "17a9b2398a7d629931dc66a168a098d051d53dc6"
   },
   "lib/openzeppelin-contracts": {
-    "tag": {
-      "name": "v5.4.0",
-      "rev": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0"
-    }
+    "rev": "765b288a6a273f8c267adcd409094212dbd5e3cb"
   },
   "lib/poseidon-solidity": {
-    "tag": {
-      "name": "v0.0.5",
-      "rev": "8205c97ec4a35a9adb854b70b2c9ba92668d1304"
-    }
+    "rev": "8205c97ec4a35a9adb854b70b2c9ba92668d1304"
+  },
+  "lib/world-id-protocol": {
+    "rev": "5305d207c7570a66f1d578cda511d06a6a307796"
   }
 }
