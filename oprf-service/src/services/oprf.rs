@@ -135,7 +135,7 @@ impl OprfService {
         }
 
         // check the time stamp against system time +/- difference
-        let req_time_stamp = Duration::from_millis(request.current_time_stamp);
+        let req_time_stamp = Duration::from_secs(request.current_time_stamp);
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("system time is after unix epoch");

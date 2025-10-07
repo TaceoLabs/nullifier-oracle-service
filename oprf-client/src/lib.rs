@@ -237,6 +237,8 @@ impl SignedOprfQuery {
 /// 4. Collects the responses and verifies the challenges.
 /// 5. Generates the final Groth16 nullifier proof along with public inputs.
 ///
+/// **Note**: the timestamps in the credentials must be given as UNIX seconds
+///
 /// # Arguments
 ///
 /// * `services` - List of OPRF service URLs to contact.
