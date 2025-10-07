@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, process::Command, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, process::Command, sync::Arc, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -173,11 +173,12 @@ impl AuthTreeIndexer {
         }
     }
 
-    pub async fn account_idx(&mut self) -> u64 {
-        self.account_idx
-            .recv()
-            .await
-            .expect("account will be added")
+    pub async fn account_idx(&mut self) -> eyre::Result<u64> {
+        Ok(
+            tokio::time::timeout(Duration::from_secs(30), self.account_idx.recv())
+                .await?
+                .expect("account will be added"),
+        )
     }
 }
 

@@ -69,7 +69,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     world_id_protocol_mock::create_account(&anvil.endpoint());
 
     println!("Get InclusionProof for account...");
-    let account_index = auth_tree_indexer.account_idx().await;
+    let account_index = auth_tree_indexer.account_idx().await?;
     let merkle_proof = auth_tree_indexer.get_proof(account_index).await?;
     let merkle_membership = MerkleMembership::from(merkle_proof);
 
