@@ -1102,7 +1102,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2196,7 +2196,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 [[package]]
 name = "groth16"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/groth16.git#68791ce41f1d075393e2e765ee0da308f9f5279d"
+source = "git+https://github.com/TaceoLabs/groth16.git#6529e47b7a9a792cf92425f2a9682ab4d4c433df"
 dependencies = [
  "ark-ec",
  "ark-ff 0.5.0",
