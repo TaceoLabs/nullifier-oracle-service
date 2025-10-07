@@ -121,6 +121,3 @@ build-push-docker-image-oprf-service-amd TAG:
 
 build-push-docker-image-key-gen-amd TAG:
   docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{TAG}}-amd64 -f build/Dockerfile.key-gen .
-  
-build-push-docker-image-smart-contract-mock-amd TAG:
-  docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/smart-contract-mock:{{TAG}}-amd64 -f build/Dockerfile.smart-contract-mock .
