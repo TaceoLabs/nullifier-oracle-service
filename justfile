@@ -13,6 +13,7 @@ unit-tests:
     cargo test --release --all-features --lib
 
 integration-tests:
+    cargo run --bin key-gen -- --overwrite-old-keys
     cargo test --release --package oprf-test
 
 all-tests:
