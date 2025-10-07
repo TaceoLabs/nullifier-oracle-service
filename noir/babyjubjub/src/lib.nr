@@ -1,10 +1,31 @@
-struct BabyJubJubPoint {
+pub struct BabyJubJubPoint {
     x: Field,
     y: Field,
 }
 
 impl BabyJubJubPoint {
-    fn add(self, other: BabyJubJubPoint) -> BabyJubJubPoint {
+    pub fn new_unchecked(x: Field, y: Field) -> BabyJubJubPoint {
+        BabyJubJubPoint { x, y }
+    }
+
+    fn is_on_curve(self) -> bool {
+        let a = 168700;
+        let d = 168696;
+        let x2 = self.x * self.x;
+        let y2 = self.y * self.y;
+        a * x2 + y2 == 1 + d * x2 * y2
+    }
+
+    pub fn new(x: Field, y: Field) -> BabyJubJubPoint {
+        let p = BabyJubJubPoint::new_unchecked(x, y);
+        assert(p.is_on_curve());
+        p
+    }
+    pub fn xy(self) -> (Field, Field) {
+        (self.x, self.y)
+    }
+
+    pub fn add(self, other: BabyJubJubPoint) -> BabyJubJubPoint {
         // based on the circom implementation at <https://github.com/iden3/circomlib/blob/35e54ea21da3e8762557234298dbb553c175ea8d/circuits/babyjub.circom>
         let a = 168700;
         let d = 168696;
@@ -18,7 +39,7 @@ impl BabyJubJubPoint {
         BabyJubJubPoint { x, y }
     }
 
-    fn double(self) -> BabyJubJubPoint {
+    pub fn double(self) -> BabyJubJubPoint {
         // Implement point doubling on Baby Jubjub curve
         // Placeholder implementation
         self.add(self)
