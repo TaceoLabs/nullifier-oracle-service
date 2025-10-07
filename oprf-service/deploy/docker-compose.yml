@@ -1,10 +1,19 @@
 services:
+  postgres:
+    container_name: "postgres"
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
   localstack:
     image: localstack/localstack
     container_name: localstack
     ports:
       - "4566:4566"            
-      - "4510-4559:4510-4559"  
     environment:
       - SERVICES=secretsmanager
       - DEBUG=1

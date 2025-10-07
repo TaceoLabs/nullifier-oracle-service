@@ -12,7 +12,9 @@
 
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
+use alloy::primitives::Address;
 use clap::{Parser, ValueEnum};
+use secrecy::SecretString;
 
 /// The environment the service is running in.
 ///
@@ -109,21 +111,33 @@ pub struct OprfPeerConfig {
     #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
     pub user_verification_key_path: PathBuf,
 
-    /// Chain URL.
-    /// TODO this is heavy wip, and will change. This notice
-    /// is here to be removed as soon as the design gets more clear
-    #[clap(long, env = "OPRF_SERVICE_CHAIN_URL")]
-    pub chain_url: String,
-
-    /// Interval to check the key rotation commands on the smart contract.
+    /// The Address of the KeyGen contract.
     #[clap(
         long,
-        env = "OPRF_SERVICE_CHAIN_CHECK_INTERVAL",
-        default_value = "10s",
-        value_parser = humantime::parse_duration
-
+        env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
+        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
     )]
-    pub chain_check_interval: Duration,
+    pub key_gen_contract: Address,
+
+    /// The address of the AccountRegistry smart contract
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT",
+        default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    )]
+    pub account_registry_contract: Address,
+
+    /// Wallet private key
+    #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY")]
+    pub wallet_private_key: SecretString,
+
+    /// The websocket rpc url of the chain
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
+        default_value = "ws://127.0.0.1:8545"
+    )]
+    pub chain_ws_rpc_url: String,
 
     /// Max epoch in the future.
     /// If an epoch is too far in the future, the service will not perform a manual check. This is defined by this value (no longer than this difference inclusive).

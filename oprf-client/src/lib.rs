@@ -95,7 +95,7 @@ pub enum Error {
         expected: usize,
     },
     /// The DLog equality proof failed verification.
-    #[error("DLog prove could not be verified")]
+    #[error("DLog proof could not be verified")]
     InvalidDLogProof,
     /// Provided public key index is out of valid range.
     #[error("Index in public-key batch must be in range [0..6], but is {0}")]
@@ -401,6 +401,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
                 share_epoch: query.share_epoch,
             },
             merkle_epoch: merkle_membership.epoch,
+            merkle_root: merkle_membership.root,
             action: query.action,
             nonce: query.nonce,
             signature: query.nonce_signature,

@@ -23,7 +23,7 @@ template MerkleLeaf() {
     out <== hasher.out[1];
 }
 
-// Choses a public key from the list of NUM_KEYS public keys based on the index. If the index is out of range, the result is zero. There is no check enforcing this zero, since in this use case it is checked later on anyway.
+// Chooses a public key from the list of NUM_KEYS public keys based on the index. If the index is out of range, the result is zero. There is no check enforcing this zero, since in this use case it is checked later on anyway.
 template ChoosePublicKey(NUM_KEYS) {
     signal input pk[NUM_KEYS][2];
     signal input index; // 0..NUM_KEYS-1

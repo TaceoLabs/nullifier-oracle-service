@@ -1,6 +1,4 @@
-//#![deny(missing_docs)]
-//! # oprf-types
-//!
+#![deny(missing_docs)]
 //! Core type definitions for the OPRF service and client.
 //!
 //! This crate groups together the strongly-typed values and message
@@ -13,22 +11,19 @@
 //! * On-chain contribution types exchanged during key generation (see
 //!   [`chain`] module).
 //! * API versioned types for client/server communication (see [`api`] module).
-//! * Optional types for communicating with the mock smart contract used in
-//!   staging tests (see [`sc_mock`] module, enabled with the
-//!   `mock-chain-watcher` feature).
 //!
 //! Use these types to pass, store, and (de)serialize identifiers and
 //! cryptographic values in a type-safe way throughout your application.
 
 use std::{fmt, ops::Sub, str::FromStr};
 
+use alloy::primitives::{U256, ruint::FromUintError};
+use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
 pub mod chain;
 pub mod crypto;
-#[cfg(feature = "mock-chain-watcher")]
-pub mod sc_mock;
 
 /// Represents an epoch of a merkle-root. Users will provide a `MerkleEpoch` and retrieve the associated [`MerkleRoot`].
 #[derive(
@@ -140,6 +135,18 @@ impl FromStr for MerkleRoot {
     }
 }
 
+impl From<U256> for MerkleRoot {
+    fn from(value: U256) -> Self {
+        Self(ark_babyjubjub::Fq::new(ark_ff::BigInt(value.into_limbs())))
+    }
+}
+
+impl From<MerkleRoot> for U256 {
+    fn from(value: MerkleRoot) -> Self {
+        U256::from_limbs(value.0.into_bigint().0)
+    }
+}
+
 impl From<u128> for RpId {
     fn from(value: u128) -> Self {
         Self(value)
@@ -149,6 +156,13 @@ impl From<u128> for RpId {
 impl From<u128> for MerkleEpoch {
     fn from(value: u128) -> Self {
         Self(value)
+    }
+}
+
+impl TryFrom<U256> for MerkleEpoch {
+    type Error = FromUintError<u128>;
+    fn try_from(value: U256) -> Result<Self, FromUintError<u128>> {
+        Ok(Self(u128::try_from(value)?))
     }
 }
 

@@ -1,19 +1,31 @@
 use std::{
     path::PathBuf,
+    str::FromStr,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
-use ark_ff::UniformRand as _;
+use alloy::{
+    network::EthereumWallet,
+    primitives::Address,
+    signers::{k256, local::PrivateKeySigner},
+};
+use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::Parser;
-use eyre::Context;
+use eyre::Context as _;
 use oprf_client::{
     MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
     zk::Groth16Material,
 };
-use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey, sc_mock::SignNonceResponse};
+use oprf_test::world_id_protocol_mock::{self};
+use oprf_test::{
+    key_gen_sc_mock::{DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy},
+    world_id_protocol_mock::InclusionProofResponse,
+};
+use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
 use parking_lot::Mutex;
 use rand::SeedableRng;
+use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 
 /// The configuration for the OPRF client.
@@ -34,13 +46,25 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_THRESHOLD", default_value = "2")]
     pub threshold: usize,
 
-    /// Chain URL.
+    /// The Address of the KeyGen contract.
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_CHAIN_URL",
-        default_value = "http://localhost:6789"
+        env = "OPRF_DEV_CLIENT_KEY_GEN_ADDRESS",
+        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
     )]
-    pub chain_url: String,
+    pub key_gen_contract: Address,
+
+    /// The RPC for chain communication
+    #[clap(
+        long,
+        env = "OPRF_DEV_CLIENT_CHAIN_WS_RPC_URL",
+        default_value = "ws://localhost:8545"
+    )]
+    pub chain_ws_rpc_url: String,
+
+    /// Wallet private key
+    #[clap(long, env = "OPRF_DEV_CLIENT_WALLET_PRIVATE_KEY")]
+    pub wallet_private_key: SecretString,
 
     /// The interval in which nullifiers are generated
     #[clap(
@@ -63,24 +87,33 @@ pub struct OprfDevClientConfig {
         value_parser = humantime::parse_duration
     )]
     pub stats_interval: Duration,
+
+    /// AuthTreeIndexer address
+    #[clap(
+        long,
+        env = "OPRF_DEV_CLIENT_AUTH_TREE_INDEXER_API_URL",
+        default_value = "http://localhost:8080"
+    )]
+    pub auth_tree_indexer_api_url: String,
+
+    /// AccountRegistry account id
+    #[clap(long, env = "OPRF_DEV_CLIENT_ACCOUNT_ID", default_value = "1")]
+    pub account_id: usize,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_nullifier(
     services: &[String],
     threshold: usize,
-    chain_url: &str,
     rp_id: RpId,
     rp_nullifier_key: RpNullifierKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
+    nonce: ark_babyjubjub::Fq,
+    current_time_stamp: u64,
+    signature: k256::ecdsa::Signature,
 ) -> eyre::Result<()> {
     let mut rng = rand_chacha::ChaCha12Rng::from_seed(rand::random());
-    let nonce = ark_babyjubjub::Fq::rand(&mut rng);
-
-    let SignNonceResponse {
-        signature,
-        current_time_stamp,
-    } = oprf_test::sc_mock::sign_nonce(chain_url, rp_id, nonce).await?;
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let groth16_material = Groth16Material::new(
@@ -155,27 +188,47 @@ async fn main() -> eyre::Result<()> {
     );
 
     tracing::info!("health check for all peers and SC Mock...");
-    let mut health_checks = config
+    let health_checks = config
         .services
         .iter()
         .map(|service| health_check(format!("{service}/health")))
         .collect::<JoinSet<_>>();
-    let sc_health_url = format!("{}/health", config.chain_url);
-    health_checks.spawn(health_check(sc_health_url));
 
     tokio::time::timeout(Duration::from_secs(5), health_checks.join_all())
         .await
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
 
-    tracing::info!("register_rp");
-    let (rp_id, rp_nullifier_key) = oprf_test::sc_mock::register_rp(&config.chain_url).await?;
+    tracing::info!("connecting to ETH wallet...");
+    let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
+        .context("while reading wallet private key")?;
+    let wallet = EthereumWallet::from(private_key);
 
-    let key_material = oprf_test::credentials::random_user_keys(&mut rand::thread_rng());
+    tracing::info!("init key gen..");
+    let mut key_gen_contract = KeyGenProxy::connect(
+        &config.chain_ws_rpc_url,
+        DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
+        wallet,
+    )
+    .await
+    .context("while connecting to KeyGen Proxy")?;
+    let (rp_id, rp_nullifier_key) = key_gen_contract
+        .init_key_gen()
+        .await
+        .context("while creating key-gen")?;
 
-    tracing::info!("register_public_key");
-    let merkle_membership =
-        oprf_test::sc_mock::register_public_key(&config.chain_url, &key_material.pk_batch).await?;
+    tracing::info!("crating account..");
+    let key_material = world_id_protocol_mock::fetch_key_material()?;
+    world_id_protocol_mock::create_account(&config.chain_ws_rpc_url);
+
+    let merkle_proof = reqwest::get(format!(
+        "{}/proof/{}",
+        config.auth_tree_indexer_api_url, config.account_id
+    ))
+    .await?
+    .json::<InclusionProofResponse>()
+    .await?;
+    let merkle_membership = MerkleMembership::from(merkle_proof);
 
     let mut nullifier_results = JoinSet::new();
     let durations = Arc::new(Mutex::new(Vec::new()));
@@ -196,19 +249,32 @@ async fn main() -> eyre::Result<()> {
         let durations_clone = Arc::clone(&durations);
         let services = config.services.clone();
         let threshold = config.threshold;
-        let chain_url = config.chain_url.clone();
         let merkle_membership = merkle_membership.clone();
         let key_material = key_material.clone();
+        let nonce = ark_babyjubjub::Fq::rand(&mut rand::thread_rng());
+        let current_time_stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system time is after unix epoch")
+            .as_millis() as u64;
+
+        let mut msg = Vec::new();
+        msg.extend(nonce.into_bigint().to_bytes_le());
+        msg.extend(current_time_stamp.to_le_bytes());
+        let signature = key_gen_contract
+            .sign(rp_id, &msg)
+            .ok_or_else(|| eyre::eyre!("unknown rp id {rp_id}"))?;
         nullifier_results.spawn(async move {
             let start = Instant::now();
             run_nullifier(
                 &services,
                 threshold,
-                &chain_url,
                 rp_id,
                 rp_nullifier_key,
                 merkle_membership,
                 key_material,
+                nonce,
+                current_time_stamp,
+                signature,
             )
             .await
             .expect("does not fail");

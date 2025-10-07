@@ -8,16 +8,19 @@
 //!
 //! # Services overview
 //!
-//! - [`chain_watcher`] – watches the blockchain for events relevant to the peer.
 //! - [`crypto_device`] – manages cryptographic operations and key material.
 //! - [`event_handler`] – handles chain events sequentially to avoid locks.
+//! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the peer.
+//! - [`merkle_watcher`] – watches the blockchain for merkle-root update events.
 //! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
 //! - [`secret_gen`] – handles multi-round secret generation protocols.
 //! - [`secret_manager`] – stores and retrieves secrets (AWS or local file based).
 //! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
-pub(crate) mod chain_watcher;
+//! - [`signature_history`] – keeps track of nonce + time_stamp signatures to detect replays
 pub(crate) mod crypto_device;
 pub(crate) mod event_handler;
+pub(crate) mod key_event_watcher;
+pub(crate) mod merkle_watcher;
 pub(crate) mod oprf;
 pub(crate) mod secret_gen;
 pub(crate) mod secret_manager;

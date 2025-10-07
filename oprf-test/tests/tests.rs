@@ -1,51 +1,95 @@
+use std::str::FromStr;
+use std::time::SystemTime;
 use std::{path::PathBuf, time::Instant};
 
-use ark_ff::UniformRand as _;
+use alloy::network::EthereumWallet;
+use alloy::{node_bindings::Anvil, signers::local::PrivateKeySigner};
+use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use groth16::Groth16;
-use oprf_client::{NullifierArgs, OprfQuery, zk::Groth16Material};
-use oprf_test::{credentials, sc_mock};
-use oprf_types::{ShareEpoch, sc_mock::SignNonceResponse};
+use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
+use oprf_test::{
+    credentials,
+    key_gen_sc_mock::{self, DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy},
+    world_id_protocol_mock::{
+        self, ACCOUNT_REGISTRY_TREE_DEPTH, AuthTreeIndexer, DEFAULT_ACCOUNT_REGISTRY_ADDRESS,
+    },
+};
+use oprf_types::ShareEpoch;
 
 pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+pub(crate) const PRIVATE_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
+    let mut rng = rand::thread_rng();
     println!("==== OPRF Client Example ====");
 
-    println!("Starting Smart Contract mock...");
-    let chain_url = sc_mock::start_smart_contract_mock().await;
+    println!("Starting anvil...");
+    let anvil = Anvil::new().spawn();
+
+    println!("Deploying AccountRegistry contract...");
+    world_id_protocol_mock::deploy_account_registry(&anvil.endpoint(), ACCOUNT_REGISTRY_TREE_DEPTH);
+
+    println!("Deploying KeyGen contract...");
+    key_gen_sc_mock::deploy_key_gen_contract(&anvil.endpoint());
+
+    println!("Starting AuthTreeIndexer...");
+    let mut auth_tree_indexer = AuthTreeIndexer::init(
+        ACCOUNT_REGISTRY_TREE_DEPTH,
+        DEFAULT_ACCOUNT_REGISTRY_ADDRESS,
+        &anvil.ws_endpoint(),
+    )
+    .await?;
 
     println!("Starting OPRF peers...");
-    let oprf_services = oprf_test::start_services().await;
+    let oprf_services = oprf_test::start_services(&anvil.ws_endpoint()).await;
 
-    println!("Creating a new RP nullifier key...");
-    let (rp_id, rp_nullifier_key) = sc_mock::register_rp(&chain_url).await?;
+    tracing::info!("connecting to ETH wallet..");
 
-    println!("Creating dummy user credentials...");
-    let mut rng = rand::thread_rng();
-    let key_material = credentials::random_user_keys(&mut rng);
+    let private_key = PrivateKeySigner::from_str(PRIVATE_KEY)?;
+    let wallet = EthereumWallet::from(private_key);
 
-    println!("Registering public key at Smart Contract mock...");
-    let merkle_membership =
-        sc_mock::register_public_key(&chain_url, &key_material.pk_batch).await?;
+    tracing::info!("init key gen..");
+    let mut key_gen_contract = KeyGenProxy::connect(
+        &anvil.ws_endpoint(),
+        DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
+        wallet,
+    )
+    .await?;
+    let (rp_id, rp_nullifier_key) = key_gen_contract.init_key_gen().await?;
 
-    println!("Creating nonce and letting the mock sign it...");
-    println!();
+    println!("Creating account...");
+    let key_material = world_id_protocol_mock::fetch_key_material()?;
+    world_id_protocol_mock::create_account(&anvil.endpoint());
+
+    println!("Get InclusionProof for account...");
+    let account_index = auth_tree_indexer.account_idx().await?;
+    let merkle_proof = auth_tree_indexer.get_proof(account_index).await?;
+    let merkle_membership = MerkleMembership::from(merkle_proof);
+
+    println!("Creating nonce and and sign it...");
     println!("In a real-world scenario, the RP would sign the nonce.");
-    println!("For simplicity, we let the Smart Contract mock do it here.");
     println!();
     println!("IMPORTANT: The signature is computed as enc(nonce) | enc(timestamp),");
     println!("where enc(x) is the little-endian byte representation of x.");
-    let nonce = ark_babyjubjub::Fq::rand(&mut rng);
+    let nonce = ark_babyjubjub::Fq::rand(&mut rand::thread_rng());
+    let current_time_stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system time is after unix epoch")
+        .as_millis() as u64;
 
-    let SignNonceResponse {
-        signature,
-        current_time_stamp,
-    } = sc_mock::sign_nonce(&chain_url, rp_id, nonce).await?;
+    let mut msg = Vec::new();
+    msg.extend(nonce.into_bigint().to_bytes_le());
+    msg.extend(current_time_stamp.to_le_bytes());
+    let signature = key_gen_contract
+        .sign(rp_id, &msg)
+        .ok_or_else(|| eyre::eyre!("unknown rp id {rp_id}"))?;
 
     println!();
     println!("Loading zkeys and matrices...");

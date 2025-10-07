@@ -65,7 +65,7 @@ pub enum Groth16Error {
     #[error("failed to generate proof")]
     ProofGeneration,
     /// Generated proof could not be verified against the verification key.
-    #[error("prove could not be verified")]
+    #[error("proof could not be verified")]
     InvalidProof,
 }
 

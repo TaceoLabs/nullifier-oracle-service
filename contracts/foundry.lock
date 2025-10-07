@@ -1,0 +1,14 @@
+{
+  "lib/forge-std": {
+    "rev": "17a9b2398a7d629931dc66a168a098d051d53dc6"
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "765b288a6a273f8c267adcd409094212dbd5e3cb"
+  },
+  "lib/poseidon-solidity": {
+    "rev": "8205c97ec4a35a9adb854b70b2c9ba92668d1304"
+  },
+  "lib/world-id-protocol": {
+    "rev": "5305d207c7570a66f1d578cda511d06a6a307796"
+  }
+}

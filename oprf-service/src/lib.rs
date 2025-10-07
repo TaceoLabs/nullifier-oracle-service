@@ -17,19 +17,22 @@
 //! - `metrics`: Metrics keys and helpers.
 //! - `services`: Core services like OPRF evaluation, chain watcher, and secret management.
 //! - `api`: REST API routes.
-use std::{fs::File, sync::Arc};
+use std::{fs::File, str::FromStr, sync::Arc};
 
+use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
 use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
+use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::{
-    chain_watcher::{ChainWatcherService, http_mock::HttpMockWatcher},
     crypto_device::CryptoDevice,
     event_handler::ChainEventHandler,
+    key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
+    merkle_watcher::{MerkleWatcherService, alloy_merkle_watcher::AlloyMerkleWatcher},
     oprf::OprfService,
     secret_manager::aws::AwsSecretManager,
 };
@@ -91,42 +94,50 @@ pub async fn start(
     // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
     let secret_manager = Arc::new(AwsSecretManager::init(Arc::clone(&config)).await);
 
-    // TODO load all RP_ids from SC
-
     tracing::info!("init crypto device..");
     let crypto_device = Arc::new(
-        CryptoDevice::init(secret_manager, vec![])
+        CryptoDevice::init(secret_manager)
             .await
             .context("while initiating crypto-device")?,
     );
 
     let cancellation_token = spawn_shutdown_task(shutdown_signal);
 
-    tracing::info!("spawn chain watcher..");
-    // spawn the chain watcher
-    let chain_watcher: ChainWatcherService = Arc::new(
-        HttpMockWatcher::init(
-            Arc::clone(&config),
-            Arc::clone(&crypto_device),
-            cancellation_token.clone(),
-        )
-        .await
-        .context("while starting chain watcher")?,
+    tracing::info!("connecting to wallet..");
+    let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
+        .context("while reading wallet private key")?;
+    let wallet = EthereumWallet::from(private_key);
+
+    tracing::info!("spawning chain event handler..");
+    let key_gen_watcher: KeyGenEventListenerService = Arc::new(
+        AlloyKeyGenWatcher::init(&config.chain_ws_rpc_url, config.key_gen_contract, wallet)
+            .await
+            .context("while spawning alloy key-gen watcher")?,
     );
 
     tracing::info!("loading party id..");
-    // load our party id
-    let party_id = chain_watcher
-        .get_party_id()
+    let party_id = key_gen_watcher
+        .fetch_party_id()
         .await
         .context("while loading partyID")?;
     tracing::info!("we are party id: {party_id}");
 
-    // start oprf-service service
+    tracing::info!("spawning merkle watcher..");
+    let merkle_watcher: MerkleWatcherService = Arc::new(
+        AlloyMerkleWatcher::init(
+            config.account_registry_contract,
+            &config.chain_ws_rpc_url,
+            config.max_merkle_store_size,
+            config.chain_epoch_max_difference,
+        )
+        .await
+        .context("while starting merkle watcher")?,
+    );
+
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
         Arc::clone(&crypto_device),
-        Arc::clone(&chain_watcher),
+        Arc::clone(&merkle_watcher),
         vk.into(),
         config.request_lifetime,
         config.session_cleanup_interval,
@@ -135,12 +146,9 @@ pub async fn start(
         config.signature_history_cleanup_interval,
     );
 
-    tracing::info!("spawning chain event handler..");
-    // spawn the periodic task
     let event_handler = ChainEventHandler::spawn(
-        config.chain_check_interval,
         party_id,
-        Arc::clone(&chain_watcher),
+        key_gen_watcher,
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
     );
@@ -236,6 +244,7 @@ pub async fn default_shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use std::array;
+    use std::collections::BTreeMap;
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
@@ -248,13 +257,13 @@ mod tests {
     use oprf_core::ddlog_equality::DLogEqualityChallenge;
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
-    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, sc_mock::MerkleRootUpdate};
+    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
 
     use crate::services::crypto_device::dlog_storage::RpMaterial;
+    use crate::services::merkle_watcher::test::TestMerkleWatcher;
     use crate::services::{
-        chain_watcher::test::TestWatcher,
         crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
         secret_manager::test::TestSecretManager,
     };
@@ -355,14 +364,11 @@ mod tests {
                     ),
                 )]),
             ));
-            let crypto_device = Arc::new(CryptoDevice::init(secret_manager, Vec::new()).await?);
+            let crypto_device = Arc::new(CryptoDevice::init(secret_manager).await?);
             let max_merkle_store_size = 10;
             let chain_epoch_max_difference = 10;
-            let chain_watcher = Arc::new(TestWatcher::new(
-                vec![MerkleRootUpdate {
-                    hash: merkle_root,
-                    epoch: merkle_epoch,
-                }],
+            let merkle_watcher = Arc::new(TestMerkleWatcher::new(
+                BTreeMap::from([(merkle_epoch, merkle_root)]),
                 max_merkle_store_size,
                 chain_epoch_max_difference,
             )?);
@@ -376,7 +382,7 @@ mod tests {
             let signature_history_cleanup_interval = Duration::from_secs(60);
             let oprf_service = OprfService::init(
                 crypto_device,
-                chain_watcher,
+                merkle_watcher,
                 vk.into(),
                 request_lifetime,
                 session_cleanup_interval,

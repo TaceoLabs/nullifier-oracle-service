@@ -142,13 +142,10 @@ impl CryptoDevice {
     ///
     /// Returns an error if loading secrets fails.
     #[instrument(level = "info", skip_all)]
-    pub(crate) async fn init(
-        secret_manager: SecretManagerService,
-        rp_ids: Vec<RpId>,
-    ) -> eyre::Result<Self> {
+    pub(crate) async fn init(secret_manager: SecretManagerService) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
         let (private_key, shares) = secret_manager
-            .load_secrets(rp_ids)
+            .load_secrets()
             .await
             .context("while loading secrets from AWS")?;
         metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);
@@ -242,7 +239,7 @@ impl CryptoDevice {
     /// Registers a new nullifier share for the given relying-party.
     ///
     /// Persists the share using the [`SecretManagerService`].
-    pub(crate) fn register_nullifier_share(
+    pub(crate) async fn register_nullifier_share(
         &self,
         rp_id: RpId,
         rp_public_key: k256::ecdsa::VerifyingKey,
@@ -251,7 +248,8 @@ impl CryptoDevice {
         self.shares.add(rp_id, rp_public_key, share);
         let result = self
             .secret_manager
-            .store_dlog_share(rp_id, rp_public_key.into(), share);
+            .store_dlog_share(rp_id, rp_public_key.into(), share)
+            .await;
         metrics::counter!(METRICS_RP_SECRETS).increment(1);
         result
     }

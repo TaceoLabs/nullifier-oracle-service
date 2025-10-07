@@ -27,15 +27,12 @@ impl TestSecretManager {
 #[async_trait]
 impl SecretManager for TestSecretManager {
     #[instrument(level = "info", skip_all)]
-    async fn load_secrets(
-        &self,
-        _rp_ids: Vec<RpId>,
-    ) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
+    async fn load_secrets(&self) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
         Ok((self.private_key, self.rp_materials.lock().clone()))
     }
 
     #[instrument(level = "info", skip(self, share))]
-    fn store_dlog_share(
+    async fn store_dlog_share(
         &self,
         rp_id: RpId,
         public_key: k256::PublicKey,
@@ -51,7 +48,7 @@ impl SecretManager for TestSecretManager {
     }
 
     #[instrument(level = "info", skip(self, _share))]
-    fn update_dlog_share(
+    async fn update_dlog_share(
         &self,
         _rp_id: RpId,
         _epoch: ShareEpoch,

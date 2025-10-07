@@ -20,7 +20,7 @@ use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::services::{
-    chain_watcher::ChainWatcherError, crypto_device::CryptoDeviceError, oprf::OprfServiceError,
+    crypto_device::CryptoDeviceError, merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
 };
 
 /// A structured API error returned to clients.
@@ -62,16 +62,14 @@ impl From<ApiError> for ApiErrors {
     }
 }
 
-impl From<ChainWatcherError> for ApiErrors {
-    fn from(value: ChainWatcherError) -> Self {
+impl From<MerkleWatcherError> for ApiErrors {
+    fn from(value: MerkleWatcherError) -> Self {
         tracing::debug!("{value:?}");
         match value {
-            ChainWatcherError::UnknownEpoch(epoch)
-            | ChainWatcherError::TooFarInFuture(epoch)
-            | ChainWatcherError::TooFarInPast(epoch) => {
+            MerkleWatcherError::TooFarInFuture(epoch) | MerkleWatcherError::TooFarInPast(epoch) => {
                 ApiErrors::BadRequest(format!("Unknown merkle epoch: {epoch}"))
             }
-            ChainWatcherError::ChainCommunicationError(report) => {
+            MerkleWatcherError::ChainCommunicationError(report) => {
                 ApiErrors::InternalSeverError(report)
             }
         }
@@ -85,10 +83,6 @@ impl From<OprfServiceError> for ApiErrors {
             OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
             OprfServiceError::CryptoDevice(crypto_device_error) => Self::from(crypto_device_error),
-            OprfServiceError::ChainWatcherError(chain_watcher_error) => {
-                Self::from(chain_watcher_error)
-            }
-            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
             OprfServiceError::TimeStampDifference => {
                 ApiErrors::BadRequest("the time stamp difference is too large".to_string())
             }
@@ -98,6 +92,13 @@ impl From<OprfServiceError> for ApiErrors {
             OprfServiceError::MerkleDepthGreaterThanMax(max) => {
                 ApiErrors::BadRequest(format!("merkle tree depth greater than max: {max}"))
             }
+            OprfServiceError::MerkleWatcherError(merkle_watcher_error) => {
+                Self::from(merkle_watcher_error)
+            }
+            OprfServiceError::InvalidMerkleRoot => {
+                ApiErrors::BadRequest("invalid merkle root".to_string())
+            }
+            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
         }
     }
 }
