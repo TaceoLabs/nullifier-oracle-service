@@ -49,6 +49,7 @@ use oprf_types::api::v1::{
 };
 use oprf_types::crypto::{PartyId, RpNullifierKey};
 use rand::{CryptoRng, Rng};
+use reqwest::StatusCode;
 use uuid::Uuid;
 
 pub use circom_types;
@@ -75,9 +76,17 @@ type Result<T> = std::result::Result<T, Error>;
 /// General error type for the OPRF client.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// API error returned by the OPRF service.
+    #[error("API error {status}: {message}")]
+    ApiError {
+        /// the HTTP status code
+        status: StatusCode,
+        /// the error message
+        message: String,
+    },
     /// HTTP or network errors from OPRF service requests.
     #[error(transparent)]
-    ApiError(#[from] reqwest::Error),
+    Request(#[from] reqwest::Error),
     /// Not enough OPRF responses received to satisfy the required threshold.
     #[error("expected degree {threshold} responses, got {n}")]
     NotEnoughOprfResponses {
