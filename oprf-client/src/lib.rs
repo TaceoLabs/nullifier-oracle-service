@@ -59,9 +59,11 @@ pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 use crate::zk::{Groth16Error, Groth16Material};
 
 pub mod nonblocking;
+mod serialization;
 mod types;
 pub mod zk;
 
+pub use serialization::ConstraintMatricesWrapper;
 pub use types::CredentialsSignature;
 pub use types::MerkleMembership;
 pub use types::OprfQuery;

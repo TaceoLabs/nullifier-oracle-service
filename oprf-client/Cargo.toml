@@ -16,7 +16,9 @@ ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
+ark-serialize = { workspace = true }
 circom-types.workspace = true
+clap = { workspace = true, features = ["derive"], optional = true }
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
 futures.workspace = true
@@ -29,7 +31,18 @@ rand.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tokio = { workspace = true, optional = true, features = [
+    "net",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+    "macros",
+] }
+tracing-subscriber = { workspace = true, features = [
+    "env-filter",
+    "fmt",
+], optional = true }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 witness = { workspace = true }
@@ -37,8 +50,15 @@ witness = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+
 [features]
 default = ["tokio"]
 tokio = ["dep:tokio"]
 rustls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
+bin = ["dep:tracing-subscriber", "dep:clap"]
+
+[[bin]]
+name = "convert_zkey_to_ark"
+path = "src/bin/convert_zkey_to_ark.rs"
+required-features = ["bin"]
