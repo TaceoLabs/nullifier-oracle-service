@@ -60,18 +60,8 @@ run-taceo-setup:
     cargo build --workspace
     echo "generating keys..."
     cargo run --bin key-gen -- --overwrite-old-keys
-    anvil &
-    anvil_pid=$!
-    echo "started anvil with PID $anvil_pid"
-    sleep 2
-    echo "starting KeyGen contract..."
     just run-key-gen
-    just run-services &
-    sleep 2
-    echo "ready to run dev-client"
-    trap "kill $anvil_pid" SIGINT SIGTERM
-    wait $anvil_pid
-    
+    OPRF_SERVICE_KEY_GEN_CONTRACT=0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=0xD23be01fb4aCEAfd36b1EDD7aAA46daCF9679645 just run-services 
 
 run-services:
     #!/usr/bin/env bash
