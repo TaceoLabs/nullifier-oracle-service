@@ -65,14 +65,7 @@ impl From<ApiError> for ApiErrors {
 impl From<MerkleWatcherError> for ApiErrors {
     fn from(value: MerkleWatcherError) -> Self {
         tracing::debug!("{value:?}");
-        match value {
-            MerkleWatcherError::TooFarInFuture(epoch) | MerkleWatcherError::TooFarInPast(epoch) => {
-                ApiErrors::BadRequest(format!("Unknown merkle epoch: {epoch}"))
-            }
-            MerkleWatcherError::ChainCommunicationError(report) => {
-                ApiErrors::InternalSeverError(report)
-            }
-        }
+        ApiErrors::InternalSeverError(eyre::eyre!("{}", value.0))
     }
 }
 
