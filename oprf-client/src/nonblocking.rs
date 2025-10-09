@@ -10,7 +10,7 @@
 //!
 //! Errors from individual peers are tolerated during init, as long as the
 //! threshold can still be met. If too many services fail, the client bails
-//! out with [`Error::NotEnoughOprfResponses`](super::Error::NotEnoughOprfResponses).
+//! out with [`Error::NotEnoughOprfResponses`].
 //!
 //! Under the hood, requests use `reqwest::Client` and responses are deserialized
 //! into the types defined in [`oprf_types::api::v1`].
@@ -19,7 +19,7 @@ use eyre::Context;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
 use tokio::task::JoinSet;
 
-use crate::OprfSessions;
+use crate::{Error, OprfSessions};
 
 /// Sends an `init` request to one OPRF peer.
 ///
@@ -33,11 +33,15 @@ async fn oprf_request(
         .post(format!("{service}/api/v1/init"))
         .json(&req)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<OprfResponse>()
         .await?;
-    Ok((service, response))
+    if response.status().is_success() {
+        let response = response.json::<OprfResponse>().await?;
+        Ok((service, response))
+    } else {
+        let status = response.status();
+        let message = response.text().await?;
+        Err(Error::ApiError { status, message })
+    }
 }
 
 /// Sends a `challenge` request to one OPRF service.
@@ -48,14 +52,19 @@ async fn oprf_challenge(
     service: String,
     req: ChallengeRequest,
 ) -> super::Result<ChallengeResponse> {
-    Ok(client
+    let response = client
         .post(format!("{service}/api/v1/finish"))
         .json(&req)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<ChallengeResponse>()
-        .await?)
+        .await?;
+    if response.status().is_success() {
+        let response = response.json::<ChallengeResponse>().await?;
+        Ok(response)
+    } else {
+        let status = response.status();
+        let message = response.text().await?;
+        Err(Error::ApiError { status, message })
+    }
 }
 
 /// Completes all OPRF sessions in parallel by calling `/api/v1/finish`
