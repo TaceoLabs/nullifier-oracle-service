@@ -139,15 +139,6 @@ pub struct OprfPeerConfig {
     )]
     pub chain_ws_rpc_url: String,
 
-    /// Max epoch in the future.
-    /// If an epoch is too far in the future, the service will not perform a manual check. This is defined by this value (no longer than this difference inclusive).
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_CHAIN_EPOCH_MAX_LOOK_AHEAD",
-        default_value = "10"
-    )]
-    pub chain_epoch_max_difference: u128,
-
     /// The name/ARN of the service's private-key.
     #[clap(
         long,

@@ -15,22 +15,15 @@
 //! Use these types to pass, store, and (de)serialize identifiers and
 //! cryptographic values in a type-safe way throughout your application.
 
-use std::{fmt, ops::Sub, str::FromStr};
+use std::{fmt, str::FromStr};
 
-use alloy::primitives::{U256, ruint::FromUintError};
+use alloy::primitives::U256;
 use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
 pub mod chain;
 pub mod crypto;
-
-/// Represents an epoch of a merkle-root. Users will provide a `MerkleEpoch` and retrieve the associated [`MerkleRoot`].
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
-)]
-#[serde(transparent)]
-pub struct MerkleEpoch(u128);
 
 /// Represents an epoch for the DLog secret-share.
 #[derive(
@@ -56,41 +49,6 @@ pub struct MerkleRoot(
     )]
     ark_babyjubjub::Fq,
 );
-
-impl MerkleEpoch {
-    /// Converts the merkle epoch to an u128
-    pub fn into_inner(self) -> u128 {
-        self.0
-    }
-
-    /// Creates a new `MerkleEpoch` by wrapping a `u128`
-    pub fn new(value: u128) -> Self {
-        Self(value)
-    }
-
-    /// Increases the epoch by one.
-    pub fn inc(&mut self) -> Self {
-        self.0 += 1;
-        *self
-    }
-
-    /// Returns the absolute difference between two epochs.
-    pub fn diff(self, other: Self) -> u128 {
-        match self.cmp(&other) {
-            std::cmp::Ordering::Less => (other - self).into_inner(),
-            std::cmp::Ordering::Equal => 0,
-            std::cmp::Ordering::Greater => (self - other).into_inner(),
-        }
-    }
-}
-
-impl Sub for MerkleEpoch {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
 
 impl ShareEpoch {
     /// Converts the key epoch to an u128
@@ -153,25 +111,6 @@ impl From<u128> for RpId {
     }
 }
 
-impl From<u128> for MerkleEpoch {
-    fn from(value: u128) -> Self {
-        Self(value)
-    }
-}
-
-impl TryFrom<U256> for MerkleEpoch {
-    type Error = FromUintError<u128>;
-    fn try_from(value: U256) -> Result<Self, FromUintError<u128>> {
-        Ok(Self(u128::try_from(value)?))
-    }
-}
-
-impl From<u64> for MerkleEpoch {
-    fn from(value: u64) -> Self {
-        Self(u128::from(value))
-    }
-}
-
 impl From<ark_babyjubjub::Fq> for MerkleRoot {
     fn from(value: ark_babyjubjub::Fq) -> Self {
         Self(value)
@@ -185,12 +124,6 @@ impl fmt::Display for RpId {
 }
 
 impl fmt::Display for ShareEpoch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.to_string())
-    }
-}
-
-impl fmt::Display for MerkleEpoch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0.to_string())
     }

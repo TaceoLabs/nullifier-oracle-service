@@ -128,7 +128,6 @@ pub async fn start(
             config.account_registry_contract,
             &config.chain_ws_rpc_url,
             config.max_merkle_store_size,
-            config.chain_epoch_max_difference,
         )
         .await
         .context("while starting merkle watcher")?,
@@ -244,7 +243,6 @@ pub async fn default_shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use std::array;
-    use std::collections::BTreeMap;
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
@@ -258,7 +256,7 @@ mod tests {
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::crypto::RpNullifierKey;
-    use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
+    use oprf_types::{MerkleRoot, RpId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
 
@@ -292,7 +290,6 @@ mod tests {
                 &siblings,
                 mt_index,
             ));
-            let merkle_epoch = MerkleEpoch::new(0);
             let share_epoch = ShareEpoch::default();
 
             let rp_id = RpId::new(rng.r#gen());
@@ -316,7 +313,6 @@ mod tests {
             )?;
 
             let merkle_membership = MerkleMembership {
-                epoch: merkle_epoch,
                 depth: MAX_DEPTH as u64, // TODO fix me
                 root: merkle_root,
                 mt_index,
@@ -372,11 +368,9 @@ mod tests {
             ));
             let crypto_device = Arc::new(CryptoDevice::init(secret_manager).await?);
             let max_merkle_store_size = 10;
-            let chain_epoch_max_difference = 10;
             let merkle_watcher = Arc::new(TestMerkleWatcher::new(
-                BTreeMap::from([(merkle_epoch, merkle_root)]),
+                HashMap::from([(merkle_root, 0)]),
                 max_merkle_store_size,
-                chain_epoch_max_difference,
             )?);
             let user_verification_key_path = dir.join("../circom/main/OPRFQueryProof.vk.json");
             let vk = File::open(&user_verification_key_path)?;
@@ -472,23 +466,6 @@ mod tests {
             .await;
         res.assert_text(format!("Cannot find RP with id: {unknown_rp_id}"));
         res.assert_status_not_found();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_init_unknown_merkle_epoch() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let unknown_merkle_epoch = MerkleEpoch::new(rand::random());
-        let mut req = setup.oprf_req;
-        req.merkle_epoch = unknown_merkle_epoch;
-        let res = setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text(format!("Unknown merkle epoch: {unknown_merkle_epoch}"));
-        res.assert_status_bad_request();
         Ok(())
     }
 
