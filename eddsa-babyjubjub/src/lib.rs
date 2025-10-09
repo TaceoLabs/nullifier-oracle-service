@@ -188,7 +188,7 @@ impl EdDSASignature {
     /// Parse the signature from a byte array.
     pub fn from_compressed_bytes(bytes: [u8; 65]) -> eyre::Result<Self> {
         let y = ark_babyjubjub::Fq::from_be_bytes_mod_order(&bytes[0..32]);
-        // bytes[64] stores whether the x-coordinate is the lexicographically largest root; see to_bytes
+        // bytes[64] stores whether the x-coordinate is the lexicographically largest root; see `to_compressed_bytes`
         let r = Affine::get_point_from_y_unchecked(y, bytes[64] != 0)
             .ok_or(eyre::eyre!("Invalid r coordinate in signature"))?;
 
