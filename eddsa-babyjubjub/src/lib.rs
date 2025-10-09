@@ -177,20 +177,18 @@ impl EdDSASignature {
     }
 
     /// Expose the signature as a byte array.
-    pub fn to_bytes(&self) -> [u8; 65] {
+    pub fn to_compressed_bytes(&self) -> [u8; 65] {
         let mut bytes = [0u8; 65];
         bytes[0..32].copy_from_slice(&self.r.y.into_bigint().to_bytes_be());
         bytes[32..64].copy_from_slice(&self.s.into_bigint().to_bytes_be());
-        bytes[64] = x_coord_sign(self.r.x, self.r.y) as u8;
+        bytes[64] = lexicographically_largest(self.r.x) as u8;
         bytes
     }
 
     /// Parse the signature from a byte array.
-    pub fn from_bytes(bytes: [u8; 65]) -> eyre::Result<Self> {
+    pub fn from_compressed_bytes(bytes: [u8; 65]) -> eyre::Result<Self> {
         let y = ark_babyjubjub::Fq::from_be_bytes_mod_order(&bytes[0..32]);
-        // bytes[64] stores !is_odd(), so 1 means even, 0 means odd
-        // get_point_from_y_unchecked(y, greatest): greatest=false → odd, greatest=true → even
-        // So we can pass bytes[64] != 0 directly
+        // bytes[64] stores whether the x-coordinate is the lexicographically largest root; see to_bytes
         let r = Affine::get_point_from_y_unchecked(y, bytes[64] != 0)
             .ok_or(eyre::eyre!("Invalid r coordinate in signature"))?;
 
@@ -211,26 +209,6 @@ impl EdDSASignature {
     }
 }
 
-fn x_coord_sign(x: BaseField, y: BaseField) -> bool {
-    // Determine which boolean to pass to get_point_from_y_unchecked to get this x back
-    // Try both options and see which one gives us the same x
-    let p_false = Affine::get_point_from_y_unchecked(y, false);
-    let p_true = Affine::get_point_from_y_unchecked(y, true);
-
-    if let Some(p) = p_false {
-        if p.x == x {
-            return false;
-        }
-    }
-    if let Some(p) = p_true {
-        if p.x == x {
-            return true;
-        }
-    }
-    // Shouldn't happen if x,y is a valid point
-    false
-}
-
 fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
     let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
     poseidon2_8.permutation(&[
@@ -244,6 +222,13 @@ fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField 
         BaseField::zero(),
     ])[1]
 }
+
+fn lexicographically_largest(x: BaseField) -> bool {
+    let x_bigint = x.into_bigint();
+    let neg_bigint = (-x).into_bigint();
+    x_bigint > neg_bigint
+}
+
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
 pub(crate) fn convert_base_to_scalar(f: BaseField) -> ScalarField {
     let bytes = f.into_bigint().to_bytes_le();
@@ -287,17 +272,19 @@ mod tests {
             "invalid signature should not verify"
         );
 
-        let bytes = signature.to_bytes();
-        let signature_deserialized = EdDSASignature::from_bytes(bytes).unwrap();
+        let bytes = signature.to_compressed_bytes();
+        let signature_deserialized = EdDSASignature::from_compressed_bytes(bytes).unwrap();
         assert_eq!(signature, signature_deserialized);
     }
 
     #[test]
     fn test_eddsa_rng() {
         let mut rng = rand::thread_rng();
-        let sk = rng.r#gen();
-        let message = BaseField::rand(&mut rng);
-        test(sk, message, &mut rng);
+        for _ in 0..100 {
+            let sk = rng.r#gen();
+            let message = BaseField::rand(&mut rng);
+            test(sk, message, &mut rng);
+        }
     }
 
     #[test]
@@ -330,8 +317,8 @@ mod tests {
         )
         .unwrap();
         let signature = EdDSAPrivateKey::from_bytes(*sk).sign(message);
-        let bytes = signature.to_bytes();
-        let signature_prime = EdDSASignature::from_bytes(bytes).unwrap();
+        let bytes = signature.to_compressed_bytes();
+        let signature_prime = EdDSASignature::from_compressed_bytes(bytes).unwrap();
         assert_eq!(signature, signature_prime);
     }
 }
