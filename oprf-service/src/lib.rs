@@ -254,9 +254,10 @@ mod tests {
     use k256::ecdsa::signature::SignerMut;
     use oprf_client::zk::Groth16Material;
     use oprf_client::{MAX_DEPTH, MerkleMembership, OprfQuery};
-    use oprf_core::ddlog_equality::DLogEqualityChallenge;
+    use oprf_core::ddlog_equality::DLogEqualityCommitments;
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
+    use oprf_types::crypto::RpNullifierKey;
     use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
@@ -347,7 +348,11 @@ mod tests {
             let oprf_req = signed_query.get_request();
             let challenge_req = ChallengeRequest {
                 request_id,
-                challenge: DLogEqualityChallenge::new(ark_babyjubjub::Fq::rand(&mut rng)),
+                challenge: DLogEqualityCommitments::new(
+                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                ),
                 rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
             };
 
@@ -361,6 +366,7 @@ mod tests {
                             DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
                         )]),
                         rp_public_key.into(),
+                        RpNullifierKey::new(rng.r#gen()),
                     ),
                 )]),
             ));

@@ -18,11 +18,16 @@ pub struct PartialDLogEqualityCommitments {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DLogEqualityChallenge {
-    // The challenge hash
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
-    pub(crate) e: BaseField,
+pub struct DLogEqualityCommitments {
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    pub(crate) c: Affine,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    pub(crate) r1: Affine,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    pub(crate) r2: Affine,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,10 +44,10 @@ pub struct DLogEqualityProofShare {
 /// The `challenge` method consumes the session.
 pub struct DLogEqualitySession {
     k: ScalarField,
+    blinded_query: Affine,
 }
 
 type ScalarField = ark_babyjubjub::Fr;
-type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
@@ -61,7 +66,10 @@ impl DLogEqualitySession {
 
         let comm = PartialDLogEqualityCommitments { c: c_share, r1, r2 };
 
-        let session = DLogEqualitySession { k: k_share };
+        let session = DLogEqualitySession {
+            k: k_share,
+            blinded_query: b,
+        };
 
         (session, comm)
     }
@@ -71,28 +79,34 @@ impl DLogEqualitySession {
     pub fn challenge(
         self,
         x_share: ScalarField,
-        challenge: DLogEqualityChallenge,
+        a: Affine,
+        challenge_input: DLogEqualityCommitments,
     ) -> DLogEqualityProofShare {
+        // Recompute the challenge hash to ensure the challenge is well-formed.
+        let d = Affine::generator();
+        let e = crate::dlog_equality::challenge_hash(
+            a,
+            self.blinded_query,
+            challenge_input.c,
+            d,
+            challenge_input.r1,
+            challenge_input.r2,
+        );
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
-        let e_ = crate::dlog_equality::convert_base_to_scalar(challenge.e);
+        let e_ = crate::dlog_equality::convert_base_to_scalar(e);
         DLogEqualityProofShare {
             s: self.k + e_ * x_share,
         }
     }
 }
 
-impl DLogEqualityChallenge {
-    /// Create a new `DLogEqualityChallenge`
-    pub fn new(e: BaseField) -> Self {
-        Self { e }
+impl DLogEqualityCommitments {
+    pub fn new(c: Affine, r1: Affine, r2: Affine) -> Self {
+        DLogEqualityCommitments { c, r1, r2 }
     }
-
-    /// The accumulating party (e.g., the verifier) combines all the shares of all parties and creates the challenge hash.
-    pub fn combine_commitments_and_create_challenge(
-        commitments: &[PartialDLogEqualityCommitments],
-        a: Affine, // Combined public key of the provers
-        b: Affine,
-    ) -> (Affine, Self) {
+    /// The accumulating party (e.g., the verifier) combines all the shares of all parties.
+    /// The returned points are the combined commitments C, R1, R2.
+    pub fn combine_commitments(commitments: &[PartialDLogEqualityCommitments]) -> Self {
         let mut c = Projective::zero();
         let mut r1 = Projective::zero();
         let mut r2 = Projective::zero();
@@ -103,24 +117,33 @@ impl DLogEqualityChallenge {
             r2 += comm.r2;
         }
 
-        // Create the challenge hash
-        let d = Affine::generator();
         let c = c.into_affine();
         let r1 = r1.into_affine();
         let r2 = r2.into_affine();
 
-        let e = crate::dlog_equality::challenge_hash(a, b, c, d, r1, r2);
-
-        (c, DLogEqualityChallenge { e })
+        DLogEqualityCommitments { c, r1, r2 }
     }
 
-    pub fn combine_proofs(self, proofs: &[DLogEqualityProofShare]) -> DLogEqualityProof {
+    pub fn combine_proofs(
+        self,
+        proofs: &[DLogEqualityProofShare],
+        a: Affine,
+        b: Affine,
+    ) -> DLogEqualityProof {
         let mut s = ScalarField::zero();
         for proof in proofs {
             s += proof.s;
         }
 
-        DLogEqualityProof { e: self.e, s }
+        let d = Affine::generator();
+        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2);
+
+        DLogEqualityProof { e, s }
+    }
+
+    /// Returns the combined blinded response C=B*x.
+    pub fn blinded_response(&self) -> Affine {
+        self.c
     }
 }
 
@@ -161,21 +184,18 @@ mod tests {
         }
 
         // 2) Client accumulates commitments and creates challenge
-        let (c, challenge) = DLogEqualityChallenge::combine_commitments_and_create_challenge(
-            &commitments,
-            public_key,
-            b,
-        );
+        let challenge = DLogEqualityCommitments::combine_commitments(&commitments);
+        let c = challenge.blinded_response();
 
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, challenge.to_owned());
+            let proof = session.challenge(x_, public_key, challenge.to_owned());
             proofs.push(proof);
         }
 
         // 4) Client combines all proofs
-        let proof = challenge.combine_proofs(&proofs);
+        let proof = challenge.combine_proofs(&proofs, public_key, b);
 
         // Verify the result and the proof
         let d = Affine::generator();

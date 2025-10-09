@@ -35,8 +35,8 @@ contract KeyGen {
     // Events
     event SecretGenRound1(uint128 indexed rpId, uint16 threshold);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
-    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCiphertexts[] round2Contributions);
-    event SecretGenNullifierKeyCreated(uint128 indexed rpId, bytes rpNullifierKey);
+    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCommitment[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
+    event SecretGenNullifierKeyCreated(uint128 indexed rpId, RpSecretGenCommitment[] nullifierKey);
 
     constructor(address[] memory _participants, uint16 _threshold, bytes memory _peerKeys) {
         require(_participants.length > 0, "Need participants");
@@ -57,7 +57,7 @@ contract KeyGen {
     }
 
     function getRpNullifierKey(uint128 rpId) external view returns (RpSecretGenCommitment[] memory) {
-        return keyStorage[id];
+        return keyStorage[rpId];
     }
 
     // Initialize a new session
@@ -106,7 +106,6 @@ contract KeyGen {
         require(st.round1[idx].data.length == 0, "Already submitted");
 
         //TODO: Add BabyJubJub Points together and keep running total
-        // Here is just a single commitment...
         st.round1[idx] = RpSecretGenCommitment(commitment);
 
 
@@ -173,7 +172,6 @@ contract KeyGen {
 
         st.round2EventEmitted = true;
 
-        console.log("Emitting secret gen round2");
         emit SecretGenRound2(rpId, peerKeys);
     }
 
@@ -183,8 +181,7 @@ contract KeyGen {
 
         st.finalizeEventEmitted = true;
 
-        console.log("Emitting secret gen round2");
-        emit SecretGenFinalize(rpId, st.ecdsaPubKey, st.round2);
+        emit SecretGenFinalize(rpId, st.ecdsaPubKey, st.round1, st.round2);
     }
 
     function _tryEmitNullifierKeyCreatedEvent(uint128 rpId, RpNullifierGenState storage st) private {
@@ -193,9 +190,9 @@ contract KeyGen {
 
         st.storedNullifier = true;
         //TODO: Need to set this to be the actual added full key...
+        // This is incorrect yes?
         keyStorage[rpId] = st.round1;
 
-        console.log("created nullifier key");
         emit SecretGenNullifierKeyCreated(rpId, st.round1);
     }
 
