@@ -12,7 +12,7 @@ use alloy::{
 use ark_ff::{AdditiveGroup as _, BigInt, PrimeField as _};
 use futures::StreamExt as _;
 use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MAX_DEPTH, MerkleMembership, UserKeyMaterial};
-use oprf_types::{MerkleEpoch, crypto::UserPublicKeyBatch};
+use oprf_types::crypto::UserPublicKeyBatch;
 use poseidon2::{POSEIDON2_BN254_T2_PARAMS, Poseidon2};
 use semaphore_rs_hasher::Hasher;
 use semaphore_rs_trees::{Branch, InclusionProof, imt::MerkleTree};
@@ -92,7 +92,6 @@ impl From<InclusionProofResponse> for MerkleMembership {
             siblings.push(ark_babyjubjub::Fq::default());
         }
         MerkleMembership {
-            epoch: MerkleEpoch::default(),
             root: value.root.into(),
             depth, // send actual depth of contract merkle tree
             mt_index: value.leaf_index,
