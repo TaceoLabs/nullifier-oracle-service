@@ -20,6 +20,11 @@ impl EdDSAPrivateKey {
         Self(bytes)
     }
 
+    /// Expose the private key as a byte array.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+
     /// Generate a random private key using the given RNG.
     pub fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let mut bytes = [0u8; 32];
@@ -170,6 +175,60 @@ impl EdDSASignature {
     fn get_chall_ds() -> BaseField {
         BaseField::from_be_bytes_mod_order(Self::CHALL_DS)
     }
+
+    /// Expose the signature as a byte array.
+    pub fn to_bytes(&self) -> [u8; 65] {
+        let mut bytes = [0u8; 65];
+        bytes[0..32].copy_from_slice(&self.r.y.into_bigint().to_bytes_be());
+        bytes[32..64].copy_from_slice(&self.s.into_bigint().to_bytes_be());
+        bytes[64] = x_coord_sign(self.r.x, self.r.y) as u8;
+        bytes
+    }
+
+    /// Parse the signature from a byte array.
+    pub fn from_bytes(bytes: [u8; 65]) -> eyre::Result<Self> {
+        let y = ark_babyjubjub::Fq::from_be_bytes_mod_order(&bytes[0..32]);
+        // bytes[64] stores !is_odd(), so 1 means even, 0 means odd
+        // get_point_from_y_unchecked(y, greatest): greatest=false → odd, greatest=true → even
+        // So we can pass bytes[64] != 0 directly
+        let r = Affine::get_point_from_y_unchecked(y, bytes[64] != 0)
+            .ok_or(eyre::eyre!("Invalid r coordinate in signature"))?;
+
+        if !r.is_on_curve() {
+            return Err(eyre::eyre!(
+                "Invalid r coordinate in signature: not on curve"
+            ));
+        }
+
+        if !r.is_in_correct_subgroup_assuming_on_curve() {
+            return Err(eyre::eyre!(
+                "Invalid r coordinate in signature: not in correct subgroup"
+            ));
+        }
+
+        let s: ScalarField = ScalarField::from_be_bytes_mod_order(&bytes[32..64]);
+        Ok(Self { r, s })
+    }
+}
+
+fn x_coord_sign(x: BaseField, y: BaseField) -> bool {
+    // Determine which boolean to pass to get_point_from_y_unchecked to get this x back
+    // Try both options and see which one gives us the same x
+    let p_false = Affine::get_point_from_y_unchecked(y, false);
+    let p_true = Affine::get_point_from_y_unchecked(y, true);
+
+    if let Some(p) = p_false {
+        if p.x == x {
+            return false;
+        }
+    }
+    if let Some(p) = p_true {
+        if p.x == x {
+            return true;
+        }
+    }
+    // Shouldn't happen if x,y is a valid point
+    false
 }
 
 fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
@@ -227,6 +286,10 @@ mod tests {
             !pk_.verify(message, &signature),
             "invalid signature should not verify"
         );
+
+        let bytes = signature.to_bytes();
+        let signature_deserialized = EdDSASignature::from_bytes(bytes).unwrap();
+        assert_eq!(signature, signature_deserialized);
     }
 
     #[test]
@@ -257,5 +320,18 @@ mod tests {
         )
         .unwrap();
         test(*sk, message, &mut rng);
+    }
+
+    #[test]
+    fn test_eddsa_signature_encoding_roundtrip() {
+        let sk = b"1cc01b8ddd6851915a42e0cfc6b7088c";
+        let message = field_from_hex_string::<BaseField>(
+            "0x671e7802b9c4f1165955b9477a378bf30fd5723fddf7e727934bf2a7c2f3265",
+        )
+        .unwrap();
+        let signature = EdDSAPrivateKey::from_bytes(*sk).sign(message);
+        let bytes = signature.to_bytes();
+        let signature_prime = EdDSASignature::from_bytes(bytes).unwrap();
+        assert_eq!(signature, signature_prime);
     }
 }

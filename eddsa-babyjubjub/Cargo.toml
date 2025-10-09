@@ -16,6 +16,7 @@ ark-ec = { workspace = true}
 ark-ff = { workspace = true}
 ark-serde-compat = { workspace = true }
 blake3 = { workspace = true }
+eyre = { workspace = true }
 num-bigint.workspace = true
 poseidon2 = { workspace = true }
 rand = { workspace = true}

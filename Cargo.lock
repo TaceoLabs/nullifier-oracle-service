@@ -2939,6 +2939,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serde-compat",
  "blake3",
+ "eyre",
  "num-bigint",
  "poseidon2",
  "rand 0.8.5",
