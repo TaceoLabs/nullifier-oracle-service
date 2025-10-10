@@ -5,14 +5,14 @@ use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use zeroize::ZeroizeOnDrop;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 /// A private key for the EdDSA signature scheme.
-#[derive(Debug, Clone, ZeroizeOnDrop, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop, PartialEq, Eq, Hash)]
 pub struct EdDSAPrivateKey(pub [u8; 32]);
 
 impl EdDSAPrivateKey {
