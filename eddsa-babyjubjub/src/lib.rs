@@ -5,14 +5,14 @@ use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use zeroize::ZeroizeOnDrop;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 /// A private key for the EdDSA signature scheme.
-#[derive(Debug, Clone, ZeroizeOnDrop, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop, PartialEq, Eq, Hash)]
 pub struct EdDSAPrivateKey(pub [u8; 32]);
 
 impl EdDSAPrivateKey {
@@ -156,6 +156,21 @@ impl EdDSAPublicKey {
         v.double_in_place();
         v.is_zero()
     }
+
+    /// Serialize the public key to a compressed byte array.
+    pub fn to_compressed_bytes(&self) -> eyre::Result<[u8; 32]> {
+        let mut buf = Vec::new();
+        self.pk.serialize_compressed(&mut buf)?;
+        let mut bytes = [0u8; 32];
+        bytes[0..32].copy_from_slice(&buf[0..32]);
+        Ok(bytes)
+    }
+
+    /// Parse the public key from a byte array with the point in compressed format.
+    pub fn from_compressed_bytes(bytes: [u8; 32]) -> eyre::Result<Self> {
+        let pk = Affine::deserialize_compressed(&bytes[0..32])?;
+        Ok(Self { pk })
+    }
 }
 
 /// An EdDSA signature on the Baby Jubjub curve, using Poseidon2 as the internal hash function for the Fiat-Shamir transform.
@@ -290,15 +305,22 @@ mod tests {
     }
 
     #[test]
-    fn test_eddsa_signature_encoding_roundtrip() {
+    fn test_encoding_roundtrip() {
         let sk = b"1cc01b8ddd6851915a42e0cfc6b7088c";
         let message = field_from_hex_string::<BaseField>(
             "0x671e7802b9c4f1165955b9477a378bf30fd5723fddf7e727934bf2a7c2f3265",
         )
         .unwrap();
         let signature = EdDSAPrivateKey::from_bytes(*sk).sign(message);
+        let pk = EdDSAPrivateKey::from_bytes(*sk).public();
         let bytes = signature.to_compressed_bytes().unwrap();
         let signature_prime = EdDSASignature::from_compressed_bytes(bytes).unwrap();
         assert_eq!(signature, signature_prime);
+
+        let pk_bytes = pk.to_compressed_bytes().unwrap();
+        let pk_prime = EdDSAPublicKey::from_compressed_bytes(pk_bytes).unwrap();
+        assert_eq!(pk, pk_prime);
+
+        assert!(pk_prime.verify(message, &signature_prime));
     }
 }
