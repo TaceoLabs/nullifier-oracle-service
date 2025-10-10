@@ -166,7 +166,7 @@ impl EdDSAPublicKey {
         Ok(bytes)
     }
 
-    /// Parse the public key from a compressed byte array.
+    /// Parse the public key from a byte array with the point in compressed format.
     pub fn from_compressed_bytes(bytes: [u8; 32]) -> eyre::Result<Self> {
         let pk = Affine::deserialize_compressed(&bytes[0..32])?;
         Ok(Self { pk })
