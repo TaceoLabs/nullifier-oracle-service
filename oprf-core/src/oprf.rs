@@ -388,12 +388,9 @@ mod mappings {
     fn map_to_curve_elligator2(input: BaseField) -> (BaseField, BaseField) {
         // constant c1 = J/K;
         let j = BaseField::from(168698);
-        let k = BaseField::from(1);
-        // TODO: this is a noop (k == 1)
-        let c1 = j / k;
-        // constant c2 = 1/ K^2
-        // TODO: this is a noop (k == 1) and c2 == 1
-        let c2 = (k * k).inverse().unwrap();
+        // since k = 1 for Baby JubJub, this simplifies a few operations below
+        let c1 = j;
+        // The constant c2 would be 1/(k*k) = 1, so we also skip it
         // constant Z = 5, based on RFC9380, Appendix H.3.
         // ```sage
         // # Argument:
@@ -420,10 +417,8 @@ mod mappings {
         let x1 = inv0(x1);
         let x1 = -c1 * x1;
         let gx1 = x1 + c1;
-        // TODO: since c2 == 1, this can be replaced with ((gx1 * x1) + 1) * x1 == gx1 * x1.square() + x1
-        let gx1 = gx1 * x1;
-        let gx1 = gx1 + c2;
-        let gx1 = gx1 * x1;
+        // normally the calculation of gx1 below would involve c2, but since c2 = 1 for Baby JubJub, we can simplify it
+        let gx1 = gx1 * x1.square() + x1;
         let x2 = -x1 - c1;
         let gx2 = tv1 * gx1;
         let e2 = ct_is_square(gx1);
@@ -433,10 +428,8 @@ mod mappings {
             .expect("y2 should be a square based on our conditional selection above");
         let e3 = Choice::from(sgn0(y) as u8);
         let y = ct_select(-y, y, e2 ^ e3);
-        // TODO: k == 1, so can be skipped
-        let s = x * k;
-        let t = y * k;
-        (s, t)
+        // the reduced (s,t) would normally be (x*k,y*k), but since k = 1 for Baby JubJub, we can skip that step
+        (x, y)
     }
 
     /// Converts a point from Montgomery to Twisted Edwards using the rational map.
