@@ -181,16 +181,16 @@ impl EdDSASignature {
     pub fn to_compressed_bytes(&self) -> eyre::Result<[u8; 64]> {
         let mut buf = Vec::new();
         self.r.serialize_compressed(&mut buf)?;
+        self.s.serialize_compressed(&mut buf)?;
         let mut bytes = [0u8; 64];
-        bytes[0..32].copy_from_slice(&buf[0..32]);
-        bytes[32..64].copy_from_slice(&self.s.into_bigint().to_bytes_be());
+        bytes[0..64].copy_from_slice(&buf[0..64]);
         Ok(bytes)
     }
 
     /// Parse the signature from a byte array.
     pub fn from_compressed_bytes(bytes: [u8; 64]) -> eyre::Result<Self> {
         let r = Affine::deserialize_compressed(&bytes[0..32])?;
-        let s: ScalarField = ScalarField::from_be_bytes_mod_order(&bytes[32..64]);
+        let s: ScalarField = ScalarField::deserialize_compressed(&bytes[32..64])?;
         Ok(Self { r, s })
     }
 }
