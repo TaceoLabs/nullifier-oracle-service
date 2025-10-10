@@ -1,5 +1,6 @@
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, Zero};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
@@ -18,6 +19,11 @@ impl EdDSAPrivateKey {
     /// Create a private key from a 32-byte array.
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)
+    }
+
+    /// Expose the private key as a byte array.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
     }
 
     /// Generate a random private key using the given RNG.
@@ -170,6 +176,23 @@ impl EdDSASignature {
     fn get_chall_ds() -> BaseField {
         BaseField::from_be_bytes_mod_order(Self::CHALL_DS)
     }
+
+    /// Expose the signature as a byte array.
+    pub fn to_compressed_bytes(&self) -> eyre::Result<[u8; 64]> {
+        let mut buf = Vec::new();
+        self.r.serialize_compressed(&mut buf)?;
+        self.s.serialize_compressed(&mut buf)?;
+        let mut bytes = [0u8; 64];
+        bytes[0..64].copy_from_slice(&buf[0..64]);
+        Ok(bytes)
+    }
+
+    /// Parse the signature from a byte array.
+    pub fn from_compressed_bytes(bytes: [u8; 64]) -> eyre::Result<Self> {
+        let r = Affine::deserialize_compressed(&bytes[0..32])?;
+        let s: ScalarField = ScalarField::deserialize_compressed(&bytes[32..64])?;
+        Ok(Self { r, s })
+    }
 }
 
 fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField {
@@ -185,6 +208,7 @@ fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField 
         BaseField::zero(),
     ])[1]
 }
+
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
 pub(crate) fn convert_base_to_scalar(f: BaseField) -> ScalarField {
     let bytes = f.into_bigint().to_bytes_le();
@@ -227,14 +251,20 @@ mod tests {
             !pk_.verify(message, &signature),
             "invalid signature should not verify"
         );
+
+        let bytes = signature.to_compressed_bytes().unwrap();
+        let signature_deserialized = EdDSASignature::from_compressed_bytes(bytes).unwrap();
+        assert_eq!(signature, signature_deserialized);
     }
 
     #[test]
     fn test_eddsa_rng() {
         let mut rng = rand::thread_rng();
-        let sk = rng.r#gen();
-        let message = BaseField::rand(&mut rng);
-        test(sk, message, &mut rng);
+        for _ in 0..100 {
+            let sk = rng.r#gen();
+            let message = BaseField::rand(&mut rng);
+            test(sk, message, &mut rng);
+        }
     }
 
     #[test]
@@ -257,5 +287,18 @@ mod tests {
         )
         .unwrap();
         test(*sk, message, &mut rng);
+    }
+
+    #[test]
+    fn test_eddsa_signature_encoding_roundtrip() {
+        let sk = b"1cc01b8ddd6851915a42e0cfc6b7088c";
+        let message = field_from_hex_string::<BaseField>(
+            "0x671e7802b9c4f1165955b9477a378bf30fd5723fddf7e727934bf2a7c2f3265",
+        )
+        .unwrap();
+        let signature = EdDSAPrivateKey::from_bytes(*sk).sign(message);
+        let bytes = signature.to_compressed_bytes().unwrap();
+        let signature_prime = EdDSASignature::from_compressed_bytes(bytes).unwrap();
+        assert_eq!(signature, signature_prime);
     }
 }
