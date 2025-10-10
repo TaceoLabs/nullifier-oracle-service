@@ -3,7 +3,25 @@ pragma solidity ^0.8.20;
 
 import "forge-std/console.sol";
 
+interface IGroth16Verifier {
+    function verifyProof(
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[24] calldata _pubSignals
+    ) external view returns (bool);
+}
+
 contract KeyGen {
+    IGroth16Verifier public immutable verifier;
+
+    struct Groth16Proof {
+        uint[2] pA;
+        uint[2][2] pB;
+        uint[2] pC;
+        uint[24] pubSignals;
+    }
+
     address[] public participants;
 
     mapping(address => uint256) public participantIndex; // participant -> index
@@ -38,12 +56,14 @@ contract KeyGen {
     event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCiphertexts[] round2Contributions);
     event SecretGenNullifierKeyCreated(uint128 indexed rpId, bytes rpNullifierKey);
 
-    constructor(address[] memory _participants, uint16 _threshold, bytes memory _peerKeys) {
+    constructor(address _verifierAddress, address[] memory _participants, uint16 _threshold, bytes memory _peerKeys) {
         require(_participants.length > 0, "Need participants");
         participants = _participants;
         for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
         peerKeys = _peerKeys;
         threshold = _threshold;
+        // Pass in correct groth16 verifier contract address
+        verifier = IGroth16Verifier(_verifierAddress);
     }
 
     function getMyId() external view returns (uint256) {
@@ -114,7 +134,11 @@ contract KeyGen {
     }
 
     // Round2 submission
-    function addRound2Contribution(uint128 rpId, bytes calldata ciphertext) external {
+    function addRound2Contribution(
+        uint128 rpId,
+        bytes calldata ciphertext,
+        Groth16Proof calldata proof
+    ) external {
         uint idx = participantIndex[msg.sender];
         require(idx < participants.length, "Not a participant");
 
@@ -124,7 +148,10 @@ contract KeyGen {
         // TODO: Check if this check can be cheated
         require(st.round2[idx].data.length == 0, "Already submitted");
 
-        // TODO: verifyProof(proof, ciphertext, verification_key);
+        require(
+            verifier.verifyProof(proof.pA, proof.pB, proof.pC, proof.pubSignals),
+            "Invalid proof for contributions"
+        );
 
         st.round2[idx] = RpSecretGenCiphertexts(ciphertext);
 
