@@ -1,5 +1,6 @@
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{AdditiveGroup, BigInteger, PrimeField, Zero};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
@@ -177,33 +178,18 @@ impl EdDSASignature {
     }
 
     /// Expose the signature as a byte array.
-    pub fn to_compressed_bytes(&self) -> [u8; 65] {
-        let mut bytes = [0u8; 65];
-        bytes[0..32].copy_from_slice(&self.r.y.into_bigint().to_bytes_be());
+    pub fn to_compressed_bytes(&self) -> eyre::Result<[u8; 64]> {
+        let mut buf = Vec::new();
+        self.r.serialize_compressed(&mut buf)?;
+        let mut bytes = [0u8; 64];
+        bytes[0..32].copy_from_slice(&buf[0..32]);
         bytes[32..64].copy_from_slice(&self.s.into_bigint().to_bytes_be());
-        bytes[64] = lexicographically_largest(self.r.x) as u8;
-        bytes
+        Ok(bytes)
     }
 
     /// Parse the signature from a byte array.
-    pub fn from_compressed_bytes(bytes: [u8; 65]) -> eyre::Result<Self> {
-        let y = ark_babyjubjub::Fq::from_be_bytes_mod_order(&bytes[0..32]);
-        // bytes[64] stores whether the x-coordinate is the lexicographically largest root; see `to_compressed_bytes`
-        let r = Affine::get_point_from_y_unchecked(y, bytes[64] != 0)
-            .ok_or(eyre::eyre!("Invalid r coordinate in signature"))?;
-
-        if !r.is_on_curve() {
-            return Err(eyre::eyre!(
-                "Invalid r coordinate in signature: not on curve"
-            ));
-        }
-
-        if !r.is_in_correct_subgroup_assuming_on_curve() {
-            return Err(eyre::eyre!(
-                "Invalid r coordinate in signature: not in correct subgroup"
-            ));
-        }
-
+    pub fn from_compressed_bytes(bytes: [u8; 64]) -> eyre::Result<Self> {
+        let r = Affine::deserialize_compressed(&bytes[0..32])?;
         let s: ScalarField = ScalarField::from_be_bytes_mod_order(&bytes[32..64]);
         Ok(Self { r, s })
     }
@@ -221,12 +207,6 @@ fn challenge_hash(message: BaseField, nonce_r: Affine, pk: Affine) -> BaseField 
         BaseField::zero(),
         BaseField::zero(),
     ])[1]
-}
-
-fn lexicographically_largest(x: BaseField) -> bool {
-    let x_bigint = x.into_bigint();
-    let neg_bigint = (-x).into_bigint();
-    x_bigint > neg_bigint
 }
 
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.
@@ -272,7 +252,7 @@ mod tests {
             "invalid signature should not verify"
         );
 
-        let bytes = signature.to_compressed_bytes();
+        let bytes = signature.to_compressed_bytes().unwrap();
         let signature_deserialized = EdDSASignature::from_compressed_bytes(bytes).unwrap();
         assert_eq!(signature, signature_deserialized);
     }
@@ -317,7 +297,7 @@ mod tests {
         )
         .unwrap();
         let signature = EdDSAPrivateKey::from_bytes(*sk).sign(message);
-        let bytes = signature.to_compressed_bytes();
+        let bytes = signature.to_compressed_bytes().unwrap();
         let signature_prime = EdDSASignature::from_compressed_bytes(bytes).unwrap();
         assert_eq!(signature, signature_prime);
     }
