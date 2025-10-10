@@ -124,7 +124,7 @@ contract KeyGen {
         // TODO: Check if this check can be cheated
         require(st.round2[idx].data.length == 0, "Already submitted");
 
-        // TODO: verifyProof(proof, ciphertext, commitment);
+        // TODO: verifyProof(proof, ciphertext, verification_key);
 
         st.round2[idx] = RpSecretGenCiphertexts(ciphertext);
 
