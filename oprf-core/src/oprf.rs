@@ -298,6 +298,16 @@ mod mappings {
         lhs_v.ct_eq(&rhs_v)
     }
 
+    fn ct_is_zero<F: PrimeField>(v: F) -> Choice {
+        // Ideally the ark ecosystem would support subtle, so this is currently
+        // the best thing we can do. Serialize the elements and then compare the
+        // byte representation.
+        let mut lhs_v = Vec::with_capacity(v.uncompressed_size());
+        let rhs_v = vec![0; v.uncompressed_size()];
+        v.serialize_uncompressed(&mut lhs_v).unwrap();
+        lhs_v.ct_eq(&rhs_v)
+    }
+
     fn ct_select<F: PrimeField>(lhs: F, rhs: F, choice: Choice) -> F {
         // Ideally the ark ecosystem would support subtle.
         let choice = F::from(choice.unwrap_u8());
@@ -306,8 +316,9 @@ mod mappings {
 
     fn ct_is_square<F: PrimeField>(x: F) -> Choice {
         let x = x.pow(F::MODULUS_MINUS_ONE_DIV_TWO);
+        // TODO this ct_eq and ct_is_zero could be folded into one serialization operation and then comparison
         let c1 = ct_eq(x, F::ONE);
-        let c2 = ct_eq(x, F::ZERO);
+        let c2 = ct_is_zero(x);
         c1 ^ c2
     }
 
@@ -403,8 +414,8 @@ mod mappings {
         let z = BaseField::from(5);
         let tv1 = input * input;
         let tv1 = z * tv1;
-        let e = ct_eq(tv1, -BaseField::ONE);
-        let tv1 = ct_select(BaseField::zero(), tv1, e); //  if e { BaseField::zero() } else { tv1 };
+        let e = ct_is_zero(tv1 + BaseField::ONE);
+        let tv1 = ct_select(BaseField::zero(), tv1, e);
         let x1 = tv1 + BaseField::one();
         let x1 = inv0(x1);
         let x1 = -c1 * x1;
@@ -416,12 +427,12 @@ mod mappings {
         let x2 = -x1 - c1;
         let gx2 = tv1 * gx1;
         let e2 = ct_is_square(gx1);
-        let (x, y2) = (ct_select(x1, x2, e2), ct_select(gx1, gx2, e2)); // if e2 { (x1, gx1) } else { (x2, gx2) };
+        let (x, y2) = (ct_select(x1, x2, e2), ct_select(gx1, gx2, e2));
         let y = y2
             .sqrt()
             .expect("y2 should be a square based on our conditional selection above");
         let e3 = Choice::from(sgn0(y) as u8);
-        let y = ct_select(-y, y, e2 ^ e3); // if e2 ^ e3 { -y } else { y };
+        let y = ct_select(-y, y, e2 ^ e3);
         // TODO: k == 1, so can be skipped
         let s = x * k;
         let t = y * k;
@@ -455,8 +466,8 @@ mod mappings {
         let w = tv2 * t;
         let tv1 = s - BaseField::one();
         let w = w * tv1;
-        let e = ct_eq(tv2, BaseField::zero()); // tv2.is_zero();
-        let w = ct_select(BaseField::one(), w, e); // if e { BaseField::one() } else { w };
+        let e = ct_is_zero(tv2);
+        let w = ct_select(BaseField::one(), w, e);
         (v, w)
     }
 
@@ -522,6 +533,11 @@ mod mappings {
             let input = BaseField::from(42);
             let point = hash_to_curve(input);
             assert!(point.is_on_curve());
+        }
+
+        #[test]
+        fn test_ct_is_zero() {
+            assert_eq!(ct_is_zero(BaseField::zero()).unwrap_u8(), 1);
         }
     }
 }
