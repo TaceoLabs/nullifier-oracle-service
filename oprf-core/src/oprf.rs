@@ -449,6 +449,7 @@ mod mappings {
     mod tests {
         use super::*;
         use ark_ff::UniformRand;
+        use std::str::FromStr;
 
         #[test]
         fn test_map_to_curve_twisted_edwards() {
@@ -475,6 +476,18 @@ mod mappings {
             let input = BaseField::from(42);
             let point = encode_to_curve(input);
             assert!(point.is_on_curve());
+
+            let expected_point = Affine {
+                x: BaseField::from_str(
+                    "2248614069508207507326262781062587749986544721157984531256611865469864958775",
+                )
+                .unwrap(),
+                y: BaseField::from_str(
+                    "11346329236507494865585709204927959305406795872019529850625216399990666158973",
+                )
+                .unwrap(),
+            };
+            assert_eq!(expected_point, point);
         }
         #[test]
         fn test_hash_to_curve() {
