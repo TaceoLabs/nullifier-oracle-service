@@ -281,7 +281,7 @@ impl OprfClient {
 
 mod mappings {
     use ark_ec::{AffineRepr, CurveGroup};
-    use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
+    use ark_ff::{BigInt, BigInteger, Field, One, PrimeField, Zero};
     use poseidon2::Poseidon2;
     use subtle::{Choice, ConstantTimeEq};
 
@@ -471,12 +471,19 @@ mod mappings {
         (v, w)
     }
 
+    trait Inv0Constants: PrimeField {
+        const MODULUS_MINUS_2: Self::BigInt;
+    }
+
+    impl Inv0Constants for BaseField {
+        const MODULUS_MINUS_2: Self::BigInt = BigInt!(
+            "21888242871839275222246405745257275088548364400416034343698204186575808495615"
+        );
+    }
+
     /// Computes the inverse of a field element, returning zero if the element is zero.
-    fn inv0<F: PrimeField>(x: F) -> F {
-        // TODO: cache the exponent somewhere
-        let mut exp = F::MODULUS;
-        exp.sub_with_borrow(&F::BigInt::from(2u64));
-        x.pow(exp)
+    fn inv0<F: PrimeField + Inv0Constants>(x: F) -> F {
+        x.pow(F::MODULUS_MINUS_2)
     }
 
     /// Computes the `sgn0` function for a field element, based on the definition in [RFC9380, Section 4.1](https://www.rfc-editor.org/rfc/rfc9380.html#name-the-sgn0-function).
@@ -538,6 +545,24 @@ mod mappings {
         #[test]
         fn test_ct_is_zero() {
             assert_eq!(ct_is_zero(BaseField::zero()).unwrap_u8(), 1);
+        }
+
+        #[test]
+        fn test_inv0() {
+            for _ in 0..100 {
+                let input = BaseField::rand(&mut rand::thread_rng());
+                let output = inv0(input);
+                assert_eq!(
+                    input * output,
+                    if !input.is_zero() {
+                        BaseField::ONE
+                    } else {
+                        BaseField::zero()
+                    }
+                );
+            }
+
+            assert_eq!(inv0(BaseField::zero()), BaseField::zero());
         }
     }
 }
