@@ -24,7 +24,7 @@ oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
 rand_chacha.workspace = true
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true }
 secrecy.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
