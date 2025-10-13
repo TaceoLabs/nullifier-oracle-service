@@ -9,9 +9,12 @@
 !oprf-client
 !oprf-core
 !oprf-service
+!oprf-dev-client
 !oprf-test
 !oprf-types
 !poseidon2
 !smart-contract-mock
+!contracts
+!*.bin
 !Cargo.lock
 !Cargo.toml

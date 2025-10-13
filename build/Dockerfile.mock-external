@@ -1,0 +1,96 @@
+FROM lukemathwalker/cargo-chef:0.1.72-rust-1.90.0-bookworm AS chef
+WORKDIR /app
+
+FROM chef AS planner
+# look at .dockerignore if this does not copy what you want
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder 
+ARG GIT_HASH
+RUN apt-get update && apt-get install -y pkg-config
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --recipe-path recipe.json
+# Build application
+COPY . .
+RUN cargo build --release --bin auth-tree-indexer
+
+# RUN cargo build --release --workspace
+# RUN cp -r ./target/* /usr/bin/
+
+
+
+
+
+FROM debian:bookworm-slim AS runtime
+ARG GIT_HASH
+LABEL org.opencontainers.image.revision=$GIT_HASH
+LABEL org.opencontainers.image.vendor=TACEO
+RUN apt-get update && \
+    apt-get install -y libssl-dev pkg-config curl ca-certificates git build-essential && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+# install foundry
+RUN curl -L https://foundry.paradigm.xyz | bash
+# Set PATH so that foundry tools are accessible
+ENV PATH="/root/.foundry/bin:${PATH}"
+RUN foundryup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/bin
+WORKDIR /app
+COPY --from=builder /app/target/release/auth-tree-indexer /app/auth-tree-indexer
+COPY contracts /app/contracts
+# RUN chown -R 12345:12345 /app
+# RUN chmod -R 700 /app
+# USER 12345
+
+COPY --chmod=0755 build/entrypoint_anvil_auth_tree.sh /entrypoint.sh
+
+
+# Expose Anvil's default RPC port and port 8080 needed for proofs
+EXPOSE 8545 8080
+
+
+ENV ANVIL_IP_ADDR=0.0.0.0
+
+CMD ["/entrypoint.sh"]
+
+
+
+
+#
+# ENV DEBIAN_FRONTEND=noninteractive
+# # ENV AWS_ACCESS_KEY_ID=test
+# # ENV AWS_SECRET_KEY=test
+#
+# # Install the curl and build-essential packages
+# RUN apt-get update && \
+#     apt-get install -y libssl-dev pkg-config curl git build-essential && \
+#     apt-get clean && rm -rf /var/lib/apt/lists/*
+#
+# # Install just
+# RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/bin
+#
+# ENV PATH="/root/.cargo/bin:${PATH}"
+# ENV PATH="/root/.cargo/bin:${PATH}"
+#
+# # install foundry
+# RUN curl -L https://foundry.paradigm.xyz | bash
+#
+# # Set PATH so that foundry tools are accessible
+# ENV PATH="/root/.foundry/bin:${PATH}"
+# RUN foundryup
+#
+# COPY --from=builder /usr/bin /usr/bin
+#
+#
+# # copy the start script to the docker image
+# COPY --chmod=0755 build/entrypoint_anvil_auth_tree.sh /entrypoint.sh
+#
+#
+# # Expose Anvil's default RPC port and port 8080 needed for proofs
+# EXPOSE 8545 8080
+#
+#
+# ENV ANVIL_IP_ADDR=0.0.0.0
+#
+# CMD ["/entrypoint.sh"]
