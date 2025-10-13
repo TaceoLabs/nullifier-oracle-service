@@ -12,14 +12,40 @@ interface IGroth16Verifier {
     ) external view returns (bool);
 }
 
+interface IBabyJubjub {
+    function add(
+        uint256 x1,
+        uint256 y1,
+        uint256 x2,
+        uint256 y2
+    ) external view returns (uint256 x3, uint256 y3);
+
+    function isOnCurve(
+        uint256 x,
+        uint256 y
+    ) external view returns (bool);
+}
+
 contract KeyGen {
     IGroth16Verifier public immutable verifier;
+    IBabyJubjub public immutable accumulator;
 
     struct Groth16Proof {
         uint[2] pA;
         uint[2][2] pB;
         uint[2] pC;
         uint[24] pubSignals;
+    }
+
+    struct BabyJubjubElement {
+        uint256 pointX;
+        uint256 pointY;
+    }
+
+    struct Round1Data {
+        BabyJubjubElement element;
+        // Hash of the polynomial created by participant
+        uint256 dealingHash;
     }
 
     address[] public participants;
@@ -30,8 +56,10 @@ contract KeyGen {
     mapping(uint128 => RpNullifierGenState) internal states;
 
     // Mapping between each rpId and the corresponding nullifier
-    mapping(uint128 => RpSecretGenCommitment[]) internal keyStorage;
+    // TODO: What type should this be?
+    mapping(uint128 => BabyJubjubElement) internal keyStorage;
 
+    // TODO: What to do with this field? @Artemis
     uint128[] public activeIds;
 
     bytes public peerKeys;
@@ -44,6 +72,7 @@ contract KeyGen {
         bytes ecdsaPubKey; // session key
         RpSecretGenCommitment[] round1;
         RpSecretGenCiphertexts[] round2;
+        BabyJubjubElement keyAggregate;
         bool[] finalizeDone;
         bool round2EventEmitted;
         bool finalizeEventEmitted;
@@ -54,9 +83,15 @@ contract KeyGen {
     event SecretGenRound1(uint128 indexed rpId, uint16 threshold);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
     event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCommitment[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
-    event SecretGenNullifierKeyCreated(uint128 indexed rpId, RpSecretGenCommitment[] nullifierKey);
+    event SecretGenNullifierKeyCreated(uint128 indexed rpId, BabyJubjubElement nullifierKey);
 
-    constructor(address _verifierAddress, address[] memory _participants, uint16 _threshold, bytes memory _peerKeys) {
+    constructor(
+        address _verifierAddress,
+        address _accumulatorAddress,
+        address[] memory _participants,
+        uint16 _threshold,
+        bytes memory _peerKeys
+    ) {
         require(_participants.length > 0, "Need participants");
         participants = _participants;
         for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
@@ -64,6 +99,7 @@ contract KeyGen {
         threshold = _threshold;
         // Pass in correct groth16 verifier contract address
         verifier = IGroth16Verifier(_verifierAddress);
+        accumulator = IBabyJubjub(_accumulatorAddress);
     }
 
     function getMyId() external view returns (uint256) {
@@ -76,7 +112,7 @@ contract KeyGen {
         return peerKeys;
     }
 
-    function getRpNullifierKey(uint128 rpId) external view returns (RpSecretGenCommitment[] memory) {
+    function getRpNullifierKey(uint128 rpId) external view returns (BabyJubjubElement memory) {
         return keyStorage[rpId];
     }
 
@@ -109,6 +145,9 @@ contract KeyGen {
 
         st.round2EventEmitted = false;
         st.finalizeEventEmitted = false;
+        st.keyAggregate.pointX = 0;
+        st.keyAggregate.pointY = 0;
+        // TODO: What to do with this field? @Artemis
         activeIds.push(rpId);
 
         // Emit Round1 event for everyone
@@ -116,7 +155,11 @@ contract KeyGen {
     }
 
     // Round1 submission
-    function addRound1Contribution(uint128 rpId, bytes calldata commitment) external {
+    function addRound1Contribution(
+        uint128 rpId,
+        bytes calldata commitment,
+        Round1Data calldata data
+    ) external {
         uint idx = participantIndex[msg.sender];
         console.log(msg.sender, "has idx:", idx);
         require(idx < participants.length, "Not a participant");
@@ -125,7 +168,12 @@ contract KeyGen {
         require(st.ecdsaPubKey.length != 0, "Session not initialized");
         require(st.round1[idx].data.length == 0, "Already submitted");
 
-        //TODO: Add BabyJubJub Points together and keep running total
+        // Add BabyJubJub Elements together and keep running total
+        _validateInputElement(data.element);
+        uint256 pointX = data.element.pointX;
+        uint256 pointY = data.element.pointY;
+        _addToAggregate(st, pointX, pointY);
+
         st.round1[idx] = RpSecretGenCommitment(commitment);
 
 
@@ -172,21 +220,21 @@ contract KeyGen {
     }
 
     // --- Helpers ---
-    function allRound1Submitted(RpNullifierGenState storage st) private returns (bool) {
+    function allRound1Submitted(RpNullifierGenState storage st) private view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
             if (st.round1[i].data.length == 0) return false;
         }
         return true;
     }
 
-    function allRound2Submitted(RpNullifierGenState storage st) private returns (bool) {
+    function allRound2Submitted(RpNullifierGenState storage st) private view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
             if (st.round2[i].data.length == 0) return false;
         }
         return true;
     }
 
-    function allFinalizeSubmitted(RpNullifierGenState storage st) private returns (bool) {
+    function allFinalizeSubmitted(RpNullifierGenState storage st) private view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
             if (!st.finalizeDone[i]) return false;
         }
@@ -216,11 +264,46 @@ contract KeyGen {
         if (!allFinalizeSubmitted(st)) return;
 
         st.storedNullifier = true;
-        //TODO: Need to set this to be the actual added full key...
-        // This is incorrect yes?
-        keyStorage[rpId] = st.round1;
+        //TODO: Is this the correct type...?????
+        keyStorage[rpId] = st.keyAggregate;
 
-        emit SecretGenNullifierKeyCreated(rpId, st.round1);
+        emit SecretGenNullifierKeyCreated(rpId, st.keyAggregate);
     }
 
+    function _addToAggregate(
+        RpNullifierGenState storage st,
+        uint256 newPointX,
+        uint256 newPointY
+    ) private {
+        if (_isEmpty(st.keyAggregate)) {
+            st.keyAggregate = BabyJubjubElement(newPointX, newPointY);
+            return;
+        }
+
+        (uint256 resultX, uint256 resultY) = accumulator.add(
+            st.keyAggregate.pointX,
+            st.keyAggregate.pointY,
+            newPointX,
+            newPointY
+        );
+
+        st.keyAggregate = BabyJubjubElement(resultX, resultY);
+    }
+
+    function _validateInputElement(BabyJubjubElement memory element) private {
+        require(
+            accumulator.isOnCurve(element.pointX, element.pointY),
+            "invalid BabyJubjub group element not on curve"
+        );
+        require(!_isInfinity(element), "Infinity element given");
+        require(!_isEmpty(element), "Empty element given");
+    }
+
+    function _isInfinity(BabyJubjubElement memory element) private view returns (bool) {
+        return element.pointX == 0 && element.pointY == 1;
+    }
+
+    function _isEmpty(BabyJubjubElement memory element) private view returns (bool) {
+        return element.pointX == 0 && element.pointY == 0;
+    }
 }
