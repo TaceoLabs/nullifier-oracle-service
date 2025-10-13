@@ -10,6 +10,7 @@ contract KeyGenTest is Test {
     address alice = address(0x1);
     address bob = address(0x2);
     address carol = address(0x3);
+    address accumulator = address(0x998);
     address verifier = address(0x999);
 
         function getValidProof() internal pure returns (KeyGen.Groth16Proof memory) {
@@ -69,7 +70,7 @@ contract KeyGenTest is Test {
 
         bytes memory peerKeys = hex"deadbeef"; // dummy peer keys
 
-        gen = new KeyGen(verifier, participants, 1, peerKeys);
+        gen = new KeyGen(verifier, accumulator, participants, 1, peerKeys);
     }
 
     function testInitKeyGenEmitsRound1() public {
@@ -85,21 +86,29 @@ contract KeyGenTest is Test {
         uint128 sessionId = 1;
         bytes memory pubKey = hex"1111";
         gen.initKeyGen(sessionId, pubKey);
+        KeyGen.BabyJubjubElement memory testElement = KeyGen.BabyJubjubElement(
+            5299619240641551281634865583518297030282874472190772894086521144482721001553,
+            16950150798460657717958625567821834550301663161624707787222815936182638968203
+        );
+        KeyGen.Round1Data memory testRound1Data = KeyGen.Round1Data(
+            testElement,
+            0
+        );
 
         // Each participant submits round1
         vm.startPrank(alice);
-        gen.addRound1Contribution(sessionId, hex"aaa1");
+        gen.addRound1Contribution(sessionId, hex"aaa1", testRound1Data);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        gen.addRound1Contribution(sessionId, hex"aaa2");
+        gen.addRound1Contribution(sessionId, hex"aaa2", testRound1Data);
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
         emit KeyGen.SecretGenRound2(sessionId, hex"deadbeef");
 
         vm.startPrank(carol);
-        gen.addRound1Contribution(sessionId, hex"aaa3");
+        gen.addRound1Contribution(sessionId, hex"aaa3", testRound1Data);
         vm.stopPrank();
     }
 
@@ -107,12 +116,20 @@ contract KeyGenTest is Test {
         uint128 sessionId = 2;
         bytes memory pubKey = hex"2222";
         KeyGen.Groth16Proof memory proof = getValidProof();
+        KeyGen.BabyJubjubElement memory testElement = KeyGen.BabyJubjubElement(
+            5299619240641551281634865583518297030282874472190772894086521144482721001553,
+            16950150798460657717958625567821834550301663161624707787222815936182638968203
+        );
+        KeyGen.Round1Data memory testRound1Data = KeyGen.Round1Data(
+            testElement,
+            0
+        );
         gen.initKeyGen(sessionId, pubKey);
 
         // All round1 first
-        vm.prank(alice); gen.addRound1Contribution(sessionId, hex"aaa1");
-        vm.prank(bob);   gen.addRound1Contribution(sessionId, hex"aaa2");
-        vm.prank(carol); gen.addRound1Contribution(sessionId, hex"aaa3");
+        vm.prank(alice); gen.addRound1Contribution(sessionId, hex"aaa1", testRound1Data);
+        vm.prank(bob);   gen.addRound1Contribution(sessionId, hex"aaa2", testRound1Data);
+        vm.prank(carol); gen.addRound1Contribution(sessionId, hex"aaa3", testRound1Data);
 
         // Two round2 contributions already submitted
         vm.prank(alice); gen.addRound2Contribution(sessionId, hex"bbb1", proof);
