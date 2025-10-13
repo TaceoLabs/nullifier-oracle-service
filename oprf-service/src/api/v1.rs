@@ -1,7 +1,7 @@
 //! Version 1 (v1) API Routes
 //!
 //! This module defines the v1 API routes for the OPRF peer service.
-//! Currently, all endpoints are unauthenticated. Routes are structured under `/oprf`.
+//! Currently, all endpoints are unauthenticated.
 //!
 //! It also applies a restrictive CORS policy suitable for JSON-based POST requests.
 use axum::Router;
@@ -21,13 +21,8 @@ fn unauthenticated_routes() -> Router<AppState> {
 /// Build the v1 API router.
 ///
 /// This sets up:
-/// - `/oprf` routes
-/// - health endpoints (`/health`, `/ready`, `/live`)
+/// - `oprf` routes
 /// - a restrictive CORS layer allowing JSON POST requests and OPTIONS preflight and a wildcard origin.
-///
-/// # Arguments
-///
-/// * `input_max_body_limit` - maximum allowed size of request bodies in bytes.
 pub(crate) fn build() -> Router<AppState> {
     // We setup a wildcard as we are a public API and everyone can access the service.
     let cors = CorsLayer::new()
