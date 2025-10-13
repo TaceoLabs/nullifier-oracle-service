@@ -4792,6 +4792,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_json",
+ "subtle",
  "thiserror 2.0.17",
  "uuid",
  "zeroize",
