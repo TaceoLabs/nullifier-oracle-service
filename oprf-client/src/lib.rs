@@ -411,7 +411,6 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
                 rp_id: query.rp_id,
                 share_epoch: query.share_epoch,
             },
-            merkle_epoch: merkle_membership.epoch,
             merkle_root: merkle_membership.root,
             action: query.action,
             nonce: query.nonce,

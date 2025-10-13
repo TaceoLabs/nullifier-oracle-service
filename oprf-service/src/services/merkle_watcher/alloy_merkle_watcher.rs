@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -11,7 +11,7 @@ use alloy::{
 use async_trait::async_trait;
 use eyre::Context as _;
 use futures::StreamExt as _;
-use oprf_types::{MerkleEpoch, MerkleRoot};
+use oprf_types::MerkleRoot;
 use parking_lot::Mutex;
 use tracing::instrument;
 
@@ -21,6 +21,7 @@ sol! {
     #[sol(rpc)]
     contract AccountRegistry {
         function isValidRoot(uint256 root) external view returns (bool);
+        function currentRoot() external view returns (uint256);
     }
     event RootRecorded(uint256 indexed root, uint256 timestamp, uint256 indexed rootEpoch);
 }
@@ -37,17 +38,19 @@ impl AlloyMerkleWatcher {
         contract_address: Address,
         ws_rpc_url: &str,
         max_merkle_store_size: usize,
-        chain_epoch_max_difference: u128,
     ) -> eyre::Result<Self> {
         tracing::info!("creating provider...");
         let ws = WsConnect::new(ws_rpc_url);
         let provider = ProviderBuilder::new().connect_ws(ws).await?;
+        let contract = AccountRegistry::new(contract_address, provider.clone());
+
+        tracing::info!("get current root...");
+        let current_root = contract.currentRoot().call().await?;
 
         let merkle_root_store = Arc::new(Mutex::new(
             MerkleRootStore::new(
-                BTreeMap::new(),
+                HashMap::from([(current_root.into(), 0)]), // insert current root with 0 timestamp so it is oldest
                 max_merkle_store_size,
-                chain_epoch_max_difference,
             )
             .context("while building merkle root store")?,
         ));
@@ -64,17 +67,17 @@ impl AlloyMerkleWatcher {
             while let Some(log) = stream.next().await {
                 match RootRecorded::decode_log(log.as_ref()) {
                     Ok(event) => {
-                        tracing::info!("got epoch {} root {}", event.rootEpoch, event.root);
-                        if let Ok(epoch) = MerkleEpoch::try_from(event.rootEpoch) {
+                        tracing::info!("got root {} timestamp {}", event.root, event.timestamp);
+                        if let Ok(timestamp) = u64::try_from(event.timestamp) {
                             merkle_root_store_clone
                                 .lock()
-                                .insert(epoch, event.root.into());
+                                .insert(event.root.into(), timestamp);
                         } else {
-                            tracing::warn!("AccountRegistry send root epoch > u128");
+                            tracing::warn!("AccountRegistry send root with timestamp > u64");
                         }
                     }
                     Err(err) => {
-                        tracing::info!("failed to decode contract event: {err:?}");
+                        tracing::warn!("failed to decode contract event: {err:?}");
                     }
                 }
             }
@@ -91,31 +94,24 @@ impl AlloyMerkleWatcher {
 #[async_trait]
 impl MerkleWatcher for AlloyMerkleWatcher {
     #[instrument(level = "debug", skip(self))]
-    async fn is_root_valid(
-        &self,
-        epoch: MerkleEpoch,
-        root: MerkleRoot,
-    ) -> Result<bool, MerkleWatcherError> {
+    async fn is_root_valid(&self, root: MerkleRoot) -> Result<bool, MerkleWatcherError> {
         {
             let store = self.merkle_root_store.lock();
             // first check if the merkle root is already registered
-            if let Some(known_root) = store.get_merkle_root(epoch) {
-                tracing::trace!("cache hit");
-                let valid = root == known_root;
-                tracing::debug!("root valid: {valid}");
-                return Ok(valid);
-            } else {
-                tracing::trace!("cache miss - check if too far in the future or past");
-                store.is_sane_epoch(epoch)?;
-                // is sane epoch - need to check on chain
+            if store.contains_root(root) {
+                tracing::trace!("root was in store");
+                tracing::trace!("root valid: true");
+                return Ok(true);
             }
         }
+        tracing::debug!("check in contract");
+        // if it is valid, we should receive this root as a RootRecorded event soon, no need to add here
         let contract = AccountRegistry::new(self.contract_address, self.provider.clone());
         let valid = contract
             .isValidRoot(root.into())
             .call()
             .await
-            .map_err(|err| MerkleWatcherError::ChainCommunicationError(eyre::eyre!("{err:?}")))?;
+            .map_err(|err| MerkleWatcherError(err.to_string()))?;
         tracing::debug!("root valid: {valid}");
         return Ok(valid);
     }

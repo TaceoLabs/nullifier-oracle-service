@@ -7,7 +7,7 @@
 //! - [`CredentialsSignature`] represents a signed credential issued by world ecosystem
 
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
-use oprf_types::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
+use oprf_types::{MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
 
 use crate::MAX_DEPTH;
 
@@ -41,14 +41,12 @@ pub struct CredentialsSignature {
 ///
 /// Each public key is tied to a leaf in a Merkle tree.
 /// To prove validity, the user shows membership in the tree
-/// at a given epoch, with a sibling path up to the root.
+/// with a sibling path up to the root.
 #[derive(Clone)]
 pub struct MerkleMembership {
-    /// The epoch of the Merkle root (sent to the OPRF service so it fetches the correct root).
-    pub epoch: MerkleEpoch,
     /// The actual Merkle root (not sent to the OPRF service, only used for computing the proof).
     pub root: MerkleRoot,
-    /// The depth of the Merkle tree in this epoch.  
+    /// The depth of the Merkle tree.
     /// Siblings are always [`MAX_DEPTH`] long to avoid leaking structure.
     pub depth: u64,
     /// The index of the user’s leaf in the Merkle tree.

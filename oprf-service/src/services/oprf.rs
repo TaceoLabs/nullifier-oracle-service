@@ -159,7 +159,7 @@ impl OprfService {
         // check if the merkle root is valid
         let valid = self
             .merkle_watcher
-            .is_root_valid(request.merkle_epoch, request.merkle_root)
+            .is_root_valid(request.merkle_root)
             .await?;
         if !valid {
             return Err(OprfServiceError::InvalidMerkleRoot)?;
