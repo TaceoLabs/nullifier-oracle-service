@@ -68,14 +68,12 @@ pub fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
 }
 
 /// Reconstructs a curve point from its Shamir shares and lagrange coefficients.
-pub(crate) fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField]) -> C {
+pub(crate) fn reconstruct_point<C: CurveGroup>(
+    shares: &[C::Affine],
+    lagrange: &[C::ScalarField],
+) -> C {
     debug_assert_eq!(shares.len(), lagrange.len());
-    let mut res = C::zero();
-    for (s, l) in shares.iter().zip(lagrange.iter()) {
-        res += *s * l
-    }
-
-    res
+    C::msm_unchecked(shares, lagrange)
 }
 
 #[allow(unused)]
@@ -99,7 +97,9 @@ pub(crate) fn reconstruct_random_pointshares<C: CurveGroup, R: Rng>(
 ) -> C {
     let num_parties = shares.len();
     let parties = (1..=num_parties).choose_multiple(rng, degree + 1);
+    // maybe sufficient to into_affine in the following map
     let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
+    let shares = C::batch_convert_to_mul_base(&shares);
     let lagrange = lagrange_from_coeff(&parties);
     reconstruct_point(&shares, &lagrange)
 }

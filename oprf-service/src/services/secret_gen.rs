@@ -276,29 +276,32 @@ mod tests {
             )
             .await;
 
-        let dlog_secret0 = *secret_manager0
+        let dlog_secret0 = secret_manager0
             .rp_materials
             .lock()
             .get(&rp_id)
             .unwrap()
             .shares
             .get(&ShareEpoch::default())
+            .cloned()
             .unwrap();
-        let dlog_secret1 = *secret_manager1
+        let dlog_secret1 = secret_manager1
             .rp_materials
             .lock()
             .get(&rp_id)
             .unwrap()
             .shares
             .get(&ShareEpoch::default())
+            .cloned()
             .unwrap();
-        let dlog_secret2 = *secret_manager2
+        let dlog_secret2 = secret_manager2
             .rp_materials
             .lock()
             .get(&rp_id)
             .unwrap()
             .shares
             .get(&ShareEpoch::default())
+            .cloned()
             .unwrap();
 
         let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);

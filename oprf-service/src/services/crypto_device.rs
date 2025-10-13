@@ -31,6 +31,7 @@ use oprf_types::{
     crypto::{PeerPublicKey, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
+use zeroize::ZeroizeOnDrop;
 
 use crate::{
     metrics::METRICS_RP_SECRETS,
@@ -45,14 +46,15 @@ pub(crate) mod dlog_storage;
 ///
 /// Used internally to compute Diffie-Hellman and key-generation operations.
 /// Not `Debug`/`Display` to avoid accidental leaks.
-#[derive(Copy, Clone)]
+#[derive(Clone, ZeroizeOnDrop)]
 pub(crate) struct PeerPrivateKey(ark_babyjubjub::Fr);
 
 /// Secret-share of an OPRF nullifier secret.
 ///
 /// Serializable so it can be persisted via a secret manager.
 /// Not `Debug`/`Display` to avoid accidental leaks.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+///
+#[derive(Clone, Serialize, Deserialize, ZeroizeOnDrop)]
 #[serde(transparent)]
 pub(crate) struct DLogShare(
     #[serde(
@@ -90,8 +92,8 @@ impl PeerPrivateKey {
     }
 
     /// Returns the inner scalar value of the private key.
-    pub fn inner(self) -> ark_babyjubjub::Fr {
-        self.0
+    pub fn inner(&self) -> &ark_babyjubjub::Fr {
+        &self.0
     }
 }
 
@@ -251,7 +253,7 @@ impl CryptoDevice {
         share: DLogShare,
     ) -> eyre::Result<()> {
         self.shares
-            .add(rp_id, rp_public_key, rp_nullifier_key, share);
+            .add(rp_id, rp_public_key, rp_nullifier_key, share.clone());
         let result = self
             .secret_manager
             .store_dlog_share(rp_id, rp_public_key.into(), rp_nullifier_key, share)

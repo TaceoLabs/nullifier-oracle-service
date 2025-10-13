@@ -306,7 +306,7 @@ pub fn create_account(rpc_url: &str) {
 }
 
 /// Authenticator holds an internal Alloy signer.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AuthenticatorSigner {
     onchain_signer: PrivateKeySigner,
     offchain_signer: EdDSAPrivateKey,

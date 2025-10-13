@@ -3,6 +3,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{UniformRand, Zero};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
+use zeroize::ZeroizeOnDrop;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartialDLogEqualityCommitments {
@@ -42,6 +43,7 @@ pub struct DLogEqualityProofShare {
 ///
 /// This is not `Clone` because it contains secret randomness that may only be used once. We also don't implement `Debug` so we do don't print it by accident.
 /// The `challenge` method consumes the session.
+#[derive(ZeroizeOnDrop)]
 pub struct DLogEqualitySession {
     k: ScalarField,
     blinded_query: Affine,

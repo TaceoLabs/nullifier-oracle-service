@@ -12,8 +12,8 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 
 /// A private key for the EdDSA signature scheme.
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop, PartialEq, Eq, Hash)]
-pub struct EdDSAPrivateKey(pub [u8; 32]);
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct EdDSAPrivateKey([u8; 32]);
 
 impl EdDSAPrivateKey {
     /// Create a private key from a 32-byte array.

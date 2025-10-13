@@ -49,7 +49,7 @@ impl RpMaterial {
 
     /// Returns the [`DLogShare`] for the given epoch, or `None` if not found.
     pub(super) fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShare> {
-        self.shares.get(&epoch).copied()
+        self.shares.get(&epoch).cloned()
     }
 
     /// Returns the RP's ECDSA `VerifyingKey`.
