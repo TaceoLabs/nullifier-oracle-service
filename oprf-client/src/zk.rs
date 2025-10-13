@@ -35,6 +35,12 @@ use witness::{BlackBoxFunction, ruint::aliases::U256};
 const QUERY_BYTES: &[u8] = include_bytes!("../../query_graph.bin");
 const NULLIFIER_BYTES: &[u8] = include_bytes!("../../nullifier_graph.bin");
 
+#[cfg(feature = "embed-zkeys")]
+const EMBEDDED_QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/OPRFQueryProof.zkey");
+#[cfg(feature = "embed-zkeys")]
+const EMBEDDED_NULLIFIER_ZKEY_BYTES: &[u8] =
+    include_bytes!("../../circom/main/OPRFNullifierProof.zkey");
+
 /// The SHA-256 fingerprint of the OPRFQuery ZKey.
 pub const FINGERPRINT_QUERY: &str =
     "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
@@ -53,6 +59,9 @@ pub enum ZkeyError {
     /// The SHA-256 fingerprint of the `.zkey` did not match the expected value.
     #[error("invalid zkey - wrong sha256 fingerprint")]
     ZKeyFingerprintMismatch,
+    /// Failed to fetch the `.zkey` from a remote source.
+    #[error(transparent)]
+    Network(#[from] reqwest::Error),
 }
 
 /// Errors that can occur during Groth16 proof generation and verification.
@@ -102,15 +111,65 @@ impl Groth16Material {
         query_zkey_path: impl AsRef<Path>,
         nullifier_zkey_path: impl AsRef<Path>,
     ) -> Result<Self, ZkeyError> {
-        let (query_matrices, query_pk) = parse_zkey(query_zkey_path, FINGERPRINT_QUERY)?;
+        let query_bytes = std::fs::read(query_zkey_path)?;
+        let nullifier_bytes = std::fs::read(nullifier_zkey_path)?;
+        let (query_matrices, query_pk) = parse_zkey_bytes(&query_bytes, FINGERPRINT_QUERY)?;
         let (nullifier_matrices, nullifier_pk) =
-            parse_zkey(nullifier_zkey_path, FINGERPRINT_NULLIFIER)?;
+            parse_zkey_bytes(&nullifier_bytes, FINGERPRINT_NULLIFIER)?;
         Ok(Self {
             query_pk,
             query_matrices,
             nullifier_pk,
             nullifier_matrices,
         })
+    }
+
+    /// Builds Groth16 material directly from in-memory `.zkey` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ZkeyError::ZKeyFingerprintMismatch`] if any embedded fingerprint check fails.
+    pub fn from_zkey_bytes(
+        query_zkey_bytes: &[u8],
+        nullifier_zkey_bytes: &[u8],
+    ) -> Result<Self, ZkeyError> {
+        let (query_matrices, query_pk) = parse_zkey_bytes(query_zkey_bytes, FINGERPRINT_QUERY)?;
+        let (nullifier_matrices, nullifier_pk) =
+            parse_zkey_bytes(nullifier_zkey_bytes, FINGERPRINT_NULLIFIER)?;
+        Ok(Self {
+            query_pk,
+            query_matrices,
+            nullifier_pk,
+            nullifier_matrices,
+        })
+    }
+
+    /// Builds Groth16 material from embedded `.zkey` bytes baked into the binary.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ZkeyError::ZKeyFingerprintMismatch`] if the baked-in fingerprints
+    /// and expected constants differ.
+    #[cfg(feature = "embed-zkeys")]
+    pub fn from_embedded_zkeys() -> Result<Self, ZkeyError> {
+        Self::from_zkey_bytes(EMBEDDED_QUERY_ZKEY_BYTES, EMBEDDED_NULLIFIER_ZKEY_BYTES)
+    }
+
+    /// Downloads `.zkey` files from the provided URLs and builds the Groth16 material.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ZkeyError::Network`] if fetching either URL fails, or a
+    /// [`ZkeyError::ZKeyFingerprintMismatch`] if the downloaded bytes do not
+    /// match the expected fingerprints.
+    #[cfg(feature = "tokio")]
+    pub async fn from_zkey_urls(
+        query_zkey_url: impl reqwest::IntoUrl,
+        nullifier_zkey_url: impl reqwest::IntoUrl,
+    ) -> Result<Self, ZkeyError> {
+        let query_bytes = reqwest::get(query_zkey_url).await?.bytes().await?;
+        let nullifier_bytes = reqwest::get(nullifier_zkey_url).await?.bytes().await?;
+        Self::from_zkey_bytes(query_bytes.as_ref(), nullifier_bytes.as_ref())
     }
 
     /// Generates an OPRFQuery Groth16 proof.
@@ -155,21 +214,20 @@ impl Groth16Material {
     }
 }
 
-/// Loads a `.zkey` and returns its matrices and proving key.
+/// Loads a `.zkey` from memory and returns its matrices and proving key.
 /// Checks the SHA-256 fingerprint.
-fn parse_zkey(
-    path: impl AsRef<Path>,
+fn parse_zkey_bytes(
+    bytes: &[u8],
     should_fingerprint: &'static str,
 ) -> Result<(ConstraintMatrices<ark_bn254::Fr>, ProvingKey<Bn254>), ZkeyError> {
-    let bytes = std::fs::read(path)?;
-    let is_fingerprint = k256::sha2::Sha256::digest(&bytes);
+    let is_fingerprint = k256::sha2::Sha256::digest(bytes);
 
     if hex::encode(is_fingerprint) != should_fingerprint {
         return Err(ZkeyError::ZKeyFingerprintMismatch);
     }
 
-    let query_zkey = ZKey::from_reader(bytes.as_slice(), CheckElement::No)
-        .expect("valid zkey if fingerprint matches");
+    let query_zkey =
+        ZKey::from_reader(bytes, CheckElement::No).expect("valid zkey if fingerprint matches");
     Ok(query_zkey.into())
 }
 
