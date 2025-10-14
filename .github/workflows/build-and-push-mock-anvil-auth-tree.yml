@@ -1,0 +1,17 @@
+name: Build and Push (mock anvil and auth-tree-indexer)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - devops
+    tags:
+      - 'mock-anvil-auth-tree-v*'
+
+jobs:
+  workflow:
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      image-name: key-gen
+      dockerfile: build/Dockerfile.mock-external
+
