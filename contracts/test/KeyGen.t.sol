@@ -131,7 +131,7 @@ contract KeyGenTest is Test {
         );
         KeyGen.Round1Data memory testRound1Data = KeyGen.Round1Data(
             testElement,
-            0
+            456
         );
         gen.initKeyGen(sessionId, pubKey);
 
@@ -145,13 +145,13 @@ contract KeyGenTest is Test {
         vm.prank(bob);   gen.addRound2Contribution(sessionId, hex"bbb2", proof);
 
         // Build expected array exactly as contract will have it
-        KeyGen.Round1Data[] memory expectedRound1 = 
+        KeyGen.Round1Data[] memory expectedRound1 =
             new KeyGen.Round1Data[](3);
         expectedRound1[0] = testRound1Data;
         expectedRound1[1] = testRound1Data;
         expectedRound1[2] = testRound1Data;
 
-        KeyGen.RpSecretGenCiphertexts[] memory expectedRound2 = 
+        KeyGen.RpSecretGenCiphertexts[] memory expectedRound2 =
             new KeyGen.RpSecretGenCiphertexts[](3);
         expectedRound2[0] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb1" });
         expectedRound2[1] = KeyGen.RpSecretGenCiphertexts({ data: hex"bbb2" });
