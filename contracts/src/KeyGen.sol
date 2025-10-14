@@ -119,9 +119,6 @@ contract KeyGen {
 
     // Initialize a new session
     // TODO: Who can initiate the keygen? Just one of the parties??
-    // TODO: Can the person have the ecdsaPubKey be empty and then delete rounds
-    // i.e. initKeyGen(1, realpubkey) then later initKeyGen(1, emptypubkey)
-    // Dont we need to ensure that the ecdsaPubKey they provide isnt empty?
     function initKeyGen(uint128 rpId, bytes calldata ecdsaPubKey) external {
         uint idx = participantIndex[msg.sender];
         require(idx < participants.length, "Not a participant");
@@ -201,7 +198,6 @@ contract KeyGen {
         RpNullifierGenState storage st = states[rpId];
         require(allRound1Submitted(st), "Round1 not complete");
         require(ciphertext.length != 0, "Submitted empty ciphertext");
-        // TODO: Check if this check can be cheated
         require(st.round2[idx].data.length == 0, "Already submitted");
 
         require(
