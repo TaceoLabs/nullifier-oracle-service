@@ -4677,7 +4677,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "clap",
  "eyre",
- "humantime",
+ "k256",
  "nodes-telemetry",
  "oprf-client",
  "oprf-service",
@@ -4690,6 +4690,7 @@ dependencies = [
  "secrecy",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4759,8 +4760,8 @@ dependencies = [
  "eyre",
  "futures",
  "groth16",
- "hex",
  "itertools 0.14.0",
+ "k256",
  "nodes-telemetry",
  "oprf-client",
  "oprf-core",

@@ -216,6 +216,7 @@ impl CryptoDevice {
     /// The provided [`NullifierShareIdentifier`] identifies the RP and the epoch of the share.
     ///
     /// Returns an error if the RP is unknown or the share for the epoch is not registered.
+    #[instrument(level = "debug", skip_all)]
     pub(crate) fn partial_commit(
         &self,
         point_b: Affine,

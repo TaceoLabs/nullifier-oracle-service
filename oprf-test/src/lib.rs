@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::LazyLock, time::Duration};
 
 use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
@@ -20,6 +20,15 @@ pub const OPRF_PEER_ADDRESS_0: Address = address!("0x14dC79964da2C08b23698B3D3cc
 pub const OPRF_PEER_ADDRESS_1: Address = address!("0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f");
 /// anvil wallet 9
 pub const OPRF_PEER_ADDRESS_2: Address = address!("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720");
+
+// FIXME
+// once we dont need to sign nonces ourself, remove this even in tests
+// this signing key is constant and used by all rps so that we do not need to run init_key_gen every time
+// and can instead reuse the key_material in the contract/secret_manager
+//
+// THIS IS NOT INTENDED FOR REAL USE IN PROD
+pub static MOCK_RP_SECRET_KEY: LazyLock<k256::SecretKey> =
+    LazyLock::new(|| k256::SecretKey::from_slice(&[42u8; 24]).unwrap());
 
 async fn start_service(
     id: usize,

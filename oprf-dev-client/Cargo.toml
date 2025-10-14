@@ -16,7 +16,7 @@ ark-babyjubjub = { workspace = true }
 ark-ff.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-humantime = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa"] }
 nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
 oprf-service = { workspace = true }
@@ -29,3 +29,4 @@ reqwest = { workspace = true }
 secrecy.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
+uuid.workspace = true

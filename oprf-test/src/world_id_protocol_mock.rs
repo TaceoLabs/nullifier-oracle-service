@@ -1,15 +1,16 @@
-use std::{
-    collections::HashSet, path::PathBuf, process::Command, str::FromStr, sync::Arc, time::Duration,
-};
+use std::{collections::HashSet, path::PathBuf, process::Command, str::FromStr, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, U256},
-    providers::{DynProvider, Provider as _, ProviderBuilder, WsConnect},
-    rpc::types::Filter,
+    network::EthereumWallet,
+    primitives::{Address, TxHash, U256, address},
+    providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
+    rpc::types::{Filter, TransactionReceipt},
     signers::local::PrivateKeySigner,
     sol,
     sol_types::SolEvent as _,
+    transports::RpcError,
+    uint,
 };
 use ark_ff::{AdditiveGroup as _, BigInt, PrimeField as _};
 use futures::StreamExt as _;
@@ -20,10 +21,22 @@ use regex::Regex;
 use semaphore_rs_hasher::Hasher;
 use semaphore_rs_trees::{Branch, InclusionProof, imt::MerkleTree};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
+
+static MASK_ACCOUNT_INDEX: U256 =
+    uint!(0x0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_U256);
 
 sol! {
     #[sol(rpc)]
+    contract AccountRegistry {
+        mapping(address => uint256) public authenticatorAddressToPackedAccountIndex;
+
+        function createAccount(
+            address recoveryAddress,
+            address[] calldata authenticatorAddresses,
+            uint256 offchainSignerCommitment
+        ) external;
+    }
     event AccountCreated(
         uint256 indexed accountIndex,
         address indexed recoveryAddress,
@@ -106,7 +119,7 @@ impl From<InclusionProofResponse> for MerkleMembership {
 pub struct AuthTreeIndexer {
     _provider: DynProvider,
     tree: Arc<RwLock<MerkleTree<PoseidonHasher>>>,
-    account_idx: mpsc::Receiver<u64>,
+    accounts: Arc<RwLock<HashSet<u64>>>,
 }
 
 impl AuthTreeIndexer {
@@ -131,7 +144,6 @@ impl AuthTreeIndexer {
             .event_signature(AccountCreated::SIGNATURE_HASH);
         let sub = provider.subscribe_logs(&filter).await?;
         let mut stream = sub.into_stream();
-        let (tx, rx) = mpsc::channel(1);
         println!("listening for events...");
         tokio::spawn(async move {
             while let Some(log) = stream.next().await {
@@ -143,21 +155,21 @@ impl AuthTreeIndexer {
                 update_tree_with_event(&tree_clone, &accounts_clone, &account_created)
                     .await
                     .expect("can update tree");
-                tx.send(hex_to_u64(&account_created.account_index_hex).expect("valid index"))
-                    .await
-                    .expect("can send");
             }
         });
         Ok(AuthTreeIndexer {
             _provider: provider.erased(),
             tree,
-            account_idx: rx,
+            accounts,
         })
     }
 
     pub async fn get_proof(&self, account_index: u64) -> eyre::Result<InclusionProofResponse> {
         if account_index == 0 {
             eyre::bail!("account index cannot be zero");
+        }
+        if !self.accounts.read().await.contains(&account_index) {
+            eyre::bail!("unknown account_index");
         }
         let leaf_index = (account_index - 1) as usize;
         let tree = self.tree.read().await;
@@ -173,14 +185,6 @@ impl AuthTreeIndexer {
             }
             None => Err(eyre::eyre!("leaf index out of range")),
         }
-    }
-
-    pub async fn account_idx(&mut self) -> eyre::Result<u64> {
-        Ok(
-            tokio::time::timeout(Duration::from_secs(30), self.account_idx.recv())
-                .await?
-                .expect("account will be added"),
-        )
     }
 }
 
@@ -290,27 +294,6 @@ pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) -> Address {
     Address::from_str(&addr).expect("valid addr")
 }
 
-// ACCOUNT_REGISTRY=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 forge script script/CreateAccount.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-pub fn create_account(rpc_url: &str, account_registry_contract: &str) {
-    let mut cmd = Command::new("forge");
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    cmd.current_dir(dir.join("../contracts"))
-        .env("ACCOUNT_REGISTRY", account_registry_contract)
-        .arg("script")
-        .arg("script/CreateAccount.s.sol")
-        .arg("--rpc-url")
-        .arg(rpc_url)
-        .arg("--broadcast")
-        .arg("--private-key")
-        .arg("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
-    let output = cmd.output().expect("failed to run forge script");
-    assert!(
-        output.status.success(),
-        "forge script failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 /// Authenticator holds an internal Alloy signer.
 #[derive(Clone)]
 pub struct AuthenticatorSigner {
@@ -335,15 +318,15 @@ impl AuthenticatorSigner {
     }
 
     /// Returns a reference to the internal signer.
-    pub fn onchain_signer(&self) -> &PrivateKeySigner {
+    pub const fn onchain_signer(&self) -> &PrivateKeySigner {
         &self.onchain_signer
     }
 
-    pub fn offchain_signer_private_key(&self) -> &EdDSAPrivateKey {
+    pub const fn offchain_signer_private_key(&self) -> &EdDSAPrivateKey {
         &self.offchain_signer
     }
 
-    pub fn onchain_signer_address(&self) -> Address {
+    pub const fn onchain_signer_address(&self) -> Address {
         self.onchain_signer.address()
     }
 
@@ -352,27 +335,173 @@ impl AuthenticatorSigner {
     }
 }
 
-pub fn fetch_key_material() -> eyre::Result<UserKeyMaterial> {
-    let seed = &hex::decode("0101010101010101010101010101010101010101010101010101010101010101")?;
-    let auth_signer = AuthenticatorSigner::from_seed_bytes(seed)?;
-    // TODO: actually fetch from registry
-    let values = std::array::from_fn(|i| {
-        if i == 0 {
-            let pk = auth_signer.offchain_signer_pubkey();
-            pk.pk
-        } else {
-            ark_babyjubjub::EdwardsAffine::new_unchecked(
-                ark_babyjubjub::Fq::ZERO,
-                ark_babyjubjub::Fq::ZERO,
-            )
+/// An Authenticator is the base layer with which a user interacts with the Protocol.
+pub struct Authenticator {
+    signer: AuthenticatorSigner,
+    packed_account_index: Option<U256>,
+    account_registry_contract: Address,
+    provider: DynProvider,
+}
+
+impl Authenticator {
+    pub async fn new(
+        seed: &[u8],
+        ws_rpc_url: &str,
+        account_registry_contract: Address,
+        wallet: EthereumWallet,
+    ) -> eyre::Result<Self> {
+        let signer = AuthenticatorSigner::from_seed_bytes(seed)?;
+        let ws = WsConnect::new(ws_rpc_url);
+        let provider = ProviderBuilder::new().wallet(wallet).connect_ws(ws).await?;
+        Ok(Self {
+            packed_account_index: None,
+            signer,
+            account_registry_contract,
+            provider: provider.erased(),
+        })
+    }
+
+    /// Returns the k256 public key of the Authenticator signer which is used to verify on-chain operations,
+    /// chiefly with the `AccountRegistry` contract.
+    #[must_use]
+    pub const fn onchain_address(&self) -> Address {
+        self.signer.onchain_signer_address()
+    }
+
+    /// Returns the `EdDSA` public key of the Authenticator signer which is used to verify off-chain operations. For example,
+    /// the Nullifier Oracle uses it to verify requests for nullifiers.
+    #[must_use]
+    pub fn offchain_pubkey(&self) -> EdDSAPublicKey {
+        self.signer.offchain_signer_pubkey()
+    }
+
+    /// Returns the packed account index for the holder's World ID.
+    ///
+    /// The packed account index is a 256 bit integer which includes the user's account index, their recovery counter,
+    /// and their pubkey id/commitment.
+    ///
+    /// # Errors
+    /// Will error if the provided RPC URL is not valid or if there are RPC call failures.
+    pub async fn packed_account_index(&mut self) -> eyre::Result<U256> {
+        if let Some(packed_account_index) = self.packed_account_index {
+            return Ok(packed_account_index);
         }
-    });
-    let pk_batch = UserPublicKeyBatch { values };
-    let pk_index = 0;
-    let sk = auth_signer.offchain_signer_private_key().clone();
-    Ok(UserKeyMaterial {
-        pk_batch,
-        pk_index,
-        sk,
-    })
+
+        let contract = AccountRegistry::new(self.account_registry_contract, self.provider.clone());
+        let raw_index = contract
+            .authenticatorAddressToPackedAccountIndex(self.signer.onchain_signer_address())
+            .call()
+            .await?;
+
+        self.packed_account_index = Some(raw_index);
+        Ok(raw_index)
+    }
+
+    /// Returns the account index for the holder's World ID.
+    ///
+    /// This is the index at the tree where the holder's World ID account is registered.
+    ///
+    /// # Errors
+    /// Will error if the provided RPC URL is not valid or if there are RPC call failures.
+    pub async fn account_index(&mut self) -> eyre::Result<U256> {
+        let packed_account_index = self.packed_account_index().await?;
+        let tree_index = packed_account_index & MASK_ACCOUNT_INDEX;
+        Ok(tree_index)
+    }
+
+    /// Returns the raw index at the tree where the holder's World ID account is registered.
+    ///
+    /// # Errors
+    /// Will error if the provided RPC URL is not valid or if there are RPC call failures.
+    pub async fn tree_index(&mut self) -> eyre::Result<U256> {
+        let account_index = self.account_index().await?;
+        Ok(account_index - U256::from(1))
+    }
+
+    /// Computes the Merkle leaf for a given public key batch.
+    ///
+    /// # Errors
+    /// Will error if the provided public key batch is not valid.
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn leaf_hash(&self, pk: &UserPublicKeyBatch) -> ark_babyjubjub::Fq {
+        let poseidon2_16: Poseidon2<ark_babyjubjub::Fq, 16, 5> = Poseidon2::default();
+        let mut input = [ark_babyjubjub::Fq::ZERO; 16];
+        #[allow(clippy::unwrap_used)]
+        {
+            input[0] = ark_babyjubjub::Fq::from_str("105702839725298824521994315").unwrap();
+        }
+        for i in 0..7 {
+            input[i * 2 + 1] = pk.values[i].x;
+            input[i * 2 + 2] = pk.values[i].y;
+        }
+        poseidon2_16.permutation(&input)[1]
+    }
+
+    /// Creates a new World ID account.
+    ///
+    /// # Errors
+    /// Will error if the provided RPC URL is not valid or if there are HTTP call failures.
+    pub async fn create_account(&self) -> eyre::Result<UserKeyMaterial> {
+        let mut pubkey_batch = UserPublicKeyBatch {
+            values: [ark_babyjubjub::EdwardsAffine::default(); 7],
+        };
+        pubkey_batch.values[0] = self.offchain_pubkey().pk;
+        let leaf_hash = self.leaf_hash(&pubkey_batch);
+
+        let contract = AccountRegistry::new(self.account_registry_contract, self.provider.clone());
+        let pending_tx = contract
+            .createAccount(
+                address!("0x000000000000000000000000000000000000ABCD"),
+                vec![self.signer.onchain_signer_address()],
+                leaf_hash.into(),
+            )
+            .send()
+            .await?
+            .register()
+            .await?;
+        let (receipt, _tx_hash) = watch_receipt(self.provider.clone(), pending_tx).await?;
+        if !receipt.status() {
+            eyre::bail!("could not get receipt for init-key gen");
+        }
+        Ok(UserKeyMaterial {
+            pk_batch: pubkey_batch,
+            pk_index: 0,
+            sk: self.signer.offchain_signer_private_key().clone(),
+        })
+    }
+}
+
+// FIXME duplicated code from alloy_ken_gen_watcher
+async fn watch_receipt(
+    provider: DynProvider,
+    mut pending_tx: PendingTransaction,
+) -> Result<(TransactionReceipt, TxHash), alloy::contract::Error> {
+    let tx_hash = pending_tx.tx_hash().to_owned();
+    // FIXME: this is a hotfix to prevent a race condition where the heartbeat would miss the
+    // block the tx was mined in
+
+    let mut interval = tokio::time::interval(provider.client().poll_interval());
+
+    loop {
+        let mut confirmed = false;
+
+        tokio::select! {
+            _ = interval.tick() => {},
+            res = &mut pending_tx => {
+                let _ = res?;
+                confirmed = true;
+            }
+        }
+
+        // try to fetch the receipt
+        if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
+            return Ok((receipt, tx_hash));
+        }
+
+        if confirmed {
+            return Err(alloy::contract::Error::TransportError(RpcError::NullResp));
+            // FIXME duplicated code from alloy_ken_gen_watcher
+        }
+    }
 }
