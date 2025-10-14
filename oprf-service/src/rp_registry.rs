@@ -1,5 +1,7 @@
 //! Rp registry
 
+use std::time::Duration;
+
 use alloy::{
     network::EthereumWallet,
     primitives::Address,
@@ -10,9 +12,12 @@ use ark_ec::AffineRepr as _;
 use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context as _;
 use k256::EncodedPoint;
-use oprf_types::crypto::{
-    PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertext, RpSecretGenCiphertexts,
-    RpSecretGenCommitment,
+use oprf_types::{
+    RpId,
+    crypto::{
+        PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext,
+        RpSecretGenCiphertexts, RpSecretGenCommitment,
+    },
 };
 
 // Codegen from ABI file to interact with the contract.
@@ -186,5 +191,26 @@ impl RpRegistry {
             .collect::<eyre::Result<Vec<_>>>()?;
         tracing::info!("success");
         Ok(PeerPublicKeyList::new(peer_public_keys))
+    }
+
+    /// Fetch the `RpNullifierKey` key from the contract
+    pub async fn fetch_rp_nullifier_key(&self, rp_id: RpId) -> eyre::Result<RpNullifierKey> {
+        tracing::info!("fetching rp_nullifier_key..");
+        let contract = KeyGen::new(self.contract_address, self.provider.clone());
+        let mut interval = tokio::time::interval(Duration::from_millis(500));
+        let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async move {
+            loop {
+                interval.tick().await;
+                let maybe_rp_nullifier_key =
+                    contract.getRpNullifierKey(rp_id.into_inner()).call().await;
+                if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
+                    return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+                }
+            }
+        })
+        .await
+        .context("could not finish key-gen in 5 seconds")?
+        .context("while polling RP key")?;
+        Ok(rp_nullifier_key)
     }
 }

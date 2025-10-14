@@ -119,7 +119,7 @@ impl OprfService {
     /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     ///
     /// Returns the compressed Base64-encoded [`PartialDLogEqualityCommitments`] if successful.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) async fn init_oprf_session(
         &self,
         request: OprfRequest,
@@ -196,7 +196,7 @@ impl OprfService {
     /// - Retrieves the stored randomness from [`SessionStore`].
     /// - Computes the final discrete-log equality proof share using [`CryptoDevice`].
     /// - Returns the proof share or an error if the session or share cannot be found.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) fn finalize_oprf_session(
         &self,
         request: ChallengeRequest,
