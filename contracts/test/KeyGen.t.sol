@@ -3,62 +3,64 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {KeyGen} from "../src/KeyGen.sol";
+import {BabyJubjub} from "../src/BabyJubjub.sol";
+import {Groth16Verifier} from "../src/Groth16Verifier.sol";
 
 contract KeyGenTest is Test {
     KeyGen public gen;
+    BabyJubjub public accumulator;
+    Groth16Verifier public verifier;
+
 
     address alice = address(0x1);
     address bob = address(0x2);
     address carol = address(0x3);
-    address accumulator = address(0x998);
-    address verifier = address(0x999);
 
         function getValidProof() internal pure returns (KeyGen.Groth16Proof memory) {
             return KeyGen.Groth16Proof({
                 pA: [
-                    uint256(11468312949660864720429384337059670254676757541106984351883106197231676331091),
-                    uint256(21560358938855909614179660361638410317406061096686392551110873609152313723109)
+                    0x215ff06bdcaa01703b7586bac6b4c7df6d0f8db30e193b25ead4d9ef24e4a2ee,
+                    0x07b5a5f3cebf93fea7424e917ce240b6b6ae4d497d4bd5fc754fe9505a589892
                 ],
                 pB: [
                     [
-                        uint256(13980735654856460516138664573684586245924121068887112274291276365337539666387),
-                        uint256(1397686996180224672356736405336363147127650825259727108741836519542724073549)
+                        0x22909aa5f3fa70f1b3ea4294387d190d4bb6deae9ff2697e7fff5a70df446b72,
+                        0x17455378cfd2b5ff1d5be41512abf32511cdf490a26405a0fef06b0e8e9ca203
                     ],
                     [
-                        uint256(15968577707534258110766194616852883078287268231758202275139689991817632376051),
-                        uint256(469385223440505726293960417901985434579356989079082282124441130782779936314)
+                        0x20f2fb3c3275362a8332e353a3dbcfc445b96700fe44afaf909926418b5a6ce1,
+                        0x22b69ff116889c21dcd4256721b981838510cb4768c60d00a4054630ce3b06d4
                     ]
                 ],
                 pC: [
-                    uint256(3828322601558746243527055852380149288514094431838454636266089925907567679932),
-                    uint256(17157137033268191615882850272980802574559493710030675183074422207142524601595)
+                    0x1d3190dcbfcf398dd72b0acbf46e325e56c20f7bf10d7137e7e81c225a188dcc,
+                    0x0ef89d9f5f17706c737e6eee18311b6db37054c94bdc72965419a4b7026b4229
                 ],
                 pubSignals: [
-                    uint256(12266518075321185797589213532529011619734935414538300173788220522564798423235),
-                    uint256(9255769123798898149953956649378827479482860591468882466861237176479881872723),
-                    uint256(8877462399555945640480352492384831296250368331849204127836387507013104108526),
-                    uint256(12631578230906775280794624255429491101400272482084813319607964027266411768781),
-                    uint256(10205653472383472488460086772914067351086846265958759657301844448460926571680),
-                    uint256(12516440285411826786488393729181852955056729344716724525960091951044647653599),
-                    uint256(16975626554934773333990238653479791437475071502682450338677582176538684668386),
-                    uint256(10992448926546190201408689558740052308140915979466990124400156321727043134834),
-                    uint256(20367068389700016202738591873020896263520259691531819894712948288043834304716),
-                    uint256(659148035290194116254646018585218061530651957523574443961880551765821062297),
-                    uint256(2921312310036426493358859436494592988052601788337886029974845598317363250844),
-                    uint256(10978475984719372499905328185911196421720951744571240239767067517059248071653),
-                    uint256(5774906195600420545408082827191749158707796026354858181412974772508107763669),
-                    uint256(16500991884686672355460614453662597856273297492358612952380955536381842267525),
-                    uint256(1),
-                    uint256(1918506960356052592250645643564153987471142747759193561574073802325049212928),
-                    uint256(18140162239983131849346838246485360180462820807127348324812097711560806367232),
-                    uint256(19073391701462346724876164917900366752759475209209991802186600260493388021760),
-                    uint256(13055503748124824218507870140538419803140480795435834229229760919434237575168),
-                    uint256(19187525471008459097508586080877286328315161835320367150266572407467403116544),
-                    uint256(4734660263677069481471877790974401255879730803634753754107037821651474448384),
-                    uint256(18788263614476327212261984658076727094194233323277639391448847593238983344128),
-                    uint256(2242242191598544219883711217843414152398659753497348717266486535244044304384),
-                    uint256(6146817087726914709223289044796148798688490938256583422678060326361342410752)
-                ]
+                    0x1b1e9a6aeccca69f22cebb80c7c3eafaa0fbcdf987667bc227fdd00321b4a0c3,
+                    0x14769465a224eda0f355d1f09580fb4a89474cdb9b4d874dc3c21c384503c553,
+                    0x15f6d9f8b0c58a5ec2c6cd12dc1c9144eece2654ac541f199ff3e7de5d8f7ad9,
+                    0x290502ecd06e093b98e7dc07312074e8bf1c9267f9d5e94719727463c4b6a306,
+                    0x220138336a128ebf9a1465b7c6107061343cba68d626bd92dea42667cf47c5a4,
+                    0x1fa3d8d7dbfb2cda8dbc6457fcd0ee696a1428496d95371d15395cfa9b3437d0,
+                    0x2a3ac9425130ddd6a62d8f48eab49b704b903ede07de2b8cd5bb62d2d7d407c4,
+                    0x1dbb8e88cbe7c38e766eb05fcd488ebddbc9276ee7c016e5658ed20e0e385a45,
+                    0x15f6d9f8b0c58a5ec2c6cd12dc1c9144eece2654ac541f199ff3e7de5d8f7ad9,
+                    0x290502ecd06e093b98e7dc07312074e8bf1c9267f9d5e94719727463c4b6a306,
+                    0x15f6d9f8b0c58a5ec2c6cd12dc1c9144eece2654ac541f199ff3e7de5d8f7ad9,
+                    0x290502ecd06e093b98e7dc07312074e8bf1c9267f9d5e94719727463c4b6a306,
+                    0x15f6d9f8b0c58a5ec2c6cd12dc1c9144eece2654ac541f199ff3e7de5d8f7ad9,
+                    0x290502ecd06e093b98e7dc07312074e8bf1c9267f9d5e94719727463c4b6a306,
+                    0x0000000000000000000000000000000000000000000000000000000000000001,
+                    0x043dd6222cc5c980000000000000000000000000000000000000000000000000,
+                    0x281af7cd8cd56a00000000000000000000000000000000000000000000000000,
+                    0x2a2b283a22a60200000000000000000000000000000000000000000000000000,
+                    0x1cdd273c07571a00000000000000000000000000000000000000000000000000,
+                    0x2a6bc12aef73d800000000000000000000000000000000000000000000000000,
+                    0x0a77b905b6e70e80000000000000000000000000000000000000000000000000,
+                    0x2989c7c598742e00000000000000000000000000000000000000000000000000,
+                    0x04f5106948b99300000000000000000000000000000000000000000000000000,
+                    0x0d96f9a57d4e0c00000000000000000000000000000000000000000000000000                ]
             });
     }
 
@@ -70,7 +72,14 @@ contract KeyGenTest is Test {
 
         bytes memory peerKeys = hex"deadbeef"; // dummy peer keys
 
-        gen = new KeyGen(verifier, accumulator, participants, 1, peerKeys);
+        accumulator = new BabyJubjub();
+        verifier = new Groth16Verifier();
+        gen = new KeyGen(address(verifier), address(accumulator), participants, 1, peerKeys);
+    }
+
+    function testProof() public {
+        KeyGen.Groth16Proof memory proof = getValidProof();
+        assert(verifier.verifyProof(proof.pA, proof.pB, proof.pC, proof.pubSignals));
     }
 
     function testInitKeyGenEmitsRound1() public {
@@ -92,23 +101,23 @@ contract KeyGenTest is Test {
         );
         KeyGen.Round1Data memory testRound1Data = KeyGen.Round1Data(
             testElement,
-            0
+            123
         );
 
         // Each participant submits round1
         vm.startPrank(alice);
-        gen.addRound1Contribution(sessionId, hex"aaa1", testRound1Data);
+        gen.addRound1Contribution(sessionId, testRound1Data);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        gen.addRound1Contribution(sessionId, hex"aaa2", testRound1Data);
+        gen.addRound1Contribution(sessionId, testRound1Data);
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
         emit KeyGen.SecretGenRound2(sessionId, hex"deadbeef");
 
         vm.startPrank(carol);
-        gen.addRound1Contribution(sessionId, hex"aaa3", testRound1Data);
+        gen.addRound1Contribution(sessionId, testRound1Data);
         vm.stopPrank();
     }
 
@@ -127,20 +136,20 @@ contract KeyGenTest is Test {
         gen.initKeyGen(sessionId, pubKey);
 
         // All round1 first
-        vm.prank(alice); gen.addRound1Contribution(sessionId, hex"aaa1", testRound1Data);
-        vm.prank(bob);   gen.addRound1Contribution(sessionId, hex"aaa2", testRound1Data);
-        vm.prank(carol); gen.addRound1Contribution(sessionId, hex"aaa3", testRound1Data);
+        vm.prank(alice); gen.addRound1Contribution(sessionId, testRound1Data);
+        vm.prank(bob);   gen.addRound1Contribution(sessionId, testRound1Data);
+        vm.prank(carol); gen.addRound1Contribution(sessionId, testRound1Data);
 
         // Two round2 contributions already submitted
         vm.prank(alice); gen.addRound2Contribution(sessionId, hex"bbb1", proof);
         vm.prank(bob);   gen.addRound2Contribution(sessionId, hex"bbb2", proof);
 
         // Build expected array exactly as contract will have it
-        KeyGen.RpSecretGenCommitment[] memory expectedRound1 = 
-            new KeyGen.RpSecretGenCommitment[](3);
-        expectedRound1[0] = KeyGen.RpSecretGenCommitment({ data: hex"aaa1" });
-        expectedRound1[1] = KeyGen.RpSecretGenCommitment({ data: hex"aaa2" });
-        expectedRound1[2] = KeyGen.RpSecretGenCommitment({ data: hex"aaa3" });
+        KeyGen.Round1Data[] memory expectedRound1 = 
+            new KeyGen.Round1Data[](3);
+        expectedRound1[0] = testRound1Data;
+        expectedRound1[1] = testRound1Data;
+        expectedRound1[2] = testRound1Data;
 
         KeyGen.RpSecretGenCiphertexts[] memory expectedRound2 = 
             new KeyGen.RpSecretGenCiphertexts[](3);
