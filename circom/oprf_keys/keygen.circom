@@ -223,7 +223,7 @@ template EvalPolyModP(DEGREE, INDEX) {
     }
 }
 
-template KeyGenCommmit(DEGREE) {
+template KeyGenCommit(DEGREE) {
     // My secret key and public key
     signal input my_sk;
     signal output my_pk[2]; // Public
@@ -413,7 +413,7 @@ template KeyGen(MAX_DEGREE, NUM_PARTIES) {
     // Commit to the polynomial and my public key
     ////////////////////////////////////////////////////////////////////////////
 
-    component keygen_commit = KeyGenCommmit(MAX_DEGREE);
+    component keygen_commit = KeyGenCommit(MAX_DEGREE);
     keygen_commit.my_sk <== my_sk;
     keygen_commit.poly <== poly;
     my_pk <== keygen_commit.my_pk;
@@ -448,5 +448,5 @@ template KeyGen(MAX_DEGREE, NUM_PARTIES) {
     }
 }
 
-// component main {public [degree, pks, nonces]} = KeyGen(1, 3);
+component main {public [degree, pks, nonces]} = KeyGen(1, 3);
 // component main {public [degree, pks, nonces]} = KeyGen(15, 30);

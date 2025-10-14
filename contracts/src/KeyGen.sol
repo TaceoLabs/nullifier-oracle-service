@@ -43,24 +43,25 @@ contract KeyGen {
     }
 
     struct Round1Data {
-        BabyJubjubElement element;
+        BabyJubjubElement commShare;
         // Hash of the polynomial created by participant
-        uint256 dealingHash;
+        uint256 commCoeffs;
     }
 
     address[] public participants;
 
-    mapping(address => uint256) public participantIndex; // participant -> index
+    // participant -> party ID
+    mapping(address => uint256) public participantIndex; 
 
-    // The the keygen state for each RP
+    // The keygen state for each RP
     mapping(uint128 => RpNullifierGenState) internal states;
+
+    // The keygen state for each RP
+    mapping(uint128 => bool) internal startedKeyGens;
 
     // Mapping between each rpId and the corresponding nullifier
     // TODO: What type should this be?
     mapping(uint128 => BabyJubjubElement) internal keyStorage;
-
-    // TODO: What to do with this field? @Artemis
-    uint128[] public activeIds;
 
     bytes public peerKeys;
     uint16 public threshold;
@@ -70,7 +71,7 @@ contract KeyGen {
 
     struct RpNullifierGenState {
         bytes ecdsaPubKey; // session key
-        RpSecretGenCommitment[] round1;
+        Round1Data[] round1;
         RpSecretGenCiphertexts[] round2;
         BabyJubjubElement keyAggregate;
         bool[] finalizeDone;
@@ -82,7 +83,7 @@ contract KeyGen {
     // Events
     event SecretGenRound1(uint128 indexed rpId, uint16 threshold);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
-    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, RpSecretGenCommitment[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
+    event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, Round1Data[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
     event SecretGenNullifierKeyCreated(uint128 indexed rpId, BabyJubjubElement nullifierKey);
 
     constructor(
@@ -128,17 +129,19 @@ contract KeyGen {
         // If this check is not in then someone can rerun the same round over and over again
         require(ecdsaPubKey.length != 0, "submitting faulty empty ECDSA key");
 
+        // Check that this rpId was not used already
+        require(!startedKeyGens[rpId], "already started keygen for this id");
+
         RpNullifierGenState storage st = states[rpId];
         require(st.ecdsaPubKey.length == 0, "Session exists");
 
         st.ecdsaPubKey = ecdsaPubKey;
 
         uint n = participants.length;
-        delete st.round1;
+        st.round1 = new Round1Data[](n);
         delete st.round2;
         delete st.finalizeDone;
         for (uint i = 0;i<n;i++) {
-            st.round1.push(RpSecretGenCommitment({ data: "" }));
             st.round2.push(RpSecretGenCiphertexts({ data: "" }));
             st.finalizeDone.push(false);
         }
@@ -147,8 +150,9 @@ contract KeyGen {
         st.finalizeEventEmitted = false;
         st.keyAggregate.pointX = 0;
         st.keyAggregate.pointY = 0;
-        // TODO: What to do with this field? @Artemis
-        activeIds.push(rpId);
+
+        // mark the key gen as started
+        startedKeyGens[rpId] = true;
 
         // Emit Round1 event for everyone
         emit SecretGenRound1(rpId, threshold);
@@ -157,25 +161,34 @@ contract KeyGen {
     // Round1 submission
     function addRound1Contribution(
         uint128 rpId,
-        bytes calldata commitment,
         Round1Data calldata data
     ) external {
         uint idx = participantIndex[msg.sender];
         console.log(msg.sender, "has idx:", idx);
         require(idx < participants.length, "Not a participant");
 
+        // check that commitments are not zero
+        require(!_isEmpty(data.commShare), "Cannot use null commitment");
+        require(data.commCoeffs != 0, "Cannot use null commitment");
+
+        // check that we started the key-gen for this rp-id
+        require(startedKeyGens[rpId], "RpId does not have a running key-gen");
+
         RpNullifierGenState storage st = states[rpId];
-        require(st.ecdsaPubKey.length != 0, "Session not initialized");
-        require(st.round1[idx].data.length == 0, "Already submitted");
+        // check that we don't have double submission
+        require(_isEmpty(st.round1[idx].commShare), "Already submitted");
+        require(st.round1[idx].commCoeffs == 0, "Already submitted");
 
         // Add BabyJubJub Elements together and keep running total
-        _validateInputElement(data.element);
-        uint256 pointX = data.element.pointX;
-        uint256 pointY = data.element.pointY;
+        // TODO maybe we don't need those validation, because the later
+        // proof will not verify anyways. Maybe we can have an optimistic
+        // approach to reduce gas costs?
+        _validateInputElement(data.commShare);
+        uint256 pointX = data.commShare.pointX;
+        uint256 pointY = data.commShare.pointY;
         _addToAggregate(st, pointX, pointY);
 
-        st.round1[idx] = RpSecretGenCommitment(commitment);
-
+        st.round1[idx] = data;
 
         _tryEmitRound2Event(rpId, st);
     }
@@ -222,7 +235,9 @@ contract KeyGen {
     // --- Helpers ---
     function allRound1Submitted(RpNullifierGenState storage st) private view returns (bool) {
         for (uint i = 0; i < participants.length; i++) {
-            if (st.round1[i].data.length == 0) return false;
+            // we don't allow commitments to be zero, therefore if one
+            // commitments is still 0, not all contributed.
+            if (st.round1[i].commCoeffs == 0) return false;
         }
         return true;
     }
@@ -308,4 +323,5 @@ contract KeyGen {
     function _isEmpty(BabyJubjubElement memory element) private view returns (bool) {
         return element.pointX == 0 && element.pointY == 0;
     }
+
 }
