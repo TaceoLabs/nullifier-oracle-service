@@ -17,7 +17,7 @@ use oprf_core::ddlog_equality::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{MerkleEpoch, MerkleRoot, RpId, ShareEpoch, crypto::PartyId};
+use crate::{MerkleRoot, RpId, ShareEpoch, crypto::PartyId};
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
@@ -32,8 +32,6 @@ pub struct OprfRequest {
     pub point_b: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
-    /// The Merkle epoch associated with this request.
-    pub merkle_epoch: MerkleEpoch,
     /// The Merkle root associated with this request.
     pub merkle_root: MerkleRoot,
     /// The action

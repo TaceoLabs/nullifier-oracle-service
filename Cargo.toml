@@ -15,7 +15,7 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.86"
 authors = ["TACEO GmbH <hello@taceo.io>"]
 homepage = "https://www.taceo.io"
 repository = "https:://github.com/TaceoLabs/nullifier-oracle-service"
@@ -24,7 +24,7 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
-alloy = "1"
+alloy = { version = "1", default-features = false }
 ark-algebra-test-templates = "0.5"
 ark-babyjubjub = { path = "ark-babyjubjub" }
 ark-bn254 = { version = "0.5" }
@@ -58,7 +58,7 @@ humantime = "2"
 itertools = "0.14"
 k256 = "0.13"
 metrics = "0.24"
-nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "06f4f13"}
+nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd"}
 num-bigint = "0.4"
 num-traits = "0.2"
 oprf-client = { path = "oprf-client" }
@@ -70,7 +70,7 @@ parking_lot = "0.12"
 poseidon2 = { path = "poseidon2" }
 rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
-reqwest = { version = "0.12" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }
