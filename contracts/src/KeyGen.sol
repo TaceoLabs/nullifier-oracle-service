@@ -60,7 +60,6 @@ contract KeyGen {
     mapping(uint128 => bool) internal startedKeyGens;
 
     // Mapping between each rpId and the corresponding nullifier
-    // TODO: What type should this be?
     mapping(uint128 => BabyJubjubElement) internal keyStorage;
 
     bytes public peerKeys;
@@ -271,7 +270,6 @@ contract KeyGen {
         if (!allFinalizeSubmitted(st)) return;
 
         st.storedNullifier = true;
-        //TODO: Is this the correct type...?????
         keyStorage[rpId] = st.keyAggregate;
 
         emit SecretGenNullifierKeyCreated(rpId, st.keyAggregate);
