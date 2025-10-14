@@ -12,6 +12,6 @@ jobs:
   workflow:
     uses: ./.github/workflows/build-and-push.yml
     with:
-      image-name: key-gen
+      image-name: mock-anvil-auth-tree
       dockerfile: build/Dockerfile.mock-external
 
