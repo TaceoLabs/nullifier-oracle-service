@@ -3,8 +3,8 @@
 //! This module defines all HTTP endpoints exposed by the OPRF peer and organizes them into submodules:
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
-//! - [`health`] – Provides health, readiness, and liveness endpoints (`/health`, `/ready`, `/live`).
-//! - [`v1`] – Version 1 of the main OPRF endpoints, including `/oprf/init` and `/oprf/finish`.
+//! - [`health`] – Provides health endpoints (`/health`).
+//! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
 use axum::Router;
 use oprf_types::crypto::PartyId;
