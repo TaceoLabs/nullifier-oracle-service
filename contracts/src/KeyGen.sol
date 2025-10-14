@@ -51,7 +51,7 @@ contract KeyGen {
     address[] public participants;
 
     // participant -> party ID
-    mapping(address => uint256) public participantIndex; 
+    mapping(address => uint256) public participantIndex;
 
     // The keygen state for each RP
     mapping(uint128 => RpNullifierGenState) internal states;
@@ -168,7 +168,7 @@ contract KeyGen {
         require(idx < participants.length, "Not a participant");
 
         // check that commitments are not zero
-        require(!_isEmpty(data.commShare), "Cannot use null commitment");
+        require(!_isEmpty(data.commShare), "Cannot use null commitment share");
         require(data.commCoeffs != 0, "Cannot use null commitment");
 
         // check that we started the key-gen for this rp-id
@@ -180,10 +180,6 @@ contract KeyGen {
         require(st.round1[idx].commCoeffs == 0, "Already submitted");
 
         // Add BabyJubJub Elements together and keep running total
-        // TODO maybe we don't need those validation, because the later
-        // proof will not verify anyways. Maybe we can have an optimistic
-        // approach to reduce gas costs?
-        _validateInputElement(data.commShare);
         uint256 pointX = data.commShare.pointX;
         uint256 pointY = data.commShare.pointY;
         _addToAggregate(st, pointX, pointY);
@@ -305,15 +301,6 @@ contract KeyGen {
         );
 
         st.keyAggregate = BabyJubjubElement(resultX, resultY);
-    }
-
-    function _validateInputElement(BabyJubjubElement memory element) private {
-        require(
-            accumulator.isOnCurve(element.pointX, element.pointY),
-            "invalid BabyJubjub group element not on curve"
-        );
-        require(!_isInfinity(element), "Infinity element given");
-        require(!_isEmpty(element), "Empty element given");
     }
 
     function _isInfinity(BabyJubjubElement memory element) private view returns (bool) {
