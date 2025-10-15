@@ -65,10 +65,23 @@ contract KeyGenTest is Test {
             });
     }
 
+    function _registerDefaultParticipants() internal {
+        address[] memory participants = new address[](3);
+        participants[0] = alice;
+        participants[1] = bob;
+        participants[2] = carol;
+
+        bytes memory peerKeys = hex"deadbeef"; // dummy peer keys
+
+        vm.startPrank(taceoAdmin);
+        gen.registerParticipants(participants, peerKeys);
+        vm.stopPrank();
+    }
+
     function setUp() public {
         accumulator = new BabyJubjub();
         verifier = new Groth16Verifier();
-        gen = new KeyGen(address(verifier), address(accumulator), 1, taceoAdmin);
+        gen = new KeyGen(address(verifier), address(accumulator), 2, taceoAdmin);
     }
 
     function testProof() public {
@@ -102,8 +115,10 @@ contract KeyGenTest is Test {
     function testInitKeyGenEmitsRound1() public {
         bytes memory ecdsaPubKey = hex"1234";
 
+        _registerDefaultParticipants();
+
         vm.expectEmit(true, true, true, true);
-        emit KeyGen.SecretGenRound1(1, 1);
+        emit KeyGen.SecretGenRound1(1, 2); // sessionId=1, threshold=2
 
         vm.startPrank(taceoAdmin);
         gen.initKeyGen(1, ecdsaPubKey);
@@ -113,7 +128,12 @@ contract KeyGenTest is Test {
     function testRound1ThenRound2Flow() public {
         uint128 sessionId = 1;
         bytes memory pubKey = hex"1111";
+        _registerDefaultParticipants();
+
+        vm.startPrank(taceoAdmin);
         gen.initKeyGen(sessionId, pubKey);
+        vm.stopPrank();
+
         KeyGen.BabyJubjubElement memory testElement = KeyGen.BabyJubjubElement(
             5299619240641551281634865583518297030282874472190772894086521144482721001553,
             16950150798460657717958625567821834550301663161624707787222815936182638968203
@@ -143,6 +163,7 @@ contract KeyGenTest is Test {
     function testRound2ThenFinalizeFlow() public {
         uint128 sessionId = 2;
         bytes memory pubKey = hex"2222";
+
         KeyGen.Groth16Proof memory proof = getValidProof();
         KeyGen.BabyJubjubElement memory testElement = KeyGen.BabyJubjubElement(
             5299619240641551281634865583518297030282874472190772894086521144482721001553,
@@ -152,7 +173,12 @@ contract KeyGenTest is Test {
             testElement,
             456
         );
+
+        _registerDefaultParticipants();
+
+        vm.startPrank(taceoAdmin);
         gen.initKeyGen(sessionId, pubKey);
+        vm.stopPrank();
 
         // All round1 first
         vm.prank(alice); gen.addRound1Contribution(sessionId, testRound1Data);
