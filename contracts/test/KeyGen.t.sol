@@ -15,6 +15,7 @@ contract KeyGenTest is Test {
     address alice = address(0x1);
     address bob = address(0x2);
     address carol = address(0x3);
+    address taceoAdmin = address(0x4);
 
         function getValidProof() internal pure returns (KeyGen.Groth16Proof memory) {
             return KeyGen.Groth16Proof({
@@ -65,21 +66,37 @@ contract KeyGenTest is Test {
     }
 
     function setUp() public {
-        address [] memory participants = new address[](3);
+        accumulator = new BabyJubjub();
+        verifier = new Groth16Verifier();
+        gen = new KeyGen(address(verifier), address(accumulator), 1, taceoAdmin);
+    }
+
+    function testProof() public {
+        KeyGen.Groth16Proof memory proof = getValidProof();
+        assert(verifier.verifyProof(proof.pA, proof.pB, proof.pC, proof.pubSignals));
+    }
+
+     function testRegisterParticipants() public {
+        address[] memory participants = new address[](3);
         participants[0] = alice;
         participants[1] = bob;
         participants[2] = carol;
 
         bytes memory peerKeys = hex"deadbeef"; // dummy peer keys
 
-        accumulator = new BabyJubjub();
-        verifier = new Groth16Verifier();
-        gen = new KeyGen(address(verifier), address(accumulator), participants, 1, peerKeys);
-    }
+        vm.prank(taceoAdmin);
+        gen.registerParticipants(participants, peerKeys);
+        vm.stopPrank();
 
-    function testProof() public {
-        KeyGen.Groth16Proof memory proof = getValidProof();
-        assert(verifier.verifyProof(proof.pA, proof.pB, proof.pC, proof.pubSignals));
+        assertEq(gen.participants(0), alice, "First participant should be alice");
+        assertEq(gen.participants(1), bob, "Second participant should be bob");
+        assertEq(gen.participants(2), carol, "Third participant should be carol");
+
+        assertEq(gen.participantIndex(alice), 0, "Alice should have index 0");
+        assertEq(gen.participantIndex(bob), 1, "Bob should have index 1");
+        assertEq(gen.participantIndex(carol), 2, "Carol should have index 2");
+
+        assertTrue(gen.getReadyState(), "Contract should be ready");
     }
 
     function testInitKeyGenEmitsRound1() public {
@@ -88,7 +105,9 @@ contract KeyGenTest is Test {
         vm.expectEmit(true, true, true, true);
         emit KeyGen.SecretGenRound1(1, 1);
 
+        vm.startPrank(taceoAdmin);
         gen.initKeyGen(1, ecdsaPubKey);
+        vm.stopPrank();
     }
 
     function testRound1ThenRound2Flow() public {

@@ -12,19 +12,11 @@ contract KeyGenScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        // Example participants (hardcoded here, but you could read from env vars or input)
-        address [] memory participants = new address[](3);
-        participants[0] = address(0x14dC79964da2C08b23698B3D3cc7Ca32193d9955);
-        participants[1] = address(0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f);
-        participants[2] = address(0xa0Ee7A142d267C1f36714E4a8F75612F20a79720);
         address accumulator = address(0x998);
         address verifier = address(0x999);
+        address taceoAdmin = address(0x4);
 
-
-        string memory filePath = "script/script-data/pubkey-list.hex";
-        bytes memory peerKeys = vm.parseBytes(vm.readFile(filePath));
-
-        gen = new KeyGen(verifier, accumulator, participants, 1, peerKeys);
+        gen = new KeyGen(verifier, accumulator, 1, taceoAdmin);
 
         vm.stopBroadcast();
         console.log("Contract deployed at:", address(gen));

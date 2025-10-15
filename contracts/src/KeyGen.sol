@@ -48,6 +48,14 @@ contract KeyGen {
         uint256 commCoeffs;
     }
 
+    // Gets set to ready state once OPRF participants are registered
+    bool isContractReady;
+
+    // Admin to start KeyGens
+    //**IMPORTANT** If this key gets lost or the entity controlling this key
+    // goes offline then effectively the system halts...
+    address taceoAdmin;
+
     address[] public participants;
 
     // participant -> party ID
@@ -80,6 +88,7 @@ contract KeyGen {
     }
 
     // Events
+    event SecretGenRegisteredParticipants(address[] participants);
     event SecretGenRound1(uint128 indexed rpId, uint16 threshold);
     event SecretGenRound2(uint128 indexed rpId, bytes peerPublicKeyList);
     event SecretGenFinalize(uint128 indexed rpId, bytes rpPublicKey, Round1Data[] round1Contributions, RpSecretGenCiphertexts[] round2Contributions);
@@ -88,18 +97,14 @@ contract KeyGen {
     constructor(
         address _verifierAddress,
         address _accumulatorAddress,
-        address[] memory _participants,
         uint16 _threshold,
-        bytes memory _peerKeys
+        address _taceoAdmin
     ) {
-        require(_participants.length > 0, "Need participants");
-        participants = _participants;
-        for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
-        peerKeys = _peerKeys;
         threshold = _threshold;
-        // Pass in correct groth16 verifier contract address
         verifier = IGroth16Verifier(_verifierAddress);
         accumulator = IBabyJubjub(_accumulatorAddress);
+        taceoAdmin = _taceoAdmin;
+        isContractReady = false;
     }
 
     function getMyId() external view returns (uint256) {
@@ -112,15 +117,28 @@ contract KeyGen {
         return peerKeys;
     }
 
+    function getReadyState() external view returns (bool) {
+        return isContractReady;
+    }
+
     function getRpNullifierKey(uint128 rpId) external view returns (BabyJubjubElement memory) {
         return keyStorage[rpId];
     }
 
+    function registerParticipants(address[] calldata _participants, bytes memory _peerKeys) external {
+        require(msg.sender == taceoAdmin, "Not authorized to register participants");
+        require(_participants.length > 0, "Need participants");
+        participants = _participants;
+        peerKeys = _peerKeys;
+        for (uint i = 0; i < _participants.length; i++) participantIndex[_participants[i]] = i;
+        isContractReady = true;
+        emit SecretGenRegisteredParticipants(participants);
+    }
+
     // Initialize a new session
-    // TODO: Who can initiate the keygen? Just one of the parties??
     function initKeyGen(uint128 rpId, bytes calldata ecdsaPubKey) external {
-        uint idx = participantIndex[msg.sender];
-        require(idx < participants.length, "Not a participant");
+        require(msg.sender == taceoAdmin, "Not authorized to init keygen");
+        require(isContractReady, "Contract hasnt registered participants");
 
         // If this check is not in then someone can rerun the same round over and over again
         require(ecdsaPubKey.length != 0, "submitting faulty empty ECDSA key");
