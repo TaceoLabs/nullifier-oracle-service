@@ -282,7 +282,7 @@ contract KeyGen {
         st.finalizeEventEmitted = true;
 
         console.log("Emitting secret gen round2");
-        emit SecretGenFinalize(rpId, st.ecdsaPubKey, st.round2);
+        emit SecretGenFinalize(rpId, st.ecdsaPubKey, st.round1, st.round2);
     }
 
     function _tryEmitNullifierKeyCreatedEvent(uint128 rpId, RpNullifierGenState storage st) private {
