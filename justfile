@@ -39,13 +39,13 @@ run-init-key-gen:
 run-auth-tree-indexer *args:
     #!/usr/bin/env bash
     cargo build --workspace
-    RUST_LOG="debug" ./target/debug/auth-tree-indexer {{args}} > logs/auth_tree_indexer.log 2>&1 &
+    RUST_LOG="debug" ./target/debug/auth-tree-indexer {{ args }} > logs/auth_tree_indexer.log 2>&1 &
     auth_tree_indexer=$!
     echo "started AuthTreeIndexer service with PID $auth_tree_indexer"
     trap "kill $auth_tree_indexer" SIGINT SIGTERM
     wait $auth_tree_indexer
 
-[working-directory: '/foo/bar/world-id-protocol'] # TODO update path
+[working-directory('/foo/bar/world-id-protocol')]
 run-world-auth-tree-indexer:
     #!/usr/bin/env bash
     REGISTRY_ADDRESS=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 cargo run --release -p authtree-indexer &
@@ -67,6 +67,22 @@ run-services:
     #!/usr/bin/env bash
     mkdir -p logs
     cargo build --workspace
+    RUST_LOG="oprf_service=trace,warn" ./target/debug/oprf-service --chain-ws-rpc-url ws://mock_anvil.taceo.network:8545 --user-verification-key-path ./circom/main/OPRFQueryProof.vk.json --bind-addr 127.0.0.1:10000 --private-key-secret-id oprf/sk/n0 --environment dev --dlog-share-secret-id-suffix oprf/share/n0 --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 > logs/service0.log 2>&1 &
+    pid0=$!
+    echo "started service0 with PID $pid0"
+    RUST_LOG="oprf_service=trace,warn" ./target/debug/oprf-service --chain-ws-rpc-url ws://mock_anvil.taceo.network:8545 --user-verification-key-path ./circom/main/OPRFQueryProof.vk.json --bind-addr 127.0.0.1:10001 --private-key-secret-id oprf/sk/n1 --environment dev --dlog-share-secret-id-suffix oprf/share/n1 --wallet-private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 > logs/service1.log 2>&1 &
+    pid1=$!
+    echo "started service1 with PID $pid1"
+    RUST_LOG="oprf_service=trace,warn" ./target/debug/oprf-service --chain-ws-rpc-url ws://mock_anvil.taceo.network:8545 --user-verification-key-path ./circom/main/OPRFQueryProof.vk.json --bind-addr 127.0.0.1:10002 --private-key-secret-id oprf/sk/n2 --environment dev --dlog-share-secret-id-suffix oprf/share/n2 --wallet-private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 > logs/service2.log 2>&1  &
+    pid2=$!
+    echo "started service2 with PID $pid2"
+    trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
+    wait $pid0 $pid1 $pid2
+
+run-services-local-anvil:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    cargo build --workspace
     RUST_LOG="oprf_service=trace,warn" ./target/debug/oprf-service --user-verification-key-path ./circom/main/OPRFQueryProof.vk.json --bind-addr 127.0.0.1:10000 --private-key-secret-id oprf/sk/n0 --environment dev --dlog-share-secret-id-suffix oprf/share/n0 --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 > logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
@@ -82,9 +98,9 @@ run-services:
 run-setup:
     #!/usr/bin/env bash
     echo "generating keys..."
-    cargo run --bin key-gen -- --overwrite-old-keys
+    # cargo run --bin key-gen -- --overwrite-old-keys
     mkdir -p logs
-    anvil &
+    anvil -vvv &
     anvil_pid=$!
     echo "started anvil with PID $anvil_pid"
     sleep 2
@@ -97,17 +113,17 @@ run-setup:
     # just run-world-auth-tree-indexer &
     sleep 2
     echo "starting OPRF services..."
-    just run-services &
-    sleep 2
+    # just run-services &
+    # sleep 2
     echo "ready to run dev-client"
     trap "kill $anvil_pid" SIGINT SIGTERM
     wait $anvil_pid
 
 run-dev-client *args:
-    cargo run --release --bin oprf-dev-client -- --wallet-private-key 0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e {{args}}
+    cargo run --release --bin oprf-dev-client -- --wallet-private-key 0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e --chain-ws-rpc-url ws://mock_anvil.taceo.network:8545 --auth-tree-indexer-api-url http://mock_anvil.taceo.network:8080 --services http://ecs-0-alb-1969425394.eu-central-1.elb.amazonaws.com:4563,http://ecs-1-alb-1665260898.eu-central-1.elb.amazonaws.com:4563,http://ecs-2-alb-1978871968.eu-central-1.elb.amazonaws.com:4563 {{ args }}
 
 build-push-docker-image-oprf-service-amd TAG:
-  docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{TAG}}-amd64 -f build/Dockerfile.oprf-service .
+    docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{ TAG }}-amd64 -f build/Dockerfile.oprf-service .
 
 build-push-docker-image-key-gen-amd TAG:
-  docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{TAG}}-amd64 -f build/Dockerfile.key-gen .
+    docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{ TAG }}-amd64 -f build/Dockerfile.key-gen .
