@@ -448,5 +448,5 @@ template KeyGen(MAX_DEGREE, NUM_PARTIES) {
     }
 }
 
-component main {public [degree, pks, nonces]} = KeyGen(1, 3);
+// component main {public [degree, pks, nonces]} = KeyGen(1, 3);
 // component main {public [degree, pks, nonces]} = KeyGen(15, 30);
