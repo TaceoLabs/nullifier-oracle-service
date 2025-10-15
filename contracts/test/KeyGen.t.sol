@@ -163,7 +163,6 @@ contract KeyGenTest is Test {
     function testRound2ThenFinalizeFlow() public {
         uint128 sessionId = 2;
         bytes memory pubKey = hex"2222";
-
         KeyGen.Groth16Proof memory proof = getValidProof();
         KeyGen.BabyJubjubElement memory testElement = KeyGen.BabyJubjubElement(
             5299619240641551281634865583518297030282874472190772894086521144482721001553,

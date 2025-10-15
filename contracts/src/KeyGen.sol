@@ -271,6 +271,7 @@ contract KeyGen {
 
         st.round2EventEmitted = true;
 
+        console.log("Emitting secret gen round2");
         emit SecretGenRound2(rpId, peerKeys);
     }
 
@@ -280,6 +281,7 @@ contract KeyGen {
 
         st.finalizeEventEmitted = true;
 
+        console.log("Emitting secret gen round2");
         emit SecretGenFinalize(rpId, st.ecdsaPubKey, st.round1, st.round2);
     }
 

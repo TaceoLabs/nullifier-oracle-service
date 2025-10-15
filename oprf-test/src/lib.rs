@@ -24,7 +24,6 @@ async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &s
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
-        chain_epoch_max_difference: 10,
         private_key_secret_id: format!("oprf/sk/n{id}"),
         dlog_share_secret_id_suffix: format!("oprf/share/n{id}"),
         max_merkle_store_size: 10,

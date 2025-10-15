@@ -29,7 +29,7 @@ impl TestSecretManager {
 impl SecretManager for TestSecretManager {
     #[instrument(level = "info", skip_all)]
     async fn load_secrets(&self) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
-        Ok((self.private_key, self.rp_materials.lock().clone()))
+        Ok((self.private_key.clone(), self.rp_materials.lock().clone()))
     }
 
     #[instrument(level = "info", skip(self, share))]

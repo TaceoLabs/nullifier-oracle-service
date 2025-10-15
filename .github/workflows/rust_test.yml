@@ -13,7 +13,6 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: FULL
-  RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
   AWS_REGION: us-east-1
   AWS_ENDPOINT_URL: http://localhost:4566
   AWS_ACCESS_KEY_ID: test
@@ -38,11 +37,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
       - uses: foundry-rs/foundry-toolchain@v1
       - run: cd contracts && forge install
-      - run: sudo apt-get install lld git-lfs
+      - run: sudo apt-get install git-lfs
       - run: git lfs pull
-      - run: cargo run --bin key-gen
+      - run: cargo run --profile ci-dev --bin key-gen
       # - uses: Swatinem/rust-cache@v2
       - name: Unit & Integration Tests
         run: cargo test --workspace --profile ci-dev --all-features

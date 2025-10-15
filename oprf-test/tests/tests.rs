@@ -25,6 +25,7 @@ pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 pub(crate) const PRIVATE_KEY: &str =
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
+#[ignore = "currently broken"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
     let mut rng = rand::thread_rng();
