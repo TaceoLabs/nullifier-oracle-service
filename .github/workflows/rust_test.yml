@@ -37,6 +37,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
       - uses: foundry-rs/foundry-toolchain@v1
       - run: cd contracts && forge install
       - run: sudo apt-get install git-lfs
