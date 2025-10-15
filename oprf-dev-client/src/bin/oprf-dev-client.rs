@@ -123,7 +123,7 @@ fn nullifier_args<R: Rng + CryptoRng>(
         dir.join("../circom/main/OPRFNullifierProof.zkey"),
     )?;
 
-    let nonce = ark_babyjubjub::Fq::rand(&mut rand::thread_rng());
+    let nonce = ark_babyjubjub::Fq::rand(rng);
     let current_time_stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("system time is after unix epoch")
@@ -171,7 +171,7 @@ async fn run_nullifier(
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
 ) -> eyre::Result<()> {
-    let mut rng = rand_chacha::ChaCha12Rng::from_seed(rand::random());
+    let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
     let args = nullifier_args(
         rp_id,
@@ -194,7 +194,7 @@ fn prepare_nullifier_stress_test_oprf_request(
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
 ) -> eyre::Result<(SignedOprfQuery, OprfRequest)> {
-    let mut rng = rand_chacha::ChaCha12Rng::from_seed(rand::random());
+    let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let groth16_material = Groth16Material::new(
@@ -261,12 +261,6 @@ async fn health_check(health_url: String) {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     tracing::info!("healthy: {health_url}");
-}
-
-#[derive(Default)]
-struct RequestDurations {
-    init_durations: Vec<Duration>,
-    finish_durations: Vec<Duration>,
 }
 
 #[tokio::main]
@@ -350,76 +344,98 @@ async fn main() -> eyre::Result<()> {
         }
         Command::StressTest(cmd) => {
             tracing::info!("preparing requests..");
-            let oprf_requests = (0..cmd.nullifier_num)
-                .map(|_| {
-                    prepare_nullifier_stress_test_oprf_request(
-                        rp_id,
-                        merkle_membership.clone(),
-                        key_material.clone(),
-                    )
-                })
-                .collect::<eyre::Result<Vec<(SignedOprfQuery, OprfRequest)>>>()?;
+            let mut oprf_queries = Vec::with_capacity(cmd.nullifier_num);
+            let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
+            for _ in 0..cmd.nullifier_num {
+                let (query, req) = prepare_nullifier_stress_test_oprf_request(
+                    rp_id,
+                    merkle_membership.clone(),
+                    key_material.clone(),
+                )?;
+                oprf_queries.push(query);
+                init_requests.push(req);
+            }
 
-            let mut nullifier_results = JoinSet::new();
-            let durations = Arc::new(Mutex::new(RequestDurations::default()));
+            let mut init_results = JoinSet::new();
+            let durations = Arc::new(Mutex::new(Vec::with_capacity(cmd.nullifier_num)));
             let client = reqwest::Client::new();
 
-            tracing::info!("start sending requests..");
+            tracing::info!("start sending init requests..");
             let start = Instant::now();
-            for (signed_oprf_query, req) in oprf_requests {
+            for req in init_requests {
                 let client = client.clone();
                 let durations_clone = Arc::clone(&durations);
                 let services = config.services.clone();
                 let threshold = config.threshold;
-                nullifier_results.spawn(async move {
+                init_results.spawn(async move {
                     let init_start = Instant::now();
                     let sessions =
                         oprf_client::nonblocking::init_sessions(&client, &services, threshold, req)
                             .await?;
                     let duration = init_start.elapsed();
-                    durations_clone.lock().init_durations.push(duration);
-                    let challenges = tokio::task::block_in_place(|| {
-                        oprf_client::compute_challenges(
-                            signed_oprf_query,
-                            &sessions,
-                            rp_nullifier_key,
-                        )
-                    })?;
-                    // let challenges = oprf_client::compute_challenges(
-                    //     signed_oprf_query,
-                    //     &sessions,
-                    //     rp_nullifier_key,
-                    // )?;
-                    let req = challenges.get_request();
+                    durations_clone.lock().push(duration);
+                    eyre::Ok(sessions)
+                });
+                if cmd.sequential {
+                    init_results.join_next().await;
+                }
+            }
+            let sessions = init_results.join_all().await;
+            let duration = start.elapsed();
+            let throughput = cmd.nullifier_num as f64 / duration.as_secs_f64();
+            {
+                let durations = durations.lock();
+                assert_eq!(durations.len(), cmd.nullifier_num);
+                let init_avg = avg(&durations);
+                tracing::info!(
+                    "init req - total time: {duration:?} avg: {init_avg:?} throughput: {throughput} req/s"
+                );
+            }
+
+            let sessions = sessions.into_iter().collect::<eyre::Result<Vec<_>>>()?;
+            let finish_requests = sessions
+                .iter()
+                .zip(oprf_queries)
+                .map(|(sessions, query)| {
+                    Ok(
+                        oprf_client::compute_challenges(query, sessions, rp_nullifier_key)?
+                            .get_request(),
+                    )
+                })
+                .collect::<eyre::Result<Vec<_>>>()?;
+
+            let mut finish_results = JoinSet::new();
+            let durations = Arc::new(Mutex::new(Vec::with_capacity(cmd.nullifier_num)));
+            let client = reqwest::Client::new();
+
+            tracing::info!("start sending finish requests..");
+            let start = Instant::now();
+            for (sessions, req) in sessions.into_iter().zip(finish_requests) {
+                let client = client.clone();
+                let durations_clone = Arc::clone(&durations);
+                finish_results.spawn(async move {
                     let finish_start = Instant::now();
                     let _responses =
                         oprf_client::nonblocking::finish_sessions(&client, sessions, req).await?;
                     let duration = finish_start.elapsed();
-                    durations_clone.lock().finish_durations.push(duration);
+                    durations_clone.lock().push(duration);
                     eyre::Ok(())
                 });
                 if cmd.sequential {
-                    nullifier_results.join_next().await;
+                    finish_results.join_next().await;
                 }
             }
-
-            nullifier_results.join_all().await;
-            let total_duration = start.elapsed();
-            let throughput = cmd.nullifier_num as f64 / total_duration.as_secs_f64();
-
-            let durations = durations.lock();
-            let init_num = durations.init_durations.len();
-            assert_eq!(init_num, cmd.nullifier_num);
-            let init_avg = avg(&durations.init_durations);
-
-            let finish_num = durations.finish_durations.len();
-            assert_eq!(finish_num, cmd.nullifier_num);
-            let finish_avg = avg(&durations.finish_durations);
-
-            tracing::info!("completed all nullifiers");
-            tracing::info!("init avg: {init_avg:?}");
-            tracing::info!("finish avg: {finish_avg:?}");
-            tracing::info!("total time: {total_duration:?} throughput: {throughput} nullifier/s")
+            finish_results.join_all().await;
+            let duration = start.elapsed();
+            let throughput = cmd.nullifier_num as f64 / duration.as_secs_f64();
+            {
+                let durations = durations.lock();
+                assert_eq!(durations.len(), cmd.nullifier_num);
+                let init_avg = avg(&durations);
+                tracing::info!(
+                    "finish req - total time: {duration:?} avg: {init_avg:?} throughput: {throughput} req/s"
+                );
+            }
         }
     }
 
