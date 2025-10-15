@@ -5,10 +5,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use oprf_types::{
-    chain::{ChainEvent, ChainEventResult},
-    crypto::PartyId,
-};
+use oprf_types::chain::{ChainEvent, ChainEventResult};
 use tokio::sync::mpsc;
 
 /// Type alias for a shared key generation event listener service.
@@ -19,7 +16,6 @@ pub(crate) mod alloy_key_gen_watcher;
 /// Service trait for subscribing to and reporting key generation events.
 ///
 /// Implementations provide methods to:
-/// - Retrieve the [`PartyId`] of this peer.
 /// - Subscribe to a stream of [`ChainEvent`]s.
 /// - Report processed [`ChainEventResult`]s.
 ///
@@ -29,9 +25,6 @@ pub(crate) mod alloy_key_gen_watcher;
 /// All methods return [`eyre::Result`] to propagate service or network errors.
 #[async_trait]
 pub(crate) trait KeyGenEventListener {
-    /// Returns the party's identifier.
-    async fn fetch_party_id(&self) -> eyre::Result<PartyId>;
-
     /// Subscribes to a stream of chain events.
     async fn subscribe(&self) -> eyre::Result<mpsc::Receiver<ChainEvent>>;
 

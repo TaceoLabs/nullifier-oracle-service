@@ -12,8 +12,9 @@
 //! * [`RpSecretGenCommitment`]
 //! * [`RpSecretGenCiphertexts`] / [`RpSecretGenCiphertext`]
 
-use std::{collections::HashMap, fmt};
+use std::{fmt, ops::Index};
 
+use ark_serde_compat::groth16::Groth16Proof;
 use serde::{Deserialize, Serialize};
 
 /// The party id of the OPRF-Peer.
@@ -65,15 +66,12 @@ impl UserPublicKeyBatch {
 
 /// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
 ///
-/// Contains the [`PeerPublicKey`] of the peer that created this contribution,
-/// along with the public commitments to the random share and the polynomial.
+/// Contains the public commitments to the random share and the polynomial.
 ///
 /// See [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf)
 /// for more information about the OPRF-nullifier generation protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCommitment {
-    /// The OPRF peer that created this contribution.
-    pub sender: PeerPublicKey,
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     /// The commitment to the random value sampled by the peer.
@@ -87,19 +85,21 @@ pub struct RpSecretGenCommitment {
 /// The public contribution of one OPRF peer for the second round of the OPRF-nullifier generation protocol.
 ///
 /// Contains ciphertexts for all OPRF peers (including the peer itself) with the evaluations
-/// of the polynomial generated in the first round.  
-/// Wraps a `HashMap` mapping each [`PartyId`] to its [`RpSecretGenCiphertext`].
+/// of the polynomial generated in the first round. The ciphertexts of the peers
+/// is sorted according to their respective party ID.  
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct RpSecretGenCiphertexts(HashMap<PartyId, RpSecretGenCiphertext>);
+pub struct RpSecretGenCiphertexts {
+    /// The proof that the ciphertexts were computed correctly
+    pub proof: Groth16Proof,
+    /// All ciphers for peers (including peer itself).
+    pub ciphers: Vec<RpSecretGenCiphertext>,
+}
 
 /// A ciphertext for an OPRF peer used in round 2 of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`PeerPublicKey`] of the sender, the ciphertext itself, and a nonce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCiphertext {
-    /// The peer that created the ciphertext.
-    pub sender: PeerPublicKey,
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
     /// The nonce used during encryption.
@@ -108,6 +108,11 @@ pub struct RpSecretGenCiphertext {
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
     /// The ciphertext.
     pub cipher: ark_babyjubjub::Fq,
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    /// The commitment to the encrypted value. Computed as xG, where x
+    /// is the plaintext and G the generator of BabyJubJub.
+    pub commitment: ark_babyjubjub::EdwardsAffine,
 }
 
 impl PartyId {
@@ -202,22 +207,24 @@ impl PeerPublicKeyList {
 }
 
 impl RpSecretGenCiphertexts {
-    /// Returns the [`RpSecretGenCiphertext`] associated with the [`PartyId`]. Iff there is no ciphertext associated with this identifier, returns `None`.
-    pub fn get_cipher_text(&self, filter: PartyId) -> Option<RpSecretGenCiphertext> {
-        self.0.get(&filter).cloned()
-    }
-}
-
-impl RpSecretGenCiphertexts {
     /// Creates a new instance by wrapping the provided value.
-    pub fn new(value: HashMap<PartyId, RpSecretGenCiphertext>) -> Self {
-        Self::from(value)
+    pub fn new(proof: Groth16Proof, ciphers: Vec<RpSecretGenCiphertext>) -> Self {
+        Self { proof, ciphers }
     }
 }
 
-impl From<HashMap<PartyId, RpSecretGenCiphertext>> for RpSecretGenCiphertexts {
-    fn from(value: HashMap<PartyId, RpSecretGenCiphertext>) -> Self {
-        Self(value)
+impl RpSecretGenCiphertext {
+    /// Creates a new ciphertext contribution for an OPRF-Peer by wrapping a nonce, a ciphertext and a commitment to the plain text.
+    pub fn new(
+        cipher: ark_babyjubjub::Fq,
+        commitment: ark_babyjubjub::EdwardsAffine,
+        nonce: ark_babyjubjub::Fq,
+    ) -> Self {
+        Self {
+            nonce,
+            cipher,
+            commitment,
+        }
     }
 }
 
@@ -236,5 +243,13 @@ impl From<u16> for PartyId {
 impl From<PartyId> for u16 {
     fn from(value: PartyId) -> Self {
         value.0
+    }
+}
+
+impl Index<usize> for PeerPublicKeyList {
+    type Output = PeerPublicKey;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
     }
 }

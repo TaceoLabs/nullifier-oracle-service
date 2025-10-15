@@ -19,6 +19,7 @@ eyre.workspace = true
 humantime = { workspace = true }
 nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
+oprf-service = { workspace = true }
 oprf-test = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }

@@ -12,6 +12,8 @@
 //! the device ensures type-safe and consistent handling of cryptographic
 //! values.
 
+use std::{collections::HashMap, path::Path};
+
 use ark_ec::{AffineRepr, CurveGroup as _};
 use ark_ff::{BigInteger as _, PrimeField as _};
 use k256::ecdsa::signature::Verifier;
@@ -28,19 +30,22 @@ use oprf_core::{
 use oprf_types::{
     RpId,
     api::v1::NullifierShareIdentifier,
-    crypto::{PeerPublicKey, RpNullifierKey, RpSecretGenCiphertext},
+    crypto::{PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
+use witness::BlackBoxFunction;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
     metrics::METRICS_RP_SECRETS,
     services::{
-        crypto_device::dlog_storage::RpMaterialStore, secret_manager::SecretManagerService,
+        crypto_device::{dlog_storage::RpMaterialStore, zk::Groth16Material},
+        secret_manager::SecretManagerService,
     },
 };
 
 pub(crate) mod dlog_storage;
+mod zk;
 
 /// The private key of an OPRF peer.
 ///
@@ -105,16 +110,20 @@ impl PeerPrivateKey {
 /// - evaluate polynomials
 /// - decrypt key-generation ciphertexts
 /// - verifies the nonce signature of the RP
-#[derive(Clone)]
 pub(crate) struct CryptoDevice {
     /// Private key. *Do not return outside the device.*
     private_key: PeerPrivateKey,
     /// Secret shares and associated public keys of RPs. *Do not return outside the device.*
     shares: RpMaterialStore,
-    /// Associated public key.
-    public_key: PeerPublicKey,
+    /// All public keys of the OPRF-peers (incl own key).
+    public_key_list: PeerPublicKeyList,
     /// Service to persist secret material.
     secret_manager: SecretManagerService,
+    /// The groth16 material needed to compute the proof in round 2 of
+    /// the KeyGen protocol.
+    key_gen_zk_material: Groth16Material,
+    /// The black box functions for the witness extensions
+    bbfs: HashMap<String, BlackBoxFunction>,
 }
 
 type CryptoDeviceResult<T> = std::result::Result<T, CryptoDeviceError>;
@@ -144,19 +153,30 @@ impl CryptoDevice {
     ///
     /// Returns an error if loading secrets fails.
     #[instrument(level = "info", skip_all)]
-    pub(crate) async fn init(secret_manager: SecretManagerService) -> eyre::Result<Self> {
+    pub(crate) async fn init(
+        secret_manager: SecretManagerService,
+        public_key_list: PeerPublicKeyList,
+        key_gen_zkey_path: impl AsRef<Path>,
+        key_gen_witness_graph: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
         let (private_key, shares) = secret_manager
             .load_secrets()
             .await
             .context("while loading secrets from AWS")?;
         metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);
-        let public_key = private_key.get_public_key();
+
         Ok(Self {
-            public_key,
             private_key,
             shares: RpMaterialStore::new(shares),
+            public_key_list,
             secret_manager,
+            key_gen_zk_material: Groth16Material::from_paths(
+                key_gen_zkey_path,
+                key_gen_witness_graph,
+            )
+            .context("while loading key-gen groth16 material")?,
+            bbfs: zk::black_box_functions(),
         })
     }
 
@@ -188,11 +208,6 @@ impl CryptoDevice {
         vk.verify(&msg, signature)?;
         tracing::debug!("success");
         Ok(())
-    }
-
-    /// Returns the public key of this peer.
-    pub(crate) fn public_key(&self) -> PeerPublicKey {
-        self.public_key
     }
 
     /// Computes C = B * x_share and commitments to a random value k_share.
@@ -262,33 +277,50 @@ impl CryptoDevice {
         result
     }
 
-    /// Evaluates the provided polynomial for a peer and encrypts the result.
-    ///
-    /// Performs a Diffie-Hellman with the private key and the peer’s public key.
-    /// Returns the commitment to the share and the encrypted share.
-    pub(crate) fn gen_share(
-        &self,
-        id: usize,
-        poly: &KeyGenPoly,
-        their_pk: PeerPublicKey,
-        nonce: ark_babyjubjub::Fq,
-    ) -> (Affine, ark_babyjubjub::Fq) {
-        poly.gen_share(id, self.private_key.inner(), their_pk.inner(), nonce)
-    }
-
     /// Decrypts a key-generation ciphertext using the private key.
     ///
     /// Returns the share of the peer's polynomial or an error if decryption fails.
-    pub(crate) fn decrypt_key_gen_ciphertext(
+    pub(crate) fn decrypt_key_gen_ciphertexts(
         &self,
-        cipher: RpSecretGenCiphertext,
-    ) -> eyre::Result<ark_babyjubjub::Fr> {
-        let RpSecretGenCiphertext {
-            sender,
-            nonce,
-            cipher,
-        } = cipher;
-        KeyGenPoly::decrypt_share(self.private_key.inner(), sender.inner(), cipher, nonce)
-            .context("cannot decrypt share")
+        ciphers: Vec<RpSecretGenCiphertext>,
+    ) -> eyre::Result<DLogShare> {
+        // In some later version, we maybe need some meaningful way
+        // to tell which party produced a wrong ciphertext. Currently,
+        // we trust the smart-contract to verify the proof, therefore
+        // it should never happen that this here fails. If yes, there is
+        // a bug.
+        //
+        // In some future version, we might have an optimistic approach
+        // where we don't verify the proof and need to pinpoint the
+        // scoundrel.
+        let shares = ciphers
+            .into_iter()
+            .enumerate()
+            .map(|(idx, cipher)| {
+                let RpSecretGenCiphertext {
+                    nonce,
+                    cipher,
+                    commitment,
+                } = cipher;
+                let their_pk = self.public_key_list[idx].inner();
+                let share =
+                    KeyGenPoly::decrypt_share(self.private_key.inner(), their_pk, cipher, nonce)
+                        .context("cannot decrypt share ciphertext from peer")?;
+                // check commitment
+                let is_commitment =
+                    (ark_babyjubjub::EdwardsAffine::generator() * share).into_affine();
+                // This is actually not possible if Smart Contract verified proof
+                if is_commitment == commitment {
+                    eyre::Ok(share)
+                } else {
+                    eyre::bail!("Commitment for {idx} wrong");
+                }
+            })
+            .collect::<eyre::Result<Vec<_>>>()?;
+        Ok(DLogShare::from(KeyGenPoly::accumulate_shares(&shares)))
+    }
+
+    pub(crate) fn peer_public_key(&self) -> PeerPublicKey {
+        self.private_key.get_public_key()
     }
 }
