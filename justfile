@@ -98,9 +98,9 @@ run-services-local-anvil:
 run-setup:
     #!/usr/bin/env bash
     echo "generating keys..."
-    # cargo run --bin key-gen -- --overwrite-old-keys
+    cargo run --bin key-gen -- --overwrite-old-keys
     mkdir -p logs
-    anvil -vvv &
+    anvil -vvvvv &
     anvil_pid=$!
     echo "started anvil with PID $anvil_pid"
     sleep 2
