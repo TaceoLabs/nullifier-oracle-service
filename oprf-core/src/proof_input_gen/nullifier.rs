@@ -46,6 +46,7 @@ pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     pub dlog_s: ScalarField,
     pub oprf_pk: [BaseField; 2],
     pub oprf_response_blinded: [BaseField; 2],
+    pub session_id: BaseField,
     // Unblinded response
     pub oprf_response: [BaseField; 2],
     // SignalHash as in Semaphore
@@ -77,8 +78,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
 
         // These come from the QueryProof, but need to be reconstructed
         let blinded_query = Affine::new_unchecked(query_proof_input.q[0], query_proof_input.q[1]);
+        let session_id = Uuid::new_v4();
         let blinded_oprf_query = BlindedOPrfRequest {
-            request_id: uuid::Uuid::new_v4(),
+            request_id: session_id,
             blinded_query,
         };
         let blinding_factor = BlindingFactor {
@@ -137,6 +139,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
                 oprf_blinded_response.blinded_response.x,
                 oprf_blinded_response.blinded_response.y,
             ],
+            session_id: session_id.as_u128().into(),
             oprf_response: [unblinded_response.x, unblinded_response.y],
             oprf_pk: [oprf_service.public_key().x, oprf_service.public_key().y],
             signal_hash,
@@ -215,6 +218,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
                 oprf_blinded_response.blinded_response.x,
                 oprf_blinded_response.blinded_response.y,
             ],
+            session_id: request_id.as_u128().into(),
             oprf_response: [unblinded_response.x, unblinded_response.y],
             oprf_pk: [oprf_pk.x, oprf_pk.y],
             signal_hash,
@@ -271,6 +275,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             "oprf_response_blinded: [{}n, {}n],",
             self.oprf_response_blinded[0], self.oprf_response_blinded[1]
         );
+        println!("session_id: {}n,", self.session_id);
         println!(
             "oprf_response: [{}n, {}n],",
             self.oprf_response[0], self.oprf_response[1]
@@ -307,6 +312,7 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
             "dlog_s": self.dlog_s.to_string(),
             "oprf_pk": [self.oprf_pk[0].to_string(), self.oprf_pk[1].to_string()],
             "oprf_response_blinded": [self.oprf_response_blinded[0].to_string(), self.oprf_response_blinded[1].to_string()],
+            "session_id": self.session_id.to_string(),
             "oprf_response": [self.oprf_response[0].to_string(), self.oprf_response[1].to_string()],
             "signal_hash": self.signal_hash.to_string(),
             "nonce": self.nonce.to_string(),

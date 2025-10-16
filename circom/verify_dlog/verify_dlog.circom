@@ -11,6 +11,7 @@ template ComputeChallengeHash() {
     input BabyJubJubPoint() c;
     input BabyJubJubPoint() r1;
     input BabyJubJubPoint() r2;
+    input signal session_id;
     output signal challenge;
 
     component poseidon = Poseidon2(16);
@@ -27,7 +28,7 @@ template ComputeChallengeHash() {
     poseidon.in[10] <== r1.y;
     poseidon.in[11] <== r2.x;
     poseidon.in[12] <== r2.y;
-    poseidon.in[13] <== 0;
+    poseidon.in[13] <== session_id;
     poseidon.in[14] <== 0;
     poseidon.in[15] <== 0;
     challenge <== poseidon.out[1];
@@ -40,6 +41,7 @@ template VerifyDlog() {
     input signal a[2];
     input signal b[2];
     input signal c[2];
+    input signal session_id;
 
     // Point A is public input. This means we don't necessarily need to check this inside the circuit, but can delegate that to the verifier in Rust land.
     BabyJubJubPoint {twisted_edwards } a_p <== BabyJubJubCheck()(a[0], a[1]);
@@ -82,6 +84,6 @@ template VerifyDlog() {
     BabyJubJubCheckNotIdentity()(r2);
 
     // recompute the challenge hash
-    signal challenge <== ComputeChallengeHash()(a_p,b_p,c_p,r1,r2);
+    signal challenge <== ComputeChallengeHash()(a_p,b_p,c_p,r1,r2, session_id);
     challenge === e.f;
 }

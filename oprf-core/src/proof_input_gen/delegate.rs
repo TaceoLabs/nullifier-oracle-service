@@ -41,6 +41,7 @@ pub struct DelegateProofInput<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
     pub dlog_s: ScalarField,
     pub oprf_pk: [BaseField; 2],
     pub oprf_response_blinded: [BaseField; 2],
+    pub session_id: BaseField,
     // Unblinded response
     pub oprf_response: [BaseField; 2],
     // Nonce
@@ -155,8 +156,9 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
 
         // These come from the QueryProof, but need to be reconstructed
         let blinded_query = Affine::new_unchecked(query_proof_input.q[0], query_proof_input.q[1]);
+        let request_id = uuid::Uuid::new_v4();
         let blinded_oprf_query = BlindedOPrfRequest {
-            request_id: uuid::Uuid::new_v4(),
+            request_id,
             blinded_query,
         };
         let blinding_factor = BlindingFactor {
@@ -248,6 +250,7 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
                 oprf_blinded_response.blinded_response.y,
             ],
             oprf_response: [unblinded_response.x, unblinded_response.y],
+            session_id: request_id.as_u128().into(),
             oprf_pk: [oprf_service.public_key().x, oprf_service.public_key().y],
             nonce: query_proof_input.nonce,
             id_commitment_r,
@@ -315,6 +318,7 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
             "oprf_response_blinded: [{}n, {}n],",
             self.oprf_response_blinded[0], self.oprf_response_blinded[1]
         );
+        println!("session_id: {}n,", self.session_id);
         println!(
             "oprf_response: [{}n, {}n],",
             self.oprf_response[0], self.oprf_response[1]

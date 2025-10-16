@@ -46,7 +46,7 @@ pub const FINGERPRINT_QUERY: &str =
     "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
 /// The SHA-256 fingerprint of the OPRFNullifier ZKey.
 pub const FINGERPRINT_NULLIFIER: &str =
-    "69195d6c04b0751b03109641c0b8aaf9367af2c1740909406deaefd24440dfb2";
+    "830c7ba5aae88cd63c4495c0334b045f0cdd646c9cdfb031a8fef339087d8dab";
 
 pub(crate) type ZkResult<T> = Result<T, Groth16Error>;
 
@@ -223,6 +223,10 @@ fn parse_zkey_bytes(
     let is_fingerprint = k256::sha2::Sha256::digest(bytes);
 
     if hex::encode(is_fingerprint) != should_fingerprint {
+        println!(
+            "expected fingerprint: {should_fingerprint}, is: {}",
+            hex::encode(is_fingerprint)
+        );
         return Err(ZkeyError::ZKeyFingerprintMismatch);
     }
 

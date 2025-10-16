@@ -34,6 +34,7 @@ template OprfNullifier(MAX_DEPTH) {
     signal input dlog_s;
     signal input oprf_pk[2]; // Public
     signal input oprf_response_blinded[2];
+    signal input session_id;
     // Unblinded response
     signal input oprf_response[2];
     // Nonce and signal hash
@@ -80,6 +81,7 @@ template OprfNullifier(MAX_DEPTH) {
     dlog_eq_verifier.a <== oprf_pk;
     dlog_eq_verifier.b <== oprf_query.q;
     dlog_eq_verifier.c <== oprf_response_blinded;
+    dlog_eq_verifier.session_id <== session_id;
 
     // 5. Unblind the OPRF response
     BabyJubJubScalarField() beta_f;
