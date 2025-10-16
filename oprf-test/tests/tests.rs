@@ -95,8 +95,10 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Loading zkeys and matrices...");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let groth16_material = Groth16Material::new(
-        dir.join("../circom/main/OPRFQueryProof.zkey"),
-        dir.join("../circom/main/OPRFNullifierProof.zkey"),
+        dir.join("../data/query_pk.bin"),
+        dir.join("../data/query_matrices.bin"),
+        dir.join("../data/nullifier_pk.bin"),
+        dir.join("../data/nullifier_matrices.bin"),
     )?;
     let nullifier_vk = groth16_material.nullifier_vk();
 

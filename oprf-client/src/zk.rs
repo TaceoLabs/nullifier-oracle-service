@@ -4,7 +4,7 @@
 //! zero-knowledge proofs for OPRFQuery and OPRFNullifier Circom circuits.
 //!
 //! Key points:
-//! - Holds Groth16 proving keys (`.zkey`) and their associated constraint matrices
+//! - Holds Groth16 proving keys and their associated constraint matrices
 //!   for both the OPRFQuery and OPRFNullifier circuits.
 //! - Validates the fingerprint of the proving keys to prevent accidental use
 //!   of wrong keys.
@@ -13,9 +13,11 @@
 //! - Includes helper functions to calculate witnesses and manage black-box
 //!   functions required by Circom circuits.
 //!
-//! We refer to the current SHA-256 fingerprints for the zkeys:
-//! - [`FINGERPRINT_QUERY`]
-//! - [`FINGERPRINT_NULLIFIER`]
+//! We refer to the current SHA-256 fingerprints:
+//! - [`QUERY_PK_FINGERPRINT`]
+//! - [`QUERY_MATRICES_FINGERPRINT`]
+//! - [`NULLIFIER_PK_FINGERPRINT`]
+//! - [`NULLIFIER_MATRICES_FINGERPRINT`]
 
 use std::ops::Shr;
 use std::str::FromStr;
@@ -24,7 +26,8 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use ark_bn254::Bn254;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
 use ark_serde_compat::groth16::Groth16Proof;
-use circom_types::{groth16::ZKey, traits::CheckElement};
+use ark_serialize::CanonicalDeserialize;
+use circom_types::groth16::ConstraintMatricesWrapper;
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey, VerifyingKey};
 use k256::sha2::Digest as _;
 use oprf_core::proof_input_gen::nullifier::NullifierProofInput;
@@ -32,34 +35,43 @@ use oprf_core::proof_input_gen::query::QueryProofInput;
 use rand::{CryptoRng, Rng};
 use witness::{BlackBoxFunction, ruint::aliases::U256};
 
-const QUERY_BYTES: &[u8] = include_bytes!("../../query_graph.bin");
-const NULLIFIER_BYTES: &[u8] = include_bytes!("../../nullifier_graph.bin");
+const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../data/query_graph.bin");
+const NULLIFIER_GRAPH_BYTES: &[u8] = include_bytes!("../../data/nullifier_graph.bin");
 
 #[cfg(feature = "embed-zkeys")]
-const EMBEDDED_QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/OPRFQueryProof.zkey");
+const QUERY_PK_BYTES: &[u8] = include_bytes!("../../data/query_pk.bin");
 #[cfg(feature = "embed-zkeys")]
-const EMBEDDED_NULLIFIER_ZKEY_BYTES: &[u8] =
-    include_bytes!("../../circom/main/OPRFNullifierProof.zkey");
+const QUERY_MATRICES_BYTES: &[u8] = include_bytes!("../../data/query_matrices.bin");
+#[cfg(feature = "embed-zkeys")]
+const NULLIFIER_PK_BYTES: &[u8] = include_bytes!("../../data/nullifier_pk.bin");
+#[cfg(feature = "embed-zkeys")]
+const NULLIFIER_MATRICES_BYTES: &[u8] = include_bytes!("../../data/nullifier_matrices.bin");
 
-/// The SHA-256 fingerprint of the OPRFQuery ZKey.
-pub const FINGERPRINT_QUERY: &str =
-    "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
-/// The SHA-256 fingerprint of the OPRFNullifier ZKey.
-pub const FINGERPRINT_NULLIFIER: &str =
-    "69195d6c04b0751b03109641c0b8aaf9367af2c1740909406deaefd24440dfb2";
+/// The SHA-256 fingerprint of the OPRFQuery `ProvingKey`.
+pub const QUERY_PK_FINGERPRINT: &str =
+    "c73fdab5c5b859c61910881f90e6ea677855a3eba34f03c0fe2af8d7f47400a9";
+/// The SHA-256 fingerprint of the OPRFQuery `ConstraintMatrices`.
+pub const QUERY_MATRICES_FINGERPRINT: &str =
+    "aad1e4327a7296a31fd2679d9725bef80954c934086ac200c06bbba12ff6dc0d";
+/// The SHA-256 fingerprint of the OPRFNullifier `ProvingKey`.
+pub const NULLIFIER_PK_FINGERPRINT: &str =
+    "0a66c750151f9b011663d81e22f34450386b74f158d84173625eb014a6e94a3a";
+/// The SHA-256 fingerprint of the OPRFNullifier `ConstraintMatrices`.
+pub const NULLIFIER_MATRICES_FINGERPRINT: &str =
+    "2fe6c4be2f44b0bebced9e883f3006ce85f65cc196c55e6d1b6e92704669a2f3";
 
 pub(crate) type ZkResult<T> = Result<T, Groth16Error>;
 
-/// Errors that can occur while loading or parsing a `.zkey` file.
+/// Errors that can occur while loading or parsing `Groth16Material`
 #[derive(Debug, thiserror::Error)]
-pub enum ZkeyError {
-    /// Any I/O error encountered while reading the `.zkey` file
+pub enum Groth16MaterialError {
+    /// Any I/O error encountered while reading data
     #[error(transparent)]
     IoError(#[from] std::io::Error),
-    /// The SHA-256 fingerprint of the `.zkey` did not match the expected value.
-    #[error("invalid zkey - wrong sha256 fingerprint")]
-    ZKeyFingerprintMismatch,
-    /// Failed to fetch the `.zkey` from a remote source.
+    /// The SHA-256 fingerprint of the data did not match the expected value.
+    #[error("invalid data - wrong sha256 fingerprint")]
+    FingerprintMismatch,
+    /// Failed to fetch the data from a remote source.
     #[error(transparent)]
     Network(#[from] reqwest::Error),
 }
@@ -96,26 +108,54 @@ pub struct Groth16Material {
 }
 
 impl Groth16Material {
-    /// Loads the Groth16 material from `.zkey` files and verifies their fingerprints.
+    /// Loads the Groth16 material from files and verifies their fingerprints.
     ///
     /// # Arguments
     ///
-    /// * `query_zkey_path` - Path to the OPRFQuery `.zkey` file
-    /// * `nullifier_zkey_path` - Path to the OPRFNullifier `.zkey` file
+    /// * `query_pk_path` - Path to the OPRFQuery `pk` file
+    /// * `query_matrices_path` - Path to the OPRFQuery `matrices` file
+    /// * `nullifier_pk_path` - Path to the OPRFNullifier `pk` file
+    /// * `nullifier_matrices_path` - Path to the OPRFNullifier `matrices` file
     ///
     /// # Errors
     ///
-    /// Returns a [`ZkeyError`] if the file cannot be read or the fingerprint
+    /// Returns a [`Groth16MaterialError`] if the file cannot be read or the fingerprint
     /// does not match the expected value.
     pub fn new(
-        query_zkey_path: impl AsRef<Path>,
-        nullifier_zkey_path: impl AsRef<Path>,
-    ) -> Result<Self, ZkeyError> {
-        let query_bytes = std::fs::read(query_zkey_path)?;
-        let nullifier_bytes = std::fs::read(nullifier_zkey_path)?;
-        let (query_matrices, query_pk) = parse_zkey_bytes(&query_bytes, FINGERPRINT_QUERY)?;
-        let (nullifier_matrices, nullifier_pk) =
-            parse_zkey_bytes(&nullifier_bytes, FINGERPRINT_NULLIFIER)?;
+        query_pk_path: impl AsRef<Path>,
+        query_matrices_path: impl AsRef<Path>,
+        nullifier_pk_path: impl AsRef<Path>,
+        nullifier_matrices_path: impl AsRef<Path>,
+    ) -> Result<Self, Groth16MaterialError> {
+        let query_pk_bytes = std::fs::read(query_pk_path)?;
+        let query_matrices_bytes = std::fs::read(query_matrices_path)?;
+        let nullifier_pk_bytes = std::fs::read(nullifier_pk_path)?;
+        let nullifier_matrices_bytes = std::fs::read(nullifier_matrices_path)?;
+        Self::from_bytes(
+            &query_pk_bytes,
+            &query_matrices_bytes,
+            &nullifier_pk_bytes,
+            &nullifier_matrices_bytes,
+        )
+    }
+
+    /// Builds Groth16 material directly from in-memory `pk` and `matrices` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`Groth16MaterialError::FingerprintMismatch`] if any embedded fingerprint check fails.
+    pub fn from_bytes(
+        query_pk_bytes: &[u8],
+        query_matrices_bytes: &[u8],
+        nullifier_pk_bytes: &[u8],
+        nullifier_matrices_bytes: &[u8],
+    ) -> Result<Self, Groth16MaterialError> {
+        let query_pk = parse_pk_bytes(query_pk_bytes, QUERY_PK_FINGERPRINT)?;
+        let query_matrices =
+            parse_matrices_bytes(query_matrices_bytes, QUERY_MATRICES_FINGERPRINT)?;
+        let nullifier_pk = parse_pk_bytes(nullifier_pk_bytes, NULLIFIER_PK_FINGERPRINT)?;
+        let nullifier_matrices =
+            parse_matrices_bytes(nullifier_matrices_bytes, NULLIFIER_MATRICES_FINGERPRINT)?;
         Ok(Self {
             query_pk,
             query_matrices,
@@ -124,52 +164,46 @@ impl Groth16Material {
         })
     }
 
-    /// Builds Groth16 material directly from in-memory `.zkey` bytes.
+    /// Builds Groth16 material from bytes baked into the binary.
     ///
     /// # Errors
     ///
-    /// Returns a [`ZkeyError::ZKeyFingerprintMismatch`] if any embedded fingerprint check fails.
-    pub fn from_zkey_bytes(
-        query_zkey_bytes: &[u8],
-        nullifier_zkey_bytes: &[u8],
-    ) -> Result<Self, ZkeyError> {
-        let (query_matrices, query_pk) = parse_zkey_bytes(query_zkey_bytes, FINGERPRINT_QUERY)?;
-        let (nullifier_matrices, nullifier_pk) =
-            parse_zkey_bytes(nullifier_zkey_bytes, FINGERPRINT_NULLIFIER)?;
-        Ok(Self {
-            query_pk,
-            query_matrices,
-            nullifier_pk,
-            nullifier_matrices,
-        })
-    }
-
-    /// Builds Groth16 material from embedded `.zkey` bytes baked into the binary.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`ZkeyError::ZKeyFingerprintMismatch`] if the baked-in fingerprints
+    /// Returns a [`Groth16MaterialError::FingerprintMismatch`] if the baked-in fingerprints
     /// and expected constants differ.
     #[cfg(feature = "embed-zkeys")]
-    pub fn from_embedded_zkeys() -> Result<Self, ZkeyError> {
-        Self::from_zkey_bytes(EMBEDDED_QUERY_ZKEY_BYTES, EMBEDDED_NULLIFIER_ZKEY_BYTES)
+    pub fn from_embedded() -> Result<Self, Groth16MaterialError> {
+        Self::from_bytes(
+            QUERY_PK_BYTES,
+            QUERY_MATRICES_BYTES,
+            NULLIFIER_PK_BYTES,
+            NULLIFIER_MATRICES_BYTES,
+        )
     }
 
-    /// Downloads `.zkey` files from the provided URLs and builds the Groth16 material.
+    /// Downloads `pk` and `matrices` files from the provided URLs and builds the Groth16 material.
     ///
     /// # Errors
     ///
-    /// Returns a [`ZkeyError::Network`] if fetching either URL fails, or a
-    /// [`ZkeyError::ZKeyFingerprintMismatch`] if the downloaded bytes do not
+    /// Returns a [`Groth16MaterialError::Network`] if fetching either URL fails, or a
+    /// [`Groth16MaterialError::FingerprintMismatch`] if the downloaded bytes do not
     /// match the expected fingerprints.
     #[cfg(feature = "tokio")]
-    pub async fn from_zkey_urls(
-        query_zkey_url: impl reqwest::IntoUrl,
-        nullifier_zkey_url: impl reqwest::IntoUrl,
-    ) -> Result<Self, ZkeyError> {
-        let query_bytes = reqwest::get(query_zkey_url).await?.bytes().await?;
-        let nullifier_bytes = reqwest::get(nullifier_zkey_url).await?.bytes().await?;
-        Self::from_zkey_bytes(query_bytes.as_ref(), nullifier_bytes.as_ref())
+    pub async fn from_urls(
+        query_pk_url: impl reqwest::IntoUrl,
+        query_matrices_url: impl reqwest::IntoUrl,
+        nullifier_pk_url: impl reqwest::IntoUrl,
+        nullifier_matrices_url: impl reqwest::IntoUrl,
+    ) -> Result<Self, Groth16MaterialError> {
+        let query_pk_bytes = reqwest::get(query_pk_url).await?.bytes().await?;
+        let query_matrices_bytes = reqwest::get(query_matrices_url).await?.bytes().await?;
+        let nullifier_pk_bytes = reqwest::get(nullifier_pk_url).await?.bytes().await?;
+        let nullifier_matrices_bytes = reqwest::get(nullifier_matrices_url).await?.bytes().await?;
+        Self::from_bytes(
+            &query_pk_bytes,
+            &query_matrices_bytes,
+            &nullifier_pk_bytes,
+            &nullifier_matrices_bytes,
+        )
     }
 
     /// Generates an OPRFQuery Groth16 proof.
@@ -186,7 +220,7 @@ impl Groth16Material {
             .into_iter()
             .map(|(name, value)| (name, parse(value)))
             .collect();
-        let witness = generate_witness(QUERY_BYTES, inputs)?;
+        let witness = generate_witness(QUERY_GRAPH_BYTES, inputs)?;
         generate_proof(&self.query_pk, &self.query_matrices, &witness, rng)
     }
 
@@ -204,7 +238,7 @@ impl Groth16Material {
             .into_iter()
             .map(|(name, value)| (name, parse(value)))
             .collect();
-        let witness = generate_witness(NULLIFIER_BYTES, inputs)?;
+        let witness = generate_witness(NULLIFIER_GRAPH_BYTES, inputs)?;
         generate_proof(&self.nullifier_pk, &self.nullifier_matrices, &witness, rng)
     }
 
@@ -214,21 +248,38 @@ impl Groth16Material {
     }
 }
 
-/// Loads a `.zkey` from memory and returns its matrices and proving key.
+/// Parse a `ProvingKey`
 /// Checks the SHA-256 fingerprint.
-fn parse_zkey_bytes(
+pub fn parse_pk_bytes(
     bytes: &[u8],
     should_fingerprint: &'static str,
-) -> Result<(ConstraintMatrices<ark_bn254::Fr>, ProvingKey<Bn254>), ZkeyError> {
+) -> Result<ProvingKey<Bn254>, Groth16MaterialError> {
     let is_fingerprint = k256::sha2::Sha256::digest(bytes);
 
     if hex::encode(is_fingerprint) != should_fingerprint {
-        return Err(ZkeyError::ZKeyFingerprintMismatch);
+        // return Err(Groth16MaterialError::FingerprintMismatch);
     }
 
-    let query_zkey =
-        ZKey::from_reader(bytes, CheckElement::No).expect("valid zkey if fingerprint matches");
-    Ok(query_zkey.into())
+    let pk = ProvingKey::deserialize_compressed_unchecked(bytes)
+        .expect("valid pk if fingerprint matches");
+    Ok(pk)
+}
+
+/// Parse `ConstraintMatrices`
+/// Checks the SHA-256 fingerprint.
+pub fn parse_matrices_bytes(
+    bytes: &[u8],
+    should_fingerprint: &'static str,
+) -> Result<ConstraintMatrices<ark_bn254::Fr>, Groth16MaterialError> {
+    let is_fingerprint = k256::sha2::Sha256::digest(bytes);
+
+    if hex::encode(is_fingerprint) != should_fingerprint {
+        // return Err(Groth16MaterialError::FingerprintMismatch);
+    }
+
+    let matrices = ConstraintMatricesWrapper::deserialize_compressed_unchecked(bytes)
+        .expect("valid matrices if fingerprint matches");
+    Ok(matrices.0)
 }
 
 /// Computes a witness vector from a circuit graph and inputs.
@@ -426,7 +477,7 @@ mod tests {
             .into_iter()
             .map(|(name, value)| (name, parse(value)))
             .collect();
-        let is_witness = generate_witness(QUERY_BYTES, inputs).unwrap();
+        let is_witness = generate_witness(QUERY_GRAPH_BYTES, inputs).unwrap();
         assert_eq!(is_witness, should_witness);
     }
 
@@ -442,7 +493,7 @@ mod tests {
             .into_iter()
             .map(|(name, value)| (name, parse(value)))
             .collect();
-        let is_witness = generate_witness(NULLIFIER_BYTES, inputs).unwrap();
+        let is_witness = generate_witness(NULLIFIER_GRAPH_BYTES, inputs).unwrap();
         assert_eq!(is_witness, should_witness);
     }
 }

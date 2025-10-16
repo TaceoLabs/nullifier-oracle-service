@@ -28,3 +28,10 @@ reqwest = { workspace = true }
 secrecy.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "ark_parse"
+harness = false

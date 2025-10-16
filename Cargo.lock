@@ -2312,7 +2312,7 @@ dependencies = [
 [[package]]
 name = "circom-types"
 version = "0.9.0"
-source = "git+https://github.com/TaceoLabs/co-snarks.git#118de7595cbc34110226fc91a4aec68654d50e51"
+source = "git+https://github.com/TaceoLabs/co-snarks.git#e636308efdf115149d53e05e70b157cfe5babb6c"
 dependencies = [
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
@@ -4645,6 +4645,7 @@ dependencies = [
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-serde-compat",
+ "ark-serialize 0.5.0",
  "circom-types",
  "eddsa-babyjubjub",
  "eyre",
@@ -4696,6 +4697,7 @@ dependencies = [
  "ark-babyjubjub",
  "ark-ff 0.5.0",
  "clap",
+ "criterion",
  "eyre",
  "humantime",
  "nodes-telemetry",

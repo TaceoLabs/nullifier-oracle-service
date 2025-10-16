@@ -16,6 +16,7 @@ ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
+ark-serialize.workspace = true
 circom-types.workspace = true
 eddsa-babyjubjub = { workspace = true }
 eyre.workspace = true
@@ -38,6 +39,6 @@ witness = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-default = ["tokio"]
+default = ["tokio", "embed-zkeys"]
 tokio = ["dep:tokio"]
 embed-zkeys = []

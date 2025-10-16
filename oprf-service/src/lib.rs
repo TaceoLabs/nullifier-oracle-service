@@ -308,8 +308,10 @@ mod tests {
             let signature = rp_signing_key.sign(&msg);
 
             let groth16_material = Groth16Material::new(
-                dir.join("../circom/main/OPRFQueryProof.zkey"),
-                dir.join("../circom/main/OPRFNullifierProof.zkey"),
+                dir.join("../data/query_pk.bin"),
+                dir.join("../data/query_matrices.bin"),
+                dir.join("../data/nullifier_pk.bin"),
+                dir.join("../data/nullifier_matrices.bin"),
             )?;
 
             let merkle_membership = MerkleMembership {
