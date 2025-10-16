@@ -31,6 +31,7 @@ use oprf_types::{
     crypto::{PeerPublicKey, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -226,6 +227,7 @@ impl CryptoDevice {
     /// Returns an error if the RP is unknown or the key epoch is not registered.
     pub(crate) fn challenge(
         &self,
+        session_id: Uuid,
         session: DLogEqualitySession,
         challenge: DLogEqualityCommitments,
         share_identifier: &NullifierShareIdentifier,
@@ -239,7 +241,8 @@ impl CryptoDevice {
             .shares
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
-        Ok(session.challenge(share, rp_nullifier_key.inner(), challenge))
+        let session_id = Some(session_id.as_u128().into());
+        Ok(session.challenge(share, rp_nullifier_key.inner(), challenge, session_id))
     }
 
     /// Registers a new nullifier share for the given relying-party.

@@ -23,14 +23,20 @@ impl DLogEqualityProof {
     }
 
     /// Creates a proof which shows that C=x*B and A=x*D share the same dlog x. This proof can be verified using B, C, and A=x*D. D is currently hard coded as the generator of the group.
-    pub fn proof(b: Affine, x: ScalarField, rng: &mut (impl CryptoRng + Rng)) -> Self {
+    /// If session_id is provided, it is included in the Fiat-Shamir hash to make the proof more resistant against replay attacks.
+    pub fn proof(
+        b: Affine,
+        x: ScalarField,
+        session_id: Option<BaseField>,
+        rng: &mut (impl CryptoRng + Rng),
+    ) -> Self {
         let k = ScalarField::rand(rng);
         let r1 = (Affine::generator() * k).into_affine();
         let r2 = (b * k).into_affine();
         let a = (Affine::generator() * x).into_affine();
         let c = (b * x).into_affine();
         let d = Affine::generator();
-        let e = challenge_hash(a, b, c, d, r1, r2);
+        let e = challenge_hash(a, b, c, d, r1, r2, session_id);
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e_ = convert_base_to_scalar(e);
@@ -39,7 +45,14 @@ impl DLogEqualityProof {
     }
 
     /// Takes the proof e,s and verifies that A=x*D and C=x*B have the same dlog x, given A,B,C,D.
-    pub fn verify(&self, a: Affine, b: Affine, c: Affine, d: Affine) -> bool {
+    pub fn verify(
+        &self,
+        a: Affine,
+        b: Affine,
+        c: Affine,
+        d: Affine,
+        session_id: Option<BaseField>,
+    ) -> bool {
         // All points need to be valid curve elements.
         if [a, b, c, d]
             .iter()
@@ -69,7 +82,7 @@ impl DLogEqualityProof {
         if r_2.is_zero() {
             return false;
         }
-        let e = challenge_hash(a, b, c, d, r_1.into_affine(), r_2.into_affine());
+        let e = challenge_hash(a, b, c, d, r_1.into_affine(), r_2.into_affine(), session_id);
         e == self.e
     }
 }
@@ -81,6 +94,7 @@ pub(crate) fn challenge_hash(
     d: Affine,
     r1: Affine,
     r2: Affine,
+    session_id: Option<BaseField>,
 ) -> BaseField {
     let poseidon = Poseidon2::<_, 16, 5>::default();
     let hash_input = [
@@ -97,7 +111,7 @@ pub(crate) fn challenge_hash(
         r1.y,
         r2.x,
         r2.y,
-        BaseField::zero(),
+        session_id.unwrap_or(BaseField::zero()),
         BaseField::zero(),
         BaseField::zero(),
     ];
@@ -123,13 +137,21 @@ mod tests {
         let a = (d * x).into_affine();
         let b = Affine::rand(&mut rng);
         let c = (b * x).into_affine();
+        let session_id = Some(BaseField::rand(&mut rng));
 
-        let proof = DLogEqualityProof::proof(b, x, &mut rng);
-        assert!(proof.verify(a, b, c, d), "valid proof should verify");
-        let b2 = Affine::rand(&mut rng);
-        let invalid_proof = DLogEqualityProof::proof(b2, x, &mut rng);
+        let proof = DLogEqualityProof::proof(b, x, session_id, &mut rng);
         assert!(
-            !invalid_proof.verify(a, b, c, d),
+            proof.verify(a, b, c, d, session_id),
+            "valid proof should verify"
+        );
+        assert!(
+            !proof.verify(a, b, c, d, session_id.map(|x| x + BaseField::from(1))),
+            "proof with different session_id should not verify"
+        );
+        let b2 = Affine::rand(&mut rng);
+        let invalid_proof = DLogEqualityProof::proof(b2, x, session_id, &mut rng);
+        assert!(
+            !invalid_proof.verify(a, b, c, d, session_id),
             "invalid proof should not verify"
         );
     }

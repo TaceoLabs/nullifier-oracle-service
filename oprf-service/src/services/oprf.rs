@@ -208,9 +208,12 @@ impl OprfService {
             .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share =
-            self.crypto_device
-                .challenge(session, request.challenge, &request.rp_identifier)?;
+        let proof_share = self.crypto_device.challenge(
+            request.request_id,
+            session,
+            request.challenge,
+            &request.rp_identifier,
+        )?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)

@@ -130,7 +130,7 @@ fn ddlog_bench(c: &mut Criterion) {
                 let challenge = DLogEqualityCommitments::combine_commitments(&[comm]);
                 (session, challenge)
             },
-            |(session, challenge)| session.challenge(x, pk, challenge),
+            |(session, challenge)| session.challenge(x, pk, challenge, None),
             BatchSize::SmallInput,
         );
     });
@@ -163,11 +163,11 @@ fn ddlog_bench(c: &mut Criterion) {
                     let challenge = DLogEqualityCommitments::combine_commitments(&commitments);
                     let responses = sessions
                         .into_iter()
-                        .map(|s| s.challenge(x, pk, challenge.clone()))
+                        .map(|s| s.challenge(x, pk, challenge.clone(), None))
                         .collect::<Vec<_>>();
                     (challenge, responses)
                 },
-                |(challenge, responses)| challenge.combine_proofs(&responses, pk, point),
+                |(challenge, responses)| challenge.combine_proofs(&responses, pk, point, None),
                 BatchSize::SmallInput,
             );
         });
@@ -208,12 +208,12 @@ fn ddlog_bench(c: &mut Criterion) {
                     );
                     let responses = sessions
                         .into_iter()
-                        .map(|s| s.challenge(x, pk, challenge.clone()))
+                        .map(|s| s.challenge(x, pk, challenge.clone(), None))
                         .collect::<Vec<_>>();
                     (challenge, responses, lagrange)
                 },
                 |(challenge, responses, lagrange)| {
-                    challenge.combine_proofs_shamir(&responses, &lagrange, pk, point)
+                    challenge.combine_proofs_shamir(&responses, &lagrange, pk, point, None)
                 },
                 BatchSize::SmallInput,
             );

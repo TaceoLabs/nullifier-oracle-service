@@ -9,6 +9,7 @@ use ark_ec::{AffineRepr, VariableBaseMSM};
 use ark_ff::Zero;
 
 type ScalarField = ark_babyjubjub::Fr;
+type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
@@ -60,6 +61,7 @@ impl DLogEqualityCommitments {
         lagrange: &[ScalarField], // Lagrange coefficients for each share
         a: Affine,
         b: Affine,
+        session_id: Option<BaseField>,
     ) -> DLogEqualityProof {
         assert_eq!(
             proofs.len(),
@@ -73,7 +75,7 @@ impl DLogEqualityCommitments {
         }
 
         let d = Affine::generator();
-        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2);
+        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2, session_id);
 
         DLogEqualityProof { e, s }
     }
@@ -88,6 +90,8 @@ mod tests {
 
     fn test_distributed_dlog_equality(num_parties: usize, degree: usize) {
         let mut rng = rand::thread_rng();
+
+        let session_id = Some(BaseField::rand(&mut rng));
 
         let x = ScalarField::rand(&mut rng);
         let x_shares = shamir::share(x, num_parties, degree, &mut rng);
@@ -130,7 +134,7 @@ mod tests {
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, public_key, challenge.to_owned());
+            let proof = session.challenge(x_, public_key, challenge.to_owned(), session_id);
             proofs.push(proof);
         }
 
@@ -140,13 +144,14 @@ mod tests {
             .iter()
             .map(|&i| proofs[i - 1].clone())
             .collect::<Vec<_>>();
-        let proof = challenge.combine_proofs_shamir(&used_proofs, &lagrange, public_key, b);
+        let proof =
+            challenge.combine_proofs_shamir(&used_proofs, &lagrange, public_key, b, session_id);
 
         // Verify the result and the proof
         let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
         assert!(
-            proof.verify(public_key, b, c, d),
+            proof.verify(public_key, b, c, d, session_id),
             "valid proof should verify"
         );
     }

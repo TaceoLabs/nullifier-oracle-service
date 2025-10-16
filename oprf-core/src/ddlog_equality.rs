@@ -50,6 +50,7 @@ pub struct DLogEqualitySession {
 }
 
 type ScalarField = ark_babyjubjub::Fr;
+type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
@@ -83,6 +84,7 @@ impl DLogEqualitySession {
         x_share: ScalarField,
         a: Affine,
         challenge_input: DLogEqualityCommitments,
+        session_id: Option<BaseField>,
     ) -> DLogEqualityProofShare {
         // Recompute the challenge hash to ensure the challenge is well-formed.
         let d = Affine::generator();
@@ -93,6 +95,7 @@ impl DLogEqualitySession {
             d,
             challenge_input.r1,
             challenge_input.r2,
+            session_id,
         );
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e_ = crate::dlog_equality::convert_base_to_scalar(e);
@@ -131,6 +134,7 @@ impl DLogEqualityCommitments {
         proofs: &[DLogEqualityProofShare],
         a: Affine,
         b: Affine,
+        session_id: Option<BaseField>,
     ) -> DLogEqualityProof {
         let mut s = ScalarField::zero();
         for proof in proofs {
@@ -138,7 +142,7 @@ impl DLogEqualityCommitments {
         }
 
         let d = Affine::generator();
-        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2);
+        let e = crate::dlog_equality::challenge_hash(a, b, self.c, d, self.r1, self.r2, session_id);
 
         DLogEqualityProof { e, s }
     }
@@ -155,6 +159,9 @@ mod tests {
 
     fn test_distributed_dlog_equality(num_parties: usize) {
         let mut rng = rand::thread_rng();
+
+        // Random session_id
+        let session_id = Some(BaseField::rand(&mut rng));
 
         // Random x shares
         let x_shares = (0..num_parties)
@@ -192,18 +199,18 @@ mod tests {
         // 3) Client challenges all servers
         let mut proofs = Vec::with_capacity(num_parties);
         for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(x_, public_key, challenge.to_owned());
+            let proof = session.challenge(x_, public_key, challenge.to_owned(), session_id);
             proofs.push(proof);
         }
 
         // 4) Client combines all proofs
-        let proof = challenge.combine_proofs(&proofs, public_key, b);
+        let proof = challenge.combine_proofs(&proofs, public_key, b, session_id);
 
         // Verify the result and the proof
         let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
         assert!(
-            proof.verify(public_key, b, c, d),
+            proof.verify(public_key, b, c, d, session_id),
             "valid proof should verify"
         );
     }

@@ -79,8 +79,14 @@ impl OPrfService {
         // Compute the blinded response
         let blinded_response = (query.blinded_query * self.key.key).into_affine();
 
-        let proof =
-            DLogEqualityProof::proof(query.blinded_query, self.key.key, &mut rand::thread_rng());
+        let session_id = Some(query.request_id.as_u128().into());
+
+        let proof = DLogEqualityProof::proof(
+            query.blinded_query,
+            self.key.key,
+            session_id,
+            &mut rand::thread_rng(),
+        );
         (
             BlindedOPrfResponse {
                 request_id: query.request_id,
@@ -270,8 +276,9 @@ impl OprfClient {
             * blinding_factor.factor.inverse().unwrap())
         .into_affine();
         let c = response.blinded_response;
+        let session_id = Some(response.request_id.as_u128().into());
 
-        if !proof.verify(a, b, c, d) {
+        if !proof.verify(a, b, c, d, session_id) {
             return Err(OPrfError::InvalidProof);
         }
         // Call finalize_query to unblind the response

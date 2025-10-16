@@ -520,6 +520,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         .into_iter()
         .map(|res| res.proof_share)
         .collect::<Vec<_>>();
+    let session_id = Some(challenges.request_id.as_u128().into());
     let dlog_proof = challenges
         .challenge_request
         .challenge
@@ -528,12 +529,14 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
             &challenges.lagrange,
             challenges.rp_nullifier_key.inner(),
             challenges.blinded_request.blinded_query(),
+            session_id,
         );
     if !dlog_proof.verify(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),
         challenges.blinded_response,
         ark_babyjubjub::EdwardsAffine::generator(),
+        session_id,
     ) {
         return Err(Error::InvalidDLogProof);
     }
