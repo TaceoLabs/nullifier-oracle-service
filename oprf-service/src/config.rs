@@ -115,7 +115,7 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
-        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+        default_value = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
     )]
     pub key_gen_contract: Address,
 
@@ -185,4 +185,12 @@ pub struct OprfPeerConfig {
     /// The max depth of the merkle tree
     #[clap(long, env = "OPRF_SERVICE_MAX_MERKLE_DEPTH", default_value = "30")]
     pub max_merkle_depth: u64,
+
+    /// The location of the zkey for the key-gen proof in round 2 of KeyGen
+    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_ZKEY")]
+    pub key_gen_zkey_path: PathBuf,
+
+    /// The location of the graph binary for the key-gen witness extension
+    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_GRAPH")]
+    pub key_gen_witness_graph_path: PathBuf,
 }

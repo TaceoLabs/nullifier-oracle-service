@@ -1,8 +1,10 @@
-use std::{collections::HashSet, path::PathBuf, process::Command, sync::Arc, time::Duration};
+use std::{
+    collections::HashSet, path::PathBuf, process::Command, str::FromStr, sync::Arc, time::Duration,
+};
 
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, U256, address},
+    primitives::{Address, U256},
     providers::{DynProvider, Provider as _, ProviderBuilder, WsConnect},
     rpc::types::Filter,
     signers::local::PrivateKeySigner,
@@ -14,6 +16,7 @@ use futures::StreamExt as _;
 use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MAX_DEPTH, MerkleMembership, UserKeyMaterial};
 use oprf_types::crypto::UserPublicKeyBatch;
 use poseidon2::{POSEIDON2_BN254_T2_PARAMS, Poseidon2};
+use regex::Regex;
 use semaphore_rs_hasher::Hasher;
 use semaphore_rs_trees::{Branch, InclusionProof, imt::MerkleTree};
 use serde::{Deserialize, Serialize};
@@ -256,12 +259,10 @@ fn proof_to_vec(proof: &InclusionProof<PoseidonHasher>) -> Vec<U256> {
         .collect()
 }
 
-pub const DEFAULT_ACCOUNT_REGISTRY_ADDRESS: Address =
-    address!("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
 pub const ACCOUNT_REGISTRY_TREE_DEPTH: usize = 10;
 
 // TREE_DEPTH=10 forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) {
+pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) -> Address {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cmd.current_dir(dir.join("../contracts"))
@@ -279,17 +280,22 @@ pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) {
         "forge script failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let re = Regex::new(r"AccountRegistry deployed to:\s*(0x[0-9a-fA-F]{40})").unwrap();
+    let addr = re
+        .captures(&stdout)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_string())
+        .expect("failed to parse deployed address from script output");
+    Address::from_str(&addr).expect("valid addr")
 }
 
 // ACCOUNT_REGISTRY=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 forge script script/CreateAccount.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-pub fn create_account(rpc_url: &str) {
+pub fn create_account(rpc_url: &str, account_registry_contract: &str) {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cmd.current_dir(dir.join("../contracts"))
-        .env(
-            "ACCOUNT_REGISTRY",
-            DEFAULT_ACCOUNT_REGISTRY_ADDRESS.to_string(),
-        )
+        .env("ACCOUNT_REGISTRY", account_registry_contract)
         .arg("script")
         .arg("script/CreateAccount.s.sol")
         .arg("--rpc-url")

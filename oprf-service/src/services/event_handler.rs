@@ -24,7 +24,7 @@ use oprf_types::chain::ChainEventResult;
 use oprf_types::chain::SecretGenFinalizeEvent;
 use oprf_types::chain::SecretGenRound1Event;
 use oprf_types::chain::SecretGenRound2Event;
-use oprf_types::crypto::PartyId;
+use oprf_types::chain::SecretGenRound3Event;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -42,7 +42,6 @@ impl ChainEventHandler {
     /// Spawns a new chain event handler.
     ///
     /// # Arguments
-    /// * `party_id` - The [`PartyId`] of this OPRF peer.
     /// * `watcher` - The [`KeyGenEventListenerService`] used to read and report events from the chain.
     /// * `crypto_device` - The cryptographic device used to process secret shares.
     /// * `cancellation_token` - Token used to signal shutdown of the handler task.
@@ -50,13 +49,11 @@ impl ChainEventHandler {
     /// # Returns
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
     pub(crate) fn spawn(
-        party_id: PartyId,
         watcher: KeyGenEventListenerService,
         crypto_device: Arc<CryptoDevice>,
         cancellation_token: CancellationToken,
     ) -> ChainEventHandler {
-        let dlog_secret_gen_service =
-            DLogSecretGenService::init(party_id, Arc::clone(&crypto_device));
+        let dlog_secret_gen_service = DLogSecretGenService::init(Arc::clone(&crypto_device));
 
         Self(tokio::task::spawn(async move {
             match run(watcher, dlog_secret_gen_service, cancellation_token.clone()).await {
@@ -133,29 +130,39 @@ pub(crate) async fn handle_chain_event(
     event: ChainEvent,
 ) -> eyre::Result<ChainEventResult> {
     match event {
-        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, degree }) => {
+        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => {
             tokio::task::block_in_place(|| {
                 Ok(ChainEventResult::SecretGenRound1(
-                    secret_gen.round1(rp_id, degree),
+                    secret_gen.round1(rp_id, threshold),
                 ))
             })
         }
-        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, keys }) => {
+        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id }) => {
             tokio::task::block_in_place(|| {
                 Ok(ChainEventResult::SecretGenRound2(
-                    secret_gen.round2(rp_id, keys),
+                    secret_gen.round2(rp_id).context("while doing round2")?,
+                ))
+            })
+        }
+        ChainEvent::SecretGenRound3(SecretGenRound3Event { rp_id, ciphers }) => {
+            tokio::task::block_in_place(|| {
+                Ok(ChainEventResult::SecretGenRound3(
+                    secret_gen
+                        .round3(rp_id, ciphers)
+                        .context("while doing round3")?,
                 ))
             })
         }
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
             rp_id,
             rp_public_key,
-            commitments,
-            ciphers,
-        }) => Ok(ChainEventResult::SecretGenFinalize(
+            rp_nullifier_key,
+        }) => {
             secret_gen
-                .finalize(rp_id, rp_public_key, commitments, ciphers)
-                .await,
-        )),
+                .finalize(rp_id, rp_public_key, rp_nullifier_key)
+                .await
+                .context("while finalizing secret-gen")?;
+            Ok(ChainEventResult::NothingToReport)
+        }
     }
 }

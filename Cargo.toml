@@ -42,7 +42,6 @@ aws-config = "1"
 aws-sdk-secretsmanager = "1"
 axum = "0.8"
 axum-test = "18"
-bincode = "2"
 blake3 = "1"
 circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
 clap = "4"
@@ -70,6 +69,7 @@ parking_lot = "0.12"
 poseidon2 = { path = "poseidon2" }
 rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
+regex = "1.12.2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rustls = "0.23"
 secrecy = "0.10"
@@ -83,7 +83,7 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
-witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", branch = "dev" }
+witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", rev = "c8ce390" }
 zeroize = "1"
 
 [profile.profiling]

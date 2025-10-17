@@ -1,17 +1,33 @@
 use std::{path::PathBuf, time::Duration};
 
+use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
 
-use crate::{
-    key_gen_sc_mock::DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
-    world_id_protocol_mock::DEFAULT_ACCOUNT_REGISTRY_ADDRESS,
-};
-
 pub mod credentials;
-pub mod key_gen_sc_mock;
+pub mod init_rp_registry;
+pub mod rp_registry_scripts;
 pub mod world_id_protocol_mock;
 
-async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &str) -> String {
+/// anvil wallet 0
+pub const TACEO_ADMIN_PRIVATE_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+/// anvil wallet 0
+pub const TACEO_ADMIN_ADDRESS: Address = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+
+/// anvil wallet 7
+pub const OPRF_PEER_ADDRESS_0: Address = address!("0x14dC79964da2C08b23698B3D3cc7Ca32193d9955");
+/// anvil wallet 8
+pub const OPRF_PEER_ADDRESS_1: Address = address!("0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f");
+/// anvil wallet 9
+pub const OPRF_PEER_ADDRESS_2: Address = address!("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720");
+
+async fn start_service(
+    id: usize,
+    chain_ws_rpc_url: &str,
+    wallet_private_key: &str,
+    key_gen_contract: Address,
+    account_registry_contract: Address,
+) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
     let config = OprfPeerConfig {
@@ -30,10 +46,12 @@ async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &s
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
         max_merkle_depth: 30,
-        key_gen_contract: DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
-        account_registry_contract: DEFAULT_ACCOUNT_REGISTRY_ADDRESS,
+        key_gen_contract,
+        account_registry_contract,
         wallet_private_key: wallet_private_key.into(),
         chain_ws_rpc_url: chain_ws_rpc_url.to_string(),
+        key_gen_witness_graph_path: dir.join("../keygen_graph.bin"),
+        key_gen_zkey_path: dir.join("../keygen_13.zkey"),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
@@ -53,24 +71,34 @@ async fn start_service(id: usize, chain_ws_rpc_url: &str, wallet_private_key: &s
     url
 }
 
-pub async fn start_services(chain_ws_rpc_url: &str) -> [String; 3] {
+pub async fn start_services(
+    chain_ws_rpc_url: &str,
+    key_gen_contract: Address,
+    account_registry_contract: Address,
+) -> [String; 3] {
     [
         start_service(
             0,
             chain_ws_rpc_url,
             "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+            key_gen_contract,
+            account_registry_contract,
         )
         .await,
         start_service(
             1,
             chain_ws_rpc_url,
             "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+            key_gen_contract,
+            account_registry_contract,
         )
         .await,
         start_service(
             2,
             chain_ws_rpc_url,
             "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+            key_gen_contract,
+            account_registry_contract,
         )
         .await,
     ]

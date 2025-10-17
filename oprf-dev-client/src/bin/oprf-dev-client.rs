@@ -1,14 +1,13 @@
 use std::{
     path::PathBuf,
-    str::FromStr,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
 use alloy::{
-    network::EthereumWallet,
     primitives::Address,
-    signers::{k256, local::PrivateKeySigner},
+    providers::{ProviderBuilder, WsConnect},
+    signers::k256::{self, ecdsa::signature::Signer as _},
 };
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::Parser;
@@ -17,11 +16,9 @@ use oprf_client::{
     MerkleMembership, NullifierArgs, OprfQuery, UserKeyMaterial, groth16::Groth16,
     zk::Groth16Material,
 };
+use oprf_service::rp_registry::{KeyGen, Types};
 use oprf_test::world_id_protocol_mock::{self};
-use oprf_test::{
-    key_gen_sc_mock::{DEFAULT_KEY_GEN_CONTRACT_ADDRESS, KeyGenProxy},
-    world_id_protocol_mock::InclusionProofResponse,
-};
+use oprf_test::{rp_registry_scripts, world_id_protocol_mock::InclusionProofResponse};
 use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
 use parking_lot::Mutex;
 use rand::SeedableRng;
@@ -49,10 +46,18 @@ pub struct OprfDevClientConfig {
     /// The Address of the KeyGen contract.
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_KEY_GEN_ADDRESS",
-        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+        env = "OPRF_DEV_CLIENT_KEY_GEN_CONTRACT",
+        default_value = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
     )]
     pub key_gen_contract: Address,
+
+    /// The Address of the KeyGen contract.
+    #[clap(
+        long,
+        env = "OPRF_DEV_CLIENT_ACCOUNT_REGISTRY_CONTRACT",
+        default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    )]
+    pub account_registry_contract: Address,
 
     /// The RPC for chain communication
     #[clap(
@@ -62,9 +67,15 @@ pub struct OprfDevClientConfig {
     )]
     pub chain_ws_rpc_url: String,
 
-    /// Wallet private key
-    #[clap(long, env = "OPRF_DEV_CLIENT_WALLET_PRIVATE_KEY")]
-    pub wallet_private_key: SecretString,
+    /// The PRIVATE_KEY of the TACEO admin wallet - used to register the OPRF peers
+    ///
+    /// Default is anvil wallet 0
+    #[clap(
+        long,
+        env = "TACEO_ADMIN_PRIVATE_KEY",
+        default_value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    )]
+    pub taceo_private_key: SecretString,
 
     /// The interval in which nullifiers are generated
     #[clap(
@@ -199,27 +210,22 @@ async fn main() -> eyre::Result<()> {
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
 
-    tracing::info!("connecting to ETH wallet...");
-    let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
-        .context("while reading wallet private key")?;
-    let wallet = EthereumWallet::from(private_key);
-
-    tracing::info!("init key gen..");
-    let mut key_gen_contract = KeyGenProxy::connect(
+    let rp_signing_key = k256::SecretKey::random(&mut rand::thread_rng());
+    let rp_pk = Types::EcDsaPubkeyCompressed::try_from(rp_signing_key.public_key())?;
+    let rp_signing_key = k256::ecdsa::SigningKey::from(rp_signing_key);
+    let rp_id = rp_registry_scripts::init_key_gen(
         &config.chain_ws_rpc_url,
-        DEFAULT_KEY_GEN_CONTRACT_ADDRESS,
-        wallet,
-    )
-    .await
-    .context("while connecting to KeyGen Proxy")?;
-    let (rp_id, rp_nullifier_key) = key_gen_contract
-        .init_key_gen()
-        .await
-        .context("while creating key-gen")?;
+        config.key_gen_contract,
+        rp_pk,
+        config.taceo_private_key.expose_secret(),
+    )?;
 
     tracing::info!("crating account..");
     let key_material = world_id_protocol_mock::fetch_key_material()?;
-    world_id_protocol_mock::create_account(&config.chain_ws_rpc_url);
+    world_id_protocol_mock::create_account(
+        &config.chain_ws_rpc_url,
+        &config.account_registry_contract.to_string(),
+    );
 
     let merkle_proof = reqwest::get(format!(
         "{}/proof/{}",
@@ -229,6 +235,28 @@ async fn main() -> eyre::Result<()> {
     .json::<InclusionProofResponse>()
     .await?;
     let merkle_membership = MerkleMembership::from(merkle_proof);
+
+    let ws = WsConnect::new(config.chain_ws_rpc_url);
+    let provider = ProviderBuilder::new()
+        .connect_ws(ws)
+        .await
+        .context("while connecting to RPC")?;
+    let contract = KeyGen::new(config.key_gen_contract, provider.clone());
+
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async move {
+        loop {
+            interval.tick().await;
+            let maybe_rp_nullifier_key =
+                contract.getRpNullifierKey(rp_id.into_inner()).call().await;
+            if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
+                return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+            }
+        }
+    })
+    .await
+    .context("could not finish key-gen in 5 seconds")?
+    .context("while polling RP key")?;
 
     let mut nullifier_results = JoinSet::new();
     let durations = Arc::new(Mutex::new(Vec::new()));
@@ -260,9 +288,7 @@ async fn main() -> eyre::Result<()> {
         let mut msg = Vec::new();
         msg.extend(nonce.into_bigint().to_bytes_le());
         msg.extend(current_time_stamp.to_le_bytes());
-        let signature = key_gen_contract
-            .sign(rp_id, &msg)
-            .ok_or_else(|| eyre::eyre!("unknown rp id {rp_id}"))?;
+        let signature = rp_signing_key.sign(&msg);
         nullifier_results.spawn(async move {
             let start = Instant::now();
             run_nullifier(

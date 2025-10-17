@@ -16,8 +16,9 @@ ark-babyjubjub = { workspace = true }
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
+aws-config = { workspace = true, features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
-bincode = { workspace = true, features = ["serde"] }
 circom-types.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eddsa-babyjubjub = { workspace = true }
@@ -25,6 +26,7 @@ eyre.workspace = true
 futures.workspace = true
 groth16 = { workspace = true }
 hex = {version = "0.4" }
+itertools.workspace = true
 nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
 oprf-core = { workspace = true }
@@ -32,9 +34,12 @@ oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 poseidon2 = { workspace = true }
 rand.workspace = true
+rand_chacha.workspace = true
+regex.workspace = true
 reqwest = { workspace = true }
 semaphore-rs-hasher = "0.5.0"
 semaphore-rs-trees = "0.5.0"
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
