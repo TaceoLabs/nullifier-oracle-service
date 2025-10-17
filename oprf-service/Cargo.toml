@@ -27,13 +27,15 @@ async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
-bincode = { workspace = true, features = ["serde"] }
+circom-types.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
+groth16 = { workspace = true }
 http = { workspace = true }
 humantime = { workspace = true }
+itertools = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 metrics = { workspace = true }
 nodes-telemetry = { workspace = true }
@@ -41,7 +43,6 @@ oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
-reqwest = { workspace = true }
 rustls = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -59,6 +60,7 @@ tokio-util = { workspace = true }
 tower-http = { workspace = true, features = ["set-header", "cors", "trace"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
+witness = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]

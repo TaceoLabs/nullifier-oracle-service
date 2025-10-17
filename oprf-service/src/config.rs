@@ -115,7 +115,7 @@ pub struct OprfPeerConfig {
     #[clap(
         long,
         env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
-        default_value = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+        default_value = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
     )]
     pub key_gen_contract: Address,
 
@@ -147,14 +147,14 @@ pub struct OprfPeerConfig {
     )]
     pub private_key_secret_id: String,
 
-    /// Suffix for secret name to store DLogShares in secret-manager.
-    /// The implementation will call `format!("{dlog_share_secret_id_suffix}/{rp_id}")`
+    /// Suffix for secret name to store rp secrets in secret-manager.
+    /// The implementation will call `format!("{rp_secret_id_suffix}/{rp_id}")`
     #[clap(
         long,
-        env = "OPRF_SERVICE_DLOG_SHARE_SECRET_ID_SUFFIX",
-        default_value = "oprf/share/"
+        env = "OPRF_SERVICE_RP_SECRET_ID_SUFFIX",
+        default_value = "oprf/rp"
     )]
-    pub dlog_share_secret_id_suffix: String,
+    pub rp_secret_id_suffix: String,
 
     /// The maximum size of the merkle store.
     ///
@@ -185,4 +185,12 @@ pub struct OprfPeerConfig {
     /// The max depth of the merkle tree
     #[clap(long, env = "OPRF_SERVICE_MAX_MERKLE_DEPTH", default_value = "30")]
     pub max_merkle_depth: u64,
+
+    /// The location of the zkey for the key-gen proof in round 2 of KeyGen
+    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_ZKEY")]
+    pub key_gen_zkey_path: PathBuf,
+
+    /// The location of the graph binary for the key-gen witness extension
+    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_GRAPH")]
+    pub key_gen_witness_graph_path: PathBuf,
 }

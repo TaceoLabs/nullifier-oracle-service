@@ -23,6 +23,10 @@ impl KeyGenPoly {
     const T1_DS: u128 = 0x80000002000000014142;
     const COEFF_DS: &[u8] = b"KeyGenPolyCoeff";
 
+    pub fn coeffs(&self) -> &[ScalarField] {
+        &self.poly
+    }
+
     // Returns the used domain separator as a field element for the encryption
     fn get_t1_ds() -> BaseField {
         BaseField::from(Self::T1_DS)

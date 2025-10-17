@@ -296,12 +296,13 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         rng,
     )?;
 
+    let client = reqwest::Client::new();
     let req = signed_query.get_request();
-    let sessions = nonblocking::init_sessions(services, threshold, req).await?;
+    let sessions = nonblocking::init_sessions(&client, services, threshold, req).await?;
 
     let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
     let req = challenges.get_request();
-    let responses = nonblocking::finish_sessions(sessions, req).await?;
+    let responses = nonblocking::finish_sessions(&client, sessions, req).await?;
     verify_challenges(challenges, responses, signal_hash, rng)
 }
 
