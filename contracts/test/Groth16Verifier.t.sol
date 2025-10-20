@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {Groth16Verifier} from "../src/Groth16Verifier.sol";
+import {Groth16Verifier} from "../src/Groth16VerifierKeyGen13.sol";
 
 contract KeyGen31Groth16Verifier is Test {
     Groth16Verifier public verifier;

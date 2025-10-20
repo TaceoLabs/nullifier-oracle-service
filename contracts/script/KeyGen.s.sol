@@ -13,12 +13,15 @@ contract KeyGenScript is Script {
         vm.startBroadcast();
 
         address accumulatorAddress = vm.envAddress("ACCUMULATOR_ADDRESS");
-        address verifierAddress = vm.envAddress("VERIFIER_ADDRESS");
+        address keyGenVerifierAddress = vm.envAddress("VERIFIER_ADDRESS_KEYGEN");
+        address nullifierVerifierAddress = vm.envAddress("VERIFIER_ADDRESS_NULLIFIER");
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
         uint256 threshold = vm.envUint("THRESHOLD");
         uint256 numPeers = vm.envUint("NUM_PEERS");
 
-        gen = new KeyGen(taceoAdminAddress, verifierAddress, accumulatorAddress, threshold, numPeers);
+        gen = new KeyGen(
+            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, threshold, numPeers
+        );
 
         vm.stopBroadcast();
         console.log("KeyGen deployed to:", address(gen));
