@@ -39,9 +39,8 @@ impl AlloyKeyGenWatcher {
 #[async_trait]
 impl KeyGenEventListener for AlloyKeyGenWatcher {
     async fn subscribe(&self) -> eyre::Result<mpsc::Receiver<ChainEvent>> {
-        // Mailbox size of 1 is enough, because we only have on consumer
-        // and it will handle events sequentially.
-        let (tx, rx) = mpsc::channel(1);
+        // mailbox size of 8 is fairly arbitrary
+        let (tx, rx) = mpsc::channel(8);
         let provider = self.provider.clone();
         let address = self.contract_address;
         tokio::spawn(async move {

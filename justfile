@@ -2,6 +2,7 @@ lint:
     cargo fmt --all -- --check
     cargo clippy --workspace --tests --examples --benches --bins -q -- -D warnings
     RUSTDOCFLAGS='-D warnings' cargo doc --workspace -q --no-deps --document-private-items
+    cd contracts && forge fmt
 
 dev-up:
     cd oprf-service/deploy && docker-compose up -d
@@ -18,7 +19,13 @@ integration-tests:
 all-tests:
     cargo test --release --all-features
 
-check-pr: lint all-tests
+circom-tests:
+    cd circom/tests && npm ci && npm test
+    
+contract-tests:
+    cd contracts && forge test
+
+check-pr: lint all-tests circom-tests contract-tests
 
 bench:
     cargo bench --all-features

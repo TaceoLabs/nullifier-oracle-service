@@ -109,6 +109,8 @@ contract KeyGen {
         // Check that this rpId was not used already
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (st.exists) revert AlreadySubmitted();
+        // We store the ecdsa key in compressed form - therefore we need to enforce
+        // that the parity bit is set to 2 or 3 (as produced by to_sec1_bytes in rust)
         if (ecdsaPubKey.yParity != 2 && ecdsaPubKey.yParity != 3) revert BadContribution();
 
         st.ecdsaPubKey = ecdsaPubKey;
@@ -143,7 +145,6 @@ contract KeyGen {
 
         // check that we don't have double submission
         if (!_isEmpty(st.round1[partyId].commShare)) revert AlreadySubmitted();
-        if (st.round1[partyId].commCoeffs != 0) revert AlreadySubmitted();
 
         // Add BabyJubJub Elements together and keep running total
         _addToAggregate(st, data.commShare.x, data.commShare.y);
@@ -271,13 +272,13 @@ contract KeyGen {
 
     function getRpNullifierKey(uint128 rpId) external view isReady returns (Types.BabyJubJubElement memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
-        if (material.nullifierKey.x == 0 && material.nullifierKey.y == 0) revert UnknownId(rpId);
+        if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId].nullifierKey;
     }
 
     function getRpMaterial(uint128 rpId) external view isReady returns (Types.RpMaterial memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
-        if (material.nullifierKey.x == 0 && material.nullifierKey.y == 0) revert UnknownId(rpId);
+        if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId];
     }
 

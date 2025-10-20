@@ -153,18 +153,16 @@ impl CryptoDevice {
             ark_babyjubjub::EdwardsAffine::new(public_inputs[2], public_inputs[3]);
 
         // parse commitment to coefficients
-        let comm_coeffs_computed = ark_babyjubjub::Fq::from(public_inputs[4]);
+        let comm_coeffs_computed = public_inputs[4];
 
-        let ciphertexts = public_inputs[5..=7]
-            .iter()
-            .map(|x| ark_babyjubjub::Fq::from(*x));
+        let ciphertexts = public_inputs[5..=7].iter();
 
         let comm_plains = public_inputs[8..=13]
             .chunks_exact(2)
             .map(|coords| ark_babyjubjub::EdwardsAffine::new(coords[0], coords[1]));
 
         let rp_ciphertexts = izip!(ciphertexts, comm_plains, nonces)
-            .map(|(cipher, comm, nonce)| RpSecretGenCiphertext::new(cipher, comm, nonce))
+            .map(|(cipher, comm, nonce)| RpSecretGenCiphertext::new(*cipher, comm, nonce))
             .collect_vec();
 
         if pk_computed != self.private_key.get_public_key().inner() {
