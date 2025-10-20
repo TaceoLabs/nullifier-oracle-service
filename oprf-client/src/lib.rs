@@ -261,6 +261,7 @@ impl SignedOprfQuery {
 /// 1. [`Groth16Proof`] – the generated nullifier proof,
 /// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
 /// 3. `ark_babyjubjub::Fq` – the computed nullifier.
+/// 3. `ark_babyjubjub::Fq` – the computed identity commitment.
 ///
 /// # Errors
 ///
@@ -274,7 +275,12 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     threshold: usize,
     args: NullifierArgs,
     rng: &mut R,
-) -> Result<(Groth16Proof, Vec<ark_babyjubjub::Fq>, ark_babyjubjub::Fq)> {
+) -> Result<(
+    Groth16Proof,
+    Vec<ark_babyjubjub::Fq>,
+    ark_babyjubjub::Fq,
+    ark_babyjubjub::Fq,
+)> {
     let NullifierArgs {
         credential_signature,
         merkle_membership,
@@ -506,6 +512,7 @@ pub fn compute_challenges(
 /// - `proof`: The Groth16 nullifier proof.
 /// - `public_inputs`: Public inputs used in the proof verification.
 /// - `nullifier`: The computed nullifier.
+/// - `id_commitment`: The computed identity_commitment.
 ///
 /// # Errors
 ///
@@ -516,7 +523,12 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     responses: Vec<ChallengeResponse>,
     signal_hash: ark_babyjubjub::Fq,
     rng: &mut R,
-) -> Result<(Groth16Proof, Vec<ark_babyjubjub::Fq>, ark_babyjubjub::Fq)> {
+) -> Result<(
+    Groth16Proof,
+    Vec<ark_babyjubjub::Fq>,
+    ark_babyjubjub::Fq,
+    ark_babyjubjub::Fq,
+)> {
     let proofs = responses
         .into_iter()
         .map(|res| res.proof_share)
@@ -552,5 +564,10 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     let (proof, public) = challenges
         .groth16_material
         .generate_nullifier_proof(&nullifier_input, rng)?;
-    Ok((proof, public, nullifier_input.nullifier))
+    Ok((
+        proof,
+        public,
+        nullifier_input.nullifier,
+        nullifier_input.id_commitment,
+    ))
 }

@@ -182,7 +182,7 @@ async fn run_nullifier(
     )?;
     let nullifier_vk = args.groth16_material.nullifier_vk();
 
-    let (proof, public, _nullifier) =
+    let (proof, public, _nullifier, _id_commitment) =
         oprf_client::nullifier(services, threshold, args, &mut rng).await?;
 
     Groth16::verify(&nullifier_vk, &proof.into(), &public).expect("verifies");

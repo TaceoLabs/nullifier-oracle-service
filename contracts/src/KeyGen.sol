@@ -7,7 +7,7 @@ import {CredentialSchemaIssuerRegistry} from "world-id-protocol/src/CredentialSc
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
-uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 32;
+uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 10;
 
 interface IGroth16VerifierKeyGen13 {
     function verifyProof(
@@ -82,6 +82,7 @@ contract KeyGen {
     error UnexpectedAmountPeers(uint256 expectedParties);
     error BadContribution();
     error InvalidProof();
+    error OutdatedNullifier();
     error UnknownId(uint128 id);
 
     constructor(
@@ -161,47 +162,47 @@ contract KeyGen {
         // do not allow proofs from the future
         if (proofTimestamp > block.timestamp) {
             // TODO better error types
-            return false;
+            revert OutdatedNullifier();
         }
         // do not allow proofs older than 5 hours
         if (proofTimestamp + 5 hours < block.timestamp) {
             // TODO better error types
-            return false;
+            revert OutdatedNullifier();
         }
 
         // check if we have a valid rp id and get the rp material if so
         Types.BabyJubJubElement memory rpKey = getRpNullifierKey(rpId);
 
         // for this specific proof, we have 13 public signals
-        // [0]: credential public key x coordinate
-        // [1]: credential public key y coordinate
-        // [2]: current time stamp
-        // [3]: Authenticator merkle tree root hash
-        // [4]: Current depth of the Authenticator merkle tree
-        // [5]: RP ID
-        // [6]: Nullifier action
-        // [7]: RP OPRF public key x coordinate
-        // [8]: RP OPRF public key y coordinate
-        // [9]: signal hash
-        // [10]: nonce for the RP signature
-        // [11]: identity commitment
-        // [12]: nullifier
+        // [0]: identity commitment
+        // [1]: nullifier
+        // [2]: credential public key x coordinate
+        // [3]: credential public key y coordinate
+        // [4]: current time stamp
+        // [5]: Authenticator merkle tree root hash
+        // [6]: Current depth of the Authenticator merkle tree
+        // [7]: RP ID
+        // [8]: Nullifier action
+        // [9]: RP OPRF public key x coordinate
+        // [10]: RP OPRF public key y coordinate
+        // [11]: signal hash
+        // [12]: nonce for the RP signature
         // use calldata since we set it once
         uint256[13] memory pubSignals;
 
-        pubSignals[0] = credentialPublicKey.x;
-        pubSignals[1] = credentialPublicKey.y;
-        pubSignals[2] = proofTimestamp;
-        pubSignals[3] = authenticatorMerkleRoot;
-        pubSignals[4] = AUTHENTICATOR_MERKLE_TREE_DEPTH;
-        pubSignals[5] = uint128(rpId);
-        pubSignals[6] = nullifierAction;
-        pubSignals[7] = rpKey.x;
-        pubSignals[8] = rpKey.y;
-        pubSignals[9] = signalHash;
-        pubSignals[10] = nonce;
-        pubSignals[11] = identityCommitment;
-        pubSignals[12] = nullifier;
+        pubSignals[0] = identityCommitment;
+        pubSignals[1] = nullifier;
+        pubSignals[2] = credentialPublicKey.x;
+        pubSignals[3] = credentialPublicKey.y;
+        pubSignals[4] = proofTimestamp;
+        pubSignals[5] = authenticatorMerkleRoot;
+        pubSignals[6] = AUTHENTICATOR_MERKLE_TREE_DEPTH;
+        pubSignals[7] = uint128(rpId);
+        pubSignals[8] = nullifierAction;
+        pubSignals[9] = rpKey.x;
+        pubSignals[10] = rpKey.y;
+        pubSignals[11] = signalHash;
+        pubSignals[12] = nonce;
 
         return nullifierVerifier.verifyProof(proof.pA, proof.pB, proof.pC, pubSignals);
     }
