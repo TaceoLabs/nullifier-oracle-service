@@ -8,7 +8,12 @@
         "internalType": "address"
       },
       {
-        "name": "_verifierAddress",
+        "name": "_keyGenVerifierAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_nullifierVerifierAddress",
         "type": "address",
         "internalType": "address"
       },
@@ -102,7 +107,7 @@
           {
             "name": "proof",
             "type": "tuple",
-            "internalType": "struct Types.Groth16ProofKeyGen13",
+            "internalType": "struct Types.Groth16Proof",
             "components": [
               {
                 "name": "pA",
@@ -391,6 +396,32 @@
   },
   {
     "type": "function",
+    "name": "keyGenVerifier",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IGroth16VerifierKeyGen13"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nullifierVerifier",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IGroth16VerifierNullifier"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "numPeers",
     "inputs": [],
     "outputs": [
@@ -484,13 +515,93 @@
   },
   {
     "type": "function",
-    "name": "verifier",
-    "inputs": [],
+    "name": "verifyNullifierProof",
+    "inputs": [
+      {
+        "name": "nullifier",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "nullifierAction",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rpId",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "identityCommitment",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "nonce",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "signalHash",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "authenticatorMerkleRoot",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proofTimestamp",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "credentialPublicKey",
+        "type": "tuple",
+        "internalType": "struct CredentialSchemaIssuerRegistry.Pubkey",
+        "components": [
+          {
+            "name": "x",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "y",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      },
+      {
+        "name": "proof",
+        "type": "tuple",
+        "internalType": "struct Types.Groth16Proof",
+        "components": [
+          {
+            "name": "pA",
+            "type": "uint256[2]",
+            "internalType": "uint256[2]"
+          },
+          {
+            "name": "pB",
+            "type": "uint256[2][2]",
+            "internalType": "uint256[2][2]"
+          },
+          {
+            "name": "pC",
+            "type": "uint256[2]",
+            "internalType": "uint256[2]"
+          }
+        ]
+      }
+    ],
     "outputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "contract IGroth16VerifierKeyGen13"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
