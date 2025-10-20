@@ -17,7 +17,7 @@ use oprf_types::crypto::{
 
 // Codegen from ABI file to interact with the contract.
 sol!(
-    #[allow(missing_docs)]
+    #[allow(missing_docs, clippy::too_many_arguments)]
     #[sol(rpc)]
     KeyGen,
     "../contracts/KeyGen.json"
@@ -62,7 +62,7 @@ impl From<RpSecretGenCommitment> for Types::Round1Contribution {
     }
 }
 
-impl From<Groth16Proof> for Types::Groth16ProofKeyGen13 {
+impl From<Groth16Proof> for Types::Groth16Proof {
     fn from(value: Groth16Proof) -> Self {
         // TODO remove unwraps
         Self {

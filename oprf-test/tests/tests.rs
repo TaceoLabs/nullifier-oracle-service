@@ -127,7 +127,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
 
-    println!("Running OPRF client flow...");
+    println!("Running KeyGen flow...");
     let time = Instant::now();
 
     let ws = WsConnect::new(anvil.ws_endpoint()); // rpc-url of anvil
@@ -151,6 +151,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     .context("could not finish key-gen in 5 seconds")?
     .context("while polling RP key")?;
 
+    println!("Running OPRF client flow...");
     let args = NullifierArgs {
         credential_signature,
         merkle_membership,

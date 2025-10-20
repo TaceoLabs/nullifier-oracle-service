@@ -28,6 +28,7 @@ sol! {
         uint256 indexed accountIndex,
         address indexed recoveryAddress,
         address[] authenticatorAddresses,
+        uint256[] authenticatorPubkeys,
         uint256 offchainSignerCommitment
     );
 }

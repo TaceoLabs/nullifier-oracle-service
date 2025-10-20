@@ -89,6 +89,9 @@ run-setup:
 run-dev-client *args:
     cargo run --release --bin oprf-dev-client -- {{args}}
 
+export-contract-abi:
+    cd contracts && forge build --silent && jq '.abi' out/KeyGen.sol/KeyGen.json > KeyGen.json
+
 build-push-docker-image-oprf-service-amd TAG:
   docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{TAG}}-amd64 -f build/Dockerfile.oprf-service .
 

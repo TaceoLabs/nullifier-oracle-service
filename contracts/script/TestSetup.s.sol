@@ -17,13 +17,13 @@ contract KeyGenScript is Script {
 
     function deployGroth16VerifierKeyGen() public returns (address) {
         Groth16VerifierKeyGen13 verifier = new Groth16VerifierKeyGen13();
-        console.log("Groth16Verifier for KeyGen deployed to:", address(verifier));
+        console.log("Groth16VerifierKeyGen13 deployed to:", address(verifier));
         return address(verifier);
     }
 
     function deployGroth16VerifierNullifier() public returns (address) {
         Groth16VerifierNullifier verifier = new Groth16VerifierNullifier();
-        console.log("Groth16Verifier for Nullifier deployed to:", address(verifier));
+        console.log("Groth16VerifierNullifier deployed to:", address(verifier));
         return address(verifier);
     }
 
