@@ -34,6 +34,7 @@ sol! {
         function createAccount(
             address recoveryAddress,
             address[] calldata authenticatorAddresses,
+            uint256[] calldata authenticatorPubkeys,
             uint256 offchainSignerCommitment
         ) external;
     }
@@ -455,6 +456,7 @@ impl Authenticator {
             .createAccount(
                 address!("0x000000000000000000000000000000000000ABCD"),
                 vec![self.signer.onchain_signer_address()],
+                vec![ark_babyjubjub::Fq::from(123456789).into()],
                 leaf_hash.into(),
             )
             .send()
