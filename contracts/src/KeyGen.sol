@@ -161,12 +161,10 @@ contract KeyGen {
     ) external view isReady returns (bool) {
         // do not allow proofs from the future
         if (proofTimestamp > block.timestamp) {
-            // TODO better error types
             revert OutdatedNullifier();
         }
         // do not allow proofs older than 5 hours
         if (proofTimestamp + 5 hours < block.timestamp) {
-            // TODO better error types
             revert OutdatedNullifier();
         }
 
@@ -197,7 +195,7 @@ contract KeyGen {
         pubSignals[4] = proofTimestamp;
         pubSignals[5] = authenticatorMerkleRoot;
         pubSignals[6] = AUTHENTICATOR_MERKLE_TREE_DEPTH;
-        pubSignals[7] = uint128(rpId);
+        pubSignals[7] = uint256(rpId);
         pubSignals[8] = nullifierAction;
         pubSignals[9] = rpKey.x;
         pubSignals[10] = rpKey.y;

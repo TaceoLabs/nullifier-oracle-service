@@ -261,7 +261,7 @@ impl SignedOprfQuery {
 /// 1. [`Groth16Proof`] – the generated nullifier proof,
 /// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
 /// 3. `ark_babyjubjub::Fq` – the computed nullifier.
-/// 3. `ark_babyjubjub::Fq` – the computed identity commitment.
+/// 4. `ark_babyjubjub::Fq` – the computed identity commitment.
 ///
 /// # Errors
 ///
