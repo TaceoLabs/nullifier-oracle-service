@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::LazyLock, time::Duration};
 
 use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
@@ -21,6 +21,15 @@ pub const OPRF_PEER_ADDRESS_1: Address = address!("0x23618e81E3f5cdF7f54C3d65f7F
 /// anvil wallet 9
 pub const OPRF_PEER_ADDRESS_2: Address = address!("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720");
 
+// FIXME
+// once we dont need to sign nonces ourself, remove this even in tests
+// this signing key is constant and used by all rps so that we do not need to run init_key_gen every time
+// and can instead reuse the key_material in the contract/secret_manager
+//
+// THIS IS NOT INTENDED FOR REAL USE IN PROD
+pub static MOCK_RP_SECRET_KEY: LazyLock<k256::SecretKey> =
+    LazyLock::new(|| k256::SecretKey::from_slice(&[42u8; 24]).unwrap());
+
 async fn start_service(
     id: usize,
     chain_ws_rpc_url: &str,
@@ -41,7 +50,7 @@ async fn start_service(
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
         private_key_secret_id: format!("oprf/sk/n{id}"),
-        dlog_share_secret_id_suffix: format!("oprf/share/n{id}"),
+        rp_secret_id_suffix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),

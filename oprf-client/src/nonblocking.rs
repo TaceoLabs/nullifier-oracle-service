@@ -79,10 +79,10 @@ async fn oprf_challenge(
 ///
 /// Fails fast if any single request errors out.
 pub async fn finish_sessions(
+    client: &reqwest::Client,
     sessions: OprfSessions,
     req: ChallengeRequest,
 ) -> super::Result<Vec<ChallengeResponse>> {
-    let client = reqwest::Client::new();
     futures::future::try_join_all(
         sessions
             .services
@@ -101,12 +101,11 @@ pub async fn finish_sessions(
 ///
 /// Returns an [`OprfSessions`] ready to be finalized with [`finish_sessions`].
 pub async fn init_sessions(
+    client: &reqwest::Client,
     oprf_services: &[String],
     threshold: usize,
     req: OprfRequest,
 ) -> super::Result<OprfSessions> {
-    let client = reqwest::Client::new();
-
     let mut requests = oprf_services
         .iter()
         .map(|service| oprf_request(client.clone(), service.to_owned(), req.to_owned()))

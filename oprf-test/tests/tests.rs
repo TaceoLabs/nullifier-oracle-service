@@ -1,17 +1,21 @@
+use std::str::FromStr as _;
 use std::time::{Duration, SystemTime};
 use std::{path::PathBuf, time::Instant};
 
+use alloy::network::EthereumWallet;
 use alloy::node_bindings::Anvil;
 use alloy::providers::{ProviderBuilder, WsConnect};
 use alloy::signers::k256;
 use alloy::signers::k256::ecdsa::signature::Signer as _;
+use alloy::signers::local::PrivateKeySigner;
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eyre::Context as _;
 use groth16::Groth16;
 use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
 use oprf_service::rp_registry::{KeyGen, Types};
-use oprf_test::{TACEO_ADMIN_PRIVATE_KEY, init_rp_registry};
+use oprf_test::world_id_protocol_mock::Authenticator;
+use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, init_rp_registry};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
@@ -24,6 +28,7 @@ pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
+use rand::Rng;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
@@ -44,7 +49,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("deployed at address: {key_gen_contract}");
 
     println!("Starting AuthTreeIndexer...");
-    let mut auth_tree_indexer = AuthTreeIndexer::init(
+    let auth_tree_indexer = AuthTreeIndexer::init(
         ACCOUNT_REGISTRY_TREE_DEPTH,
         account_registry_contract,
         &anvil.ws_endpoint(),
@@ -59,10 +64,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     )
     .await;
 
-    let rp_signing_key = k256::SecretKey::random(&mut rand::thread_rng());
-    let rp_pk = Types::EcDsaPubkeyCompressed::try_from(rp_signing_key.public_key())?;
-    let rp_signing_key = k256::ecdsa::SigningKey::from(rp_signing_key);
-
+    let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
     let rp_id = rp_registry_scripts::init_key_gen(
         &anvil.ws_endpoint(),
         key_gen_contract,
@@ -72,15 +74,23 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("init key-gen with rp id: {rp_id}");
 
     println!("Creating account...");
-    let key_material = world_id_protocol_mock::fetch_key_material()?;
-    world_id_protocol_mock::create_account(
-        &anvil.endpoint(),
-        &account_registry_contract.to_string(),
-    );
+    let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)
+        .context("while reading wallet private key")?;
+    let wallet = EthereumWallet::from(private_key);
+    let mut authenticator = Authenticator::new(
+        &rng.r#gen::<[u8; 32]>(),
+        &anvil.ws_endpoint(),
+        account_registry_contract,
+        wallet,
+    )
+    .await?;
+    let key_material = authenticator.create_account().await?;
+    let account_index = authenticator.account_index().await?;
 
     println!("Get InclusionProof for account...");
-    let account_index = auth_tree_indexer.account_idx().await?;
-    let merkle_proof = auth_tree_indexer.get_proof(account_index).await?;
+    let merkle_proof = auth_tree_indexer
+        .get_proof(account_index.try_into().unwrap())
+        .await?;
     let merkle_membership = MerkleMembership::from(merkle_proof);
 
     println!("Creating nonce and and sign it...");
@@ -97,7 +107,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let mut msg = Vec::new();
     msg.extend(nonce.into_bigint().to_bytes_le());
     msg.extend(current_time_stamp.to_le_bytes());
-    let signature = rp_signing_key.sign(&msg);
+    let signature = k256::ecdsa::SigningKey::from(MOCK_RP_SECRET_KEY.clone()).sign(&msg);
 
     println!();
     println!("Loading zkeys and matrices...");

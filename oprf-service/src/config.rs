@@ -147,14 +147,14 @@ pub struct OprfPeerConfig {
     )]
     pub private_key_secret_id: String,
 
-    /// Suffix for secret name to store DLogShares in secret-manager.
-    /// The implementation will call `format!("{dlog_share_secret_id_suffix}/{rp_id}")`
+    /// Suffix for secret name to store rp secrets in secret-manager.
+    /// The implementation will call `format!("{rp_secret_id_suffix}/{rp_id}")`
     #[clap(
         long,
-        env = "OPRF_SERVICE_DLOG_SHARE_SECRET_ID_SUFFIX",
-        default_value = "oprf/share/"
+        env = "OPRF_SERVICE_RP_SECRET_ID_SUFFIX",
+        default_value = "oprf/rp"
     )]
-    pub dlog_share_secret_id_suffix: String,
+    pub rp_secret_id_suffix: String,
 
     /// The maximum size of the merkle store.
     ///
