@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /v
 WORKDIR /app
 COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 COPY --from=builder /app/circom/main/OPRFQueryProof.vk.json /app/OPRFQueryProof.vk.json
+COPY ./keygen_13.zkey /app/keygen_13.zkey
+COPY ./keygen_graph.bin /app/keygen_graph.bin
 RUN chown -R 12345:12345 /app
 RUN chmod -R 700 /app
 USER 12345
