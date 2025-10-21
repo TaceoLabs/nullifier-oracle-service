@@ -35,6 +35,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        lfs: true
+
+      - name: lfs 
+        run: git lfs pull
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
