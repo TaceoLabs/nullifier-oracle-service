@@ -86,20 +86,20 @@ pub enum Groth16Error {
 
 /// Core material for generating zero-knowledge proofs.
 ///
-/// Holds the proving keys and constraint matrices for both OPRFQuery and OPRFNullifier
-/// circuits. Provides methods to:
+/// Holds the proving keys, constraint matrices and graphs.
+/// Provides methods to:
 /// - Generate proofs from structured inputs
 /// - Verify proofs internally immediately after generation
 #[derive(Clone)]
 pub struct Groth16Material {
     /// Proving key for the OPRFQuery circuit
-    pub pk: ProvingKey<Bn254>,
+    pub pk: Arc<ProvingKey<Bn254>>,
     /// Constraint matrices for the OPRFQuery circuit
-    pub matrices: ConstraintMatrices<ark_bn254::Fr>,
+    pub matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
     /// The graph for witness extension
     pub graph: Arc<Graph>,
     /// The black-box functions needed for witness extension
-    pub bbfs: HashMap<String, BlackBoxFunction>,
+    pub bbfs: Arc<HashMap<String, BlackBoxFunction>>,
 }
 
 impl Groth16Material {
@@ -142,13 +142,30 @@ impl Groth16Material {
                 ZKey::from_reader(zkey_bytes, CheckElement::No).map_err(ZkError::ZKeyInvalid)?;
             query_zkey.into()
         };
-        let graph = Arc::new(witness::init_graph(graph_bytes).map_err(ZkError::GraphInvalid)?);
+        let graph = witness::init_graph(graph_bytes).map_err(ZkError::GraphInvalid)?;
         Ok(Self {
-            pk,
-            matrices,
-            graph,
-            bbfs: black_box_functions(),
+            pk: Arc::new(pk),
+            matrices: Arc::new(matrices),
+            graph: Arc::new(graph),
+            bbfs: Arc::new(black_box_functions()),
         })
+    }
+
+    /// Builds Groth16 material directly from `.zkey` and graph readers.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ZkError::ZKeyFingerprintMismatch`] if any embedded fingerprint check fails.
+    pub fn from_reader(
+        mut zkey_reader: impl std::io::Read,
+        fingerprint: Option<&'static str>,
+        mut graph_reader: impl std::io::Read,
+    ) -> Result<Self, ZkError> {
+        let mut zkey_bytes = Vec::new();
+        zkey_reader.read_to_end(&mut zkey_bytes)?;
+        let mut graph_bytes = Vec::new();
+        graph_reader.read_to_end(&mut graph_bytes)?;
+        Self::from_bytes(&zkey_bytes, fingerprint, &graph_bytes)
     }
 
     /// Builds Groth16 material from embedded `.zkey` and graph bytes baked into the binary.
