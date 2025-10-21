@@ -272,7 +272,7 @@ pub fn deploy_account_registry(rpc_url: &str) -> Address {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cmd.current_dir(dir.join("../contracts"))
         .arg("script")
-        .arg("script/AccountRegistry.s.sol")
+        .arg("script/test/AccountRegistry.s.sol")
         .arg("--rpc-url")
         .arg(rpc_url)
         .arg("--broadcast")

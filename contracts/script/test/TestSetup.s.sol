@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../src/KeyGen.sol";
-import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
-import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
-import {BabyJubJub} from "../src/BabyJubJub.sol";
-import {Types} from "../src/Types.sol";
+import {KeyGen} from "../../src/KeyGen.sol";
+import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
+import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
+import {BabyJubJub} from "../../src/BabyJubJub.sol";
+import {Types} from "../../src/Types.sol";
 
 contract KeyGenScript is Script {
     using Types for Types.BabyJubJubElement;
@@ -59,7 +59,7 @@ contract KeyGenScript is Script {
 
         Types.BabyJubJubElement memory publicKeyCarol = Types.BabyJubJubElement({x: carolX, y: carolY});
 
-        gen = new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3);
+        gen = new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = aliceAddress;

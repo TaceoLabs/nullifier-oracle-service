@@ -1,7 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, process::Command, str::FromStr as _};
 
 use alloy::primitives::Address;
-use eyre::Context;
 use oprf_service::rp_registry::Types;
 use oprf_types::RpId;
 use regex::Regex;
@@ -21,7 +20,7 @@ pub fn deploy_test_setup(
         .env("THRESHOLD", "2")
         .envs(env)
         .arg("script")
-        .arg("script/TestSetup.s.sol")
+        .arg("script/test/TestSetup.s.sol")
         .arg("--rpc-url")
         .arg(rpc_url)
         .arg("--broadcast")
@@ -53,13 +52,15 @@ pub fn init_key_gen(
     let pk_y_parity = ecdsa_key.yParity.to_string();
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let rp_id = rand::random::<u128>();
     let cmd = cmd
         .current_dir(dir.join("../contracts"))
         .env("KEYGEN_CONTRACT", key_gen_contract.to_string())
+        .env("SESSION_ID", rp_id.to_string())
         .env("ECDSA_X", pk_x)
         .env("ECDSA_Y_PARITY", pk_y_parity)
         .arg("script")
-        .arg("script/InitKeyGen.s.sol")
+        .arg("script/deploy/InitKeyGen.s.sol")
         .arg("--rpc-url")
         .arg(rpc_url)
         .arg("--broadcast")
@@ -71,17 +72,5 @@ pub fn init_key_gen(
         "forge script failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let re = Regex::new(r"Initialized new key gen session with ID:\s(\d+)")?;
-
-    let rp_id = re
-        .captures(&stdout)
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string())
-        .expect("failed to parse rp id from script output");
-    Ok(RpId::new(
-        rp_id
-            .parse()
-            .context("while parsing RpId from InitKeyGen script")?,
-    ))
+    Ok(RpId::new(rp_id))
 }

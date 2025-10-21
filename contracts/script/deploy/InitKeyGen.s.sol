@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../src/KeyGen.sol";
-import {Types} from "../src/Types.sol";
+import {KeyGen} from "../../src/KeyGen.sol";
+import {Types} from "../../src/Types.sol";
 
 contract InitKeyGenScript is Script {
     using Types for Types.EcDsaPubkeyCompressed;
@@ -15,11 +15,7 @@ contract InitKeyGenScript is Script {
     }
 
     function run() external {
-        // --- Replace with your deployed contract address ---
-
-        // Example: new session ID and ECDSA public key
-        uint128 sessionId = uint128(uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender))));
-
+        uint128 sessionId = uint128(vm.envUint("SESSION_ID"));
         uint256 ecdsaKeyX = vm.envUint("ECDSA_X");
         uint256 ecdsaKeyYParity = vm.envUint("ECDSA_Y_PARITY");
 

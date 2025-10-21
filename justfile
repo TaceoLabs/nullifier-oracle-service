@@ -1,38 +1,58 @@
+[private]
+default:
+    @just --justfile {{justfile()}} --list --list-heading $'Project commands:\n'
+
+
+[group: 'build']
+dev-up:
+    cd oprf-service/deploy && docker-compose up -d
+
+[group: 'build']
+dev-down:
+    cd oprf-service/deploy && docker-compose down
+
+[group: 'build']
+export-contract-abi:
+    cd contracts && forge build --silent && jq '.abi' out/KeyGen.sol/KeyGen.json > KeyGen.json
+
+[group: 'test']
+unit-tests:
+    cargo test --release --all-features --lib
+
+[group: 'test']
+integration-tests:
+    cargo test --release --package oprf-test
+
+[group: 'test']
+all-rust-tests:
+    cargo test --release --all-features
+
+[group: 'test']
+circom-tests:
+    cd circom/tests && npm ci && npm test
+    
+[group: 'test']
+contract-tests:
+    cd contracts && forge test
+
+[group: 'test']
+all-tests: check-pr
+
+[group: 'ci']
+check-pr: lint all-rust-tests circom-tests contract-tests
+
+[group: 'ci']
 lint:
     cargo fmt --all -- --check
     cargo clippy --workspace --tests --examples --benches --bins -q -- -D warnings
     RUSTDOCFLAGS='-D warnings' cargo doc --workspace -q --no-deps --document-private-items
     cd contracts && forge fmt
 
-dev-up:
-    cd oprf-service/deploy && docker-compose up -d
-
-dev-down:
-    cd oprf-service/deploy && docker-compose down
-
-unit-tests:
-    cargo test --release --all-features --lib
-
-integration-tests:
-    cargo test --release --package oprf-test
-
-all-tests:
-    cargo test --release --all-features
-
-circom-tests:
-    cd circom/tests && npm ci && npm test
-    
-contract-tests:
-    cd contracts && forge test
-
-check-pr: lint all-tests circom-tests contract-tests
-
-bench:
-    cargo bench --all-features
-
+[private]
 run-account-registry:
-    cd contracts && TREE_DEPTH=10 forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    cd contracts && TREE_DEPTH=10 forge script script/test/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
+[private]
 run-auth-tree-indexer *args:
     #!/usr/bin/env bash
     cargo build --workspace --release
@@ -42,10 +62,12 @@ run-auth-tree-indexer *args:
     trap "kill $auth_tree_indexer" SIGINT SIGTERM
     wait $auth_tree_indexer
 
-init-rp-registry:
+[private]
+run-rp-registry:
     cargo build --workspace --release
     ./target/release/init-rp-registry-contract --overwrite-old-keys  
 
+[group: 'local-setup']
 run-services:
     #!/usr/bin/env bash
     mkdir -p logs
@@ -65,6 +87,7 @@ run-services:
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
     wait $pid0 $pid1 $pid2
 
+[group: 'local-setup']
 run-setup:
     #!/usr/bin/env bash
     mkdir -p logs
@@ -75,7 +98,7 @@ run-setup:
     echo "starting AccountRegistry contract..."
     just run-account-registry
     echo "starting RpRegistry contract.."
-    just init-rp-registry
+    just run-rp-registry
     echo "starting AuthTreeIndexer service..."
     just run-auth-tree-indexer &
     sleep 2
@@ -86,15 +109,53 @@ run-setup:
     trap "kill $anvil_pid" SIGINT SIGTERM
     wait $anvil_pid
 
+[group: 'dev-client']
 run-dev-client *args:
     cargo build --workspace --release
     ./target/release/oprf-dev-client {{args}}
 
-export-contract-abi:
-    cd contracts && forge build --silent && jq '.abi' out/KeyGen.sol/KeyGen.json > KeyGen.json
+[group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry-with-deps-dry-run *args: 
+    forge script RpRegistryWithDeps.s.sol -vvvvv *args
 
+[group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry-with-deps *args: 
+    forge script RpRegistryWithDeps.s.sol --broadcast -vvvvv *args
+
+[group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+register-participants *args: 
+    forge script RegisterParticipants.s.sol --broadcast -vvvvv *args
+
+[group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+register-participants-dry-run *args: 
+    forge script RegisterParticipants.s.sol -vvvvv *args
+
+
+[group: 'anvil']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry-with-deps-anvil: 
+    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script RpRegistryWithDeps.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+[group: 'anvil']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry-anvil: 
+    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script RpRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+[group: 'anvil']
+[working-directory: 'contracts/script/deploy']
+register-participants-anvil: 
+    KEY_GEN_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9   ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+
+
+[group: 'docker']
 build-push-docker-image-oprf-service-amd TAG:
   docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{TAG}}-amd64 -f build/Dockerfile.oprf-service .
 
+[group: 'docker']
 build-push-docker-image-key-gen-amd TAG:
   docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{TAG}}-amd64 -f build/Dockerfile.key-gen .

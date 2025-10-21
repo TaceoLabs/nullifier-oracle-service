@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {BabyJubJub} from "../src/BabyJubJub.sol";
+import {BabyJubJub} from "../../src/BabyJubJub.sol";
 
 contract BabyJubJubScript is Script {
     BabyJubJub public babyJubJub;

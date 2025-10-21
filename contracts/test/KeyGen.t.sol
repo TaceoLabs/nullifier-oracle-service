@@ -67,7 +67,7 @@ contract KeyGenTest is Test {
         accumulator = new BabyJubJub();
         verifierKeyGen = new Groth16VerifierKeyGen13();
         verifierNullifier = new Groth16VerifierNullifier();
-        gen = new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        gen = new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
 
         // register participants for runs later
         address[] memory peerAddresses = new address[](3);
@@ -85,13 +85,13 @@ contract KeyGenTest is Test {
 
     function testConstructedCorrectly() public {
         KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
         assertEq(genTest.taceoAdmin(), taceoAdmin);
         assertEq(address(genTest.keyGenVerifier()), address(verifierKeyGen));
         assertEq(address(genTest.nullifierVerifier()), address(verifierNullifier));
         assertEq(address(genTest.accumulator()), address(accumulator));
-        assertEq(genTest.threshold(), 2);
         assertEq(genTest.numPeers(), 3);
+        assertEq(genTest.threshold(), 2);
         assert(!genTest.isContractReady());
 
         // TODO call other functions to check that it reverts correctly
@@ -99,7 +99,7 @@ contract KeyGenTest is Test {
 
     function testRegisterParticipants() public {
         KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -153,7 +153,7 @@ contract KeyGenTest is Test {
 
     function testRegisterParticipantsNotTACEO() public {
         KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -186,7 +186,7 @@ contract KeyGenTest is Test {
 
     function testRegisterParticipantsWrongNumberKeys() public {
         KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
         address[] memory peerAddressesCorrect = new address[](3);
         peerAddressesCorrect[0] = alice;
         peerAddressesCorrect[1] = bob;
