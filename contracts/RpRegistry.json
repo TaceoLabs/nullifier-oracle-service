@@ -696,6 +696,11 @@
   },
   {
     "type": "error",
+    "name": "OutdatedNullifier",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "UnexpectedAmountPeers",
     "inputs": [
       {

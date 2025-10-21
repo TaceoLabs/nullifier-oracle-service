@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../../src/KeyGen.sol";
+import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
 import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
@@ -11,7 +11,7 @@ import {Types} from "../../src/Types.sol";
 contract DeployRpRegistryWithDepsScript is Script {
     using Types for Types.BabyJubJubElement;
 
-    KeyGen public gen;
+    RpRegistry public rpRegistry;
 
     function setUp() public {}
 
@@ -41,8 +41,10 @@ contract DeployRpRegistryWithDepsScript is Script {
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
         address nullifierVerifierAddress = deployGroth16VerifierNullifier();
-        gen = new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2);
+        rpRegistry = new RpRegistry(
+            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2
+        );
 
-        console.log("RpRegistry deployed to:", address(gen));
+        console.log("RpRegistry deployed to:", address(rpRegistry));
     }
 }

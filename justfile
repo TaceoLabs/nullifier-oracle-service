@@ -13,7 +13,7 @@ dev-down:
 
 [group: 'build']
 export-contract-abi:
-    cd contracts && forge build --silent && jq '.abi' out/KeyGen.sol/KeyGen.json > KeyGen.json
+    cd contracts && forge build --silent && jq '.abi' out/RpRegistry.sol/RpRegistry.json > RpRegistry.json
 
 [group: 'test']
 unit-tests:

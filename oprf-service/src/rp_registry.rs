@@ -24,8 +24,8 @@ use oprf_types::{
 sol!(
     #[allow(missing_docs, clippy::too_many_arguments)]
     #[sol(rpc)]
-    KeyGen,
-    "../contracts/KeyGen.json"
+    RpRegistry,
+    "../contracts/RpRegistry.json"
 );
 
 impl From<PeerPublicKey> for Types::BabyJubJubElement {
@@ -145,14 +145,14 @@ impl TryFrom<k256::PublicKey> for Types::EcDsaPubkeyCompressed {
 }
 
 #[derive(Clone)]
-/// Main struct to interact with the `KeyGen` contract
-pub struct RpRegistry {
+/// Main struct to interact with the `RpRegistry` contract
+pub struct RpRegistryProxy {
     pub(crate) contract_address: Address,
     pub(crate) provider: DynProvider,
 }
 
-impl RpRegistry {
-    /// Create a new `RpRegistry`
+impl RpRegistryProxy {
+    /// Create a new `RpRegistryProxy`
     pub async fn init(
         rpc_url: &str,
         contract_address: Address,
@@ -165,10 +165,10 @@ impl RpRegistry {
             .connect_ws(ws)
             .await
             .context("while connecting to RPC")?;
-        tracing::info!("checking KeyGen ready state at address {contract_address}..");
-        let contract = KeyGen::new(contract_address, provider.clone());
+        tracing::info!("checking RpRegistry ready state at address {contract_address}..");
+        let contract = RpRegistry::new(contract_address, provider.clone());
         if !contract.isContractReady().call().await? {
-            eyre::bail!("KeyGen contract not ready");
+            eyre::bail!("RpRegistry contract not ready");
         }
         tracing::info!("ready!");
 
@@ -181,7 +181,7 @@ impl RpRegistry {
     /// Fetch the OPRF peer public keys from the contract
     pub async fn fetch_peer_public_keys(&self) -> eyre::Result<PeerPublicKeyList> {
         tracing::info!("fetching peer public keys..");
-        let contract = KeyGen::new(self.contract_address, self.provider.clone());
+        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
         let peer_public_keys = contract
             .getPeerPublicKeys()
             .call()
@@ -196,7 +196,7 @@ impl RpRegistry {
     /// Fetch the `RpNullifierKey` key from the contract
     pub async fn fetch_rp_nullifier_key(&self, rp_id: RpId) -> eyre::Result<RpNullifierKey> {
         tracing::info!("fetching rp_nullifier_key..");
-        let contract = KeyGen::new(self.contract_address, self.provider.clone());
+        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
         let mut interval = tokio::time::interval(Duration::from_millis(500));
         let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async move {
             loop {

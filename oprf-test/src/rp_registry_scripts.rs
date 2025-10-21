@@ -33,7 +33,7 @@ pub fn deploy_test_setup(
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let re = Regex::new(r"KeyGen deployed to:\s*(0x[0-9a-fA-F]{40})").unwrap();
+    let re = Regex::new(r"RpRegistry deployed to:\s*(0x[0-9a-fA-F]{40})").unwrap();
     let addr = re
         .captures(&stdout)
         .and_then(|c| c.get(1))

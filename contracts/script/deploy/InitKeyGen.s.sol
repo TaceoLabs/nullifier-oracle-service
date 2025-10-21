@@ -2,16 +2,16 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../../src/KeyGen.sol";
+import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Types} from "../../src/Types.sol";
 
 contract InitKeyGenScript is Script {
     using Types for Types.EcDsaPubkeyCompressed;
 
-    KeyGen public keyGenContract;
+    RpRegistry public rpRegistry;
 
     function setUp() public {
-        keyGenContract = KeyGen(vm.envAddress("KEYGEN_CONTRACT"));
+        rpRegistry = RpRegistry(vm.envAddress("KEYGEN_CONTRACT"));
     }
 
     function run() external {
@@ -23,7 +23,7 @@ contract InitKeyGenScript is Script {
             Types.EcDsaPubkeyCompressed({x: bytes32(ecdsaKeyX), yParity: ecdsaKeyYParity});
 
         vm.startBroadcast();
-        keyGenContract.initKeyGen(sessionId, ecdsaPubKey);
+        rpRegistry.initKeyGen(sessionId, ecdsaPubKey);
         vm.stopBroadcast();
 
         console.log("Initialized new key gen session with ID:", sessionId);

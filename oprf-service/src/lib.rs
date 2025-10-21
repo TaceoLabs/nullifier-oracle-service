@@ -29,7 +29,7 @@ use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    rp_registry::RpRegistry,
+    rp_registry::RpRegistryProxy,
     services::{
         crypto_device::CryptoDevice,
         event_handler::ChainEventHandler,
@@ -107,9 +107,9 @@ pub async fn start(
     let wallet = EthereumWallet::from(private_key);
 
     tracing::info!("init RpRegistry..");
-    let rp_registry = RpRegistry::init(
+    let rp_registry = RpRegistryProxy::init(
         &config.chain_ws_rpc_url,
-        config.key_gen_contract,
+        config.rp_registry_contract,
         wallet.clone(),
     )
     .await?;

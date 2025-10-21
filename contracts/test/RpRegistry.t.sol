@@ -2,16 +2,16 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {KeyGen} from "../src/KeyGen.sol";
+import {RpRegistry} from "../src/RpRegistry.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
 import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {Types} from "../src/Types.sol";
 
-contract KeyGenTest is Test {
+contract RpRegistryTest is Test {
     using Types for Types.BabyJubJubElement;
 
-    KeyGen public gen;
+    RpRegistry public rpRegistry;
     BabyJubJub public accumulator;
     Groth16VerifierKeyGen13 public verifierKeyGen;
     Groth16VerifierNullifier public verifierNullifier;
@@ -67,7 +67,8 @@ contract KeyGenTest is Test {
         accumulator = new BabyJubJub();
         verifierKeyGen = new Groth16VerifierKeyGen13();
         verifierNullifier = new Groth16VerifierNullifier();
-        gen = new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
+        rpRegistry =
+            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         // register participants for runs later
         address[] memory peerAddresses = new address[](3);
@@ -79,27 +80,27 @@ contract KeyGenTest is Test {
         peerPublicKeys[1] = publicKeyBob;
         peerPublicKeys[2] = publicKeyCarol;
         vm.prank(taceoAdmin);
-        gen.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
         vm.stopPrank();
     }
 
     function testConstructedCorrectly() public {
-        KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
-        assertEq(genTest.taceoAdmin(), taceoAdmin);
-        assertEq(address(genTest.keyGenVerifier()), address(verifierKeyGen));
-        assertEq(address(genTest.nullifierVerifier()), address(verifierNullifier));
-        assertEq(address(genTest.accumulator()), address(accumulator));
-        assertEq(genTest.numPeers(), 3);
-        assertEq(genTest.threshold(), 2);
-        assert(!genTest.isContractReady());
+        RpRegistry rpRegistryTest =
+            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        assertEq(rpRegistryTest.taceoAdmin(), taceoAdmin);
+        assertEq(address(rpRegistryTest.keyGenVerifier()), address(verifierKeyGen));
+        assertEq(address(rpRegistryTest.nullifierVerifier()), address(verifierNullifier));
+        assertEq(address(rpRegistryTest.accumulator()), address(accumulator));
+        assertEq(rpRegistryTest.threshold(), 2);
+        assertEq(rpRegistryTest.numPeers(), 3);
+        assert(!rpRegistryTest.isContractReady());
 
         // TODO call other functions to check that it reverts correctly
     }
 
     function testRegisterParticipants() public {
-        KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
+        RpRegistry rpRegistryTest =
+            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -111,16 +112,16 @@ contract KeyGenTest is Test {
         peerPublicKeys[2] = publicKeyCarol;
 
         // check that not ready
-        assert(!genTest.isContractReady());
+        assert(!rpRegistryTest.isContractReady());
         vm.prank(taceoAdmin);
-        genTest.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
         vm.stopPrank();
 
         // check that ready after call
-        assert(genTest.isContractReady());
+        assert(rpRegistryTest.isContractReady());
 
         // check that public keys are stored correctly
-        Types.BabyJubJubElement[] memory isKeys = genTest.getPeerPublicKeys();
+        Types.BabyJubJubElement[] memory isKeys = rpRegistryTest.getPeerPublicKeys();
         assertEq(isKeys[0].x, peerPublicKeys[0].x);
         assertEq(isKeys[0].y, peerPublicKeys[0].y);
         assertEq(isKeys[1].x, peerPublicKeys[1].x);
@@ -130,30 +131,30 @@ contract KeyGenTest is Test {
 
         // check that parties can read their partyID
         vm.prank(alice);
-        uint256 aliceId = genTest.checkIsParticipantAndReturnPartyId();
+        uint256 aliceId = rpRegistryTest.checkIsParticipantAndReturnPartyId();
         assertEq(aliceId, 0);
         vm.stopPrank();
 
         vm.prank(bob);
-        uint256 bobId = genTest.checkIsParticipantAndReturnPartyId();
+        uint256 bobId = rpRegistryTest.checkIsParticipantAndReturnPartyId();
         assertEq(bobId, 1);
         vm.stopPrank();
 
         vm.prank(carol);
-        uint256 carolId = genTest.checkIsParticipantAndReturnPartyId();
+        uint256 carolId = rpRegistryTest.checkIsParticipantAndReturnPartyId();
         assertEq(carolId, 2);
         vm.stopPrank();
 
         // check that taceo is not a participant
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.NotAParticipant.selector));
-        genTest.checkIsParticipantAndReturnPartyId();
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.NotAParticipant.selector));
+        rpRegistryTest.checkIsParticipantAndReturnPartyId();
         vm.stopPrank();
     }
 
     function testRegisterParticipantsNotTACEO() public {
-        KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
+        RpRegistry rpRegistryTest =
+            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -165,8 +166,8 @@ contract KeyGenTest is Test {
         peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.OnlyTACEO.selector));
-        genTest.registerOprfPeers(peerAddresses, peerPublicKeys);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyTACEO.selector));
+        rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
     }
 
     function testRegisterParticipantsTwice() public {
@@ -180,13 +181,13 @@ contract KeyGenTest is Test {
         peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.AlreadySubmitted.selector));
-        gen.registerOprfPeers(peerAddresses, peerPublicKeys);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.AlreadySubmitted.selector));
+        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
     }
 
     function testRegisterParticipantsWrongNumberKeys() public {
-        KeyGen genTest =
-            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 3, 2);
+        RpRegistry rpRegistryTest =
+            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
         address[] memory peerAddressesCorrect = new address[](3);
         peerAddressesCorrect[0] = alice;
         peerAddressesCorrect[1] = bob;
@@ -205,32 +206,32 @@ contract KeyGenTest is Test {
 
         // check that not ready
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.UnexpectedAmountPeers.selector, 3));
-        genTest.registerOprfPeers(peerAddressesCorrect, peerPublicKeysWrong);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
+        rpRegistryTest.registerOprfPeers(peerAddressesCorrect, peerPublicKeysWrong);
 
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.UnexpectedAmountPeers.selector, 3));
-        genTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysCorrect);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
+        rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysCorrect);
 
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.UnexpectedAmountPeers.selector, 3));
-        genTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysWrong);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
+        rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysWrong);
     }
 
     function testInitKeyGenResubmit() public {
         vm.prank(taceoAdmin);
-        gen.initKeyGen(0, ecdsaPubKey);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.AlreadySubmitted.selector));
+        rpRegistry.initKeyGen(0, ecdsaPubKey);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.AlreadySubmitted.selector));
         vm.prank(taceoAdmin);
-        gen.initKeyGen(0, ecdsaPubKey);
+        rpRegistry.initKeyGen(0, ecdsaPubKey);
     }
 
     function testInitKeyGenParityWrong() public {
         Types.EcDsaPubkeyCompressed memory ecdsaPubKeyBroken = Types.EcDsaPubkeyCompressed({x: bytes32(0), yParity: 1});
 
         vm.prank(taceoAdmin);
-        vm.expectRevert(abi.encodeWithSelector(KeyGen.BadContribution.selector));
-        gen.initKeyGen(1, ecdsaPubKeyBroken);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.BadContribution.selector));
+        rpRegistry.initKeyGen(1, ecdsaPubKeyBroken);
     }
 
     function testE2E() public {
@@ -238,17 +239,19 @@ contract KeyGenTest is Test {
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(rpId, 2);
-        gen.initKeyGen(rpId, ecdsaPubKey);
+        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
         vm.stopPrank();
 
         // do round 1 contributions
 
         vm.prank(bob);
-        gen.addRound1Contribution(rpId, Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob}));
+        rpRegistry.addRound1Contribution(
+            rpId, Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob})
+        );
         vm.stopPrank();
 
         vm.prank(alice);
-        gen.addRound1Contribution(
+        rpRegistry.addRound1Contribution(
             rpId, Types.Round1Contribution({commShare: commShareAlice, commCoeffs: commCoeffsAlice})
         );
         vm.stopPrank();
@@ -256,7 +259,7 @@ contract KeyGenTest is Test {
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(rpId);
-        gen.addRound1Contribution(
+        rpRegistry.addRound1Contribution(
             rpId, Types.Round1Contribution({commShare: commShareCarol, commCoeffs: commCoeffsCarol})
         );
         vm.stopPrank();
@@ -264,36 +267,36 @@ contract KeyGenTest is Test {
         // do round 2 contributions
 
         vm.prank(bob);
-        gen.addRound2Contribution(rpId, bobRound2Contribution());
+        rpRegistry.addRound2Contribution(rpId, bobRound2Contribution());
         vm.stopPrank();
 
         vm.prank(alice);
-        gen.addRound2Contribution(rpId, aliceRound2Contribution());
+        rpRegistry.addRound2Contribution(rpId, aliceRound2Contribution());
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound3(rpId);
         vm.prank(carol);
-        gen.addRound2Contribution(rpId, carolRound2Contribution());
+        rpRegistry.addRound2Contribution(rpId, carolRound2Contribution());
         vm.stopPrank();
 
         // do round 3 contributions
         vm.prank(alice);
-        gen.addRound3Contribution(rpId);
+        rpRegistry.addRound3Contribution(rpId);
         vm.stopPrank();
 
         vm.prank(bob);
-        gen.addRound3Contribution(rpId);
+        rpRegistry.addRound3Contribution(rpId);
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenFinalize(rpId);
         vm.prank(carol);
-        gen.addRound3Contribution(rpId);
+        rpRegistry.addRound3Contribution(rpId);
         vm.stopPrank();
 
         // check that the computed nullifier is correct
-        Types.RpMaterial memory material = gen.getRpMaterial(rpId);
+        Types.RpMaterial memory material = rpRegistry.getRpMaterial(rpId);
         assertEq(material.nullifierKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
         assertEq(material.nullifierKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
         assertEq(material.ecdsaKey.x, bytes32(0));
