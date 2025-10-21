@@ -7,9 +7,7 @@
 //! - [`CredentialsSignature`] represents a signed credential issued by world ecosystem
 
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
-use oprf_types::{MerkleRoot, RpId, ShareEpoch, crypto::UserPublicKeyBatch};
-
-use crate::MAX_DEPTH;
+use oprf_types::{MerkleRoot, RpId, ShareEpoch, TREE_DEPTH, crypto::UserPublicKeyBatch};
 
 /// A credential object in the world ecosystem, together with its signature.  
 /// See [Notion doc](https://www.notion.so/worldcoin/WID25-Credential-PCP-Structure-Lifecycle-2668614bdf8c805d9484d7dd8f68532b?source=copy_link#2698614bdf8c808f83ebe8889dad0af6) for details.
@@ -46,14 +44,10 @@ pub struct CredentialsSignature {
 pub struct MerkleMembership {
     /// The actual Merkle root (not sent to the OPRF service, only used for computing the proof).
     pub root: MerkleRoot,
-    /// The depth of the Merkle tree.
-    /// Siblings are always [`MAX_DEPTH`] long to avoid leaking structure.
-    pub depth: u64,
     /// The index of the user’s leaf in the Merkle tree.
     pub mt_index: u64,
     /// The sibling path up to the Merkle root.  
-    /// Always [`MAX_DEPTH`] long, possibly padded with dummy values.
-    pub siblings: [ark_babyjubjub::Fq; MAX_DEPTH],
+    pub siblings: [ark_babyjubjub::Fq; TREE_DEPTH],
 }
 
 /// The basic request a client sends to the OPRF service.

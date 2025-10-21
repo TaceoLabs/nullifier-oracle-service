@@ -25,6 +25,9 @@ pub mod api;
 pub mod chain;
 pub mod crypto;
 
+/// The depth of the merkle-tree
+pub const TREE_DEPTH: usize = 30;
+
 /// Represents an epoch for the DLog secret-share.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,

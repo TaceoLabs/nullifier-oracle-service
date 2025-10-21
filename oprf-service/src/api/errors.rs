@@ -82,9 +82,6 @@ impl From<OprfServiceError> for ApiErrors {
             OprfServiceError::DuplicateSignatureError(err) => {
                 ApiErrors::BadRequest(err.to_string())
             }
-            OprfServiceError::MerkleDepthGreaterThanMax(max) => {
-                ApiErrors::BadRequest(format!("merkle tree depth greater than max: {max}"))
-            }
             OprfServiceError::MerkleWatcherError(merkle_watcher_error) => {
                 Self::from(merkle_watcher_error)
             }

@@ -25,7 +25,10 @@ use ark_groth16::Groth16;
 use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
-use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
+use oprf_types::{
+    TREE_DEPTH,
+    api::v1::{ChallengeRequest, OprfRequest},
+};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -60,9 +63,6 @@ pub(crate) enum OprfServiceError {
     /// A nonce signature was uses more than once
     #[error(transparent)]
     DuplicateSignatureError(#[from] DuplicateSignatureError),
-    /// The merkle tree depth is greater than the max
-    #[error("merkle tree depth greater than max: {0}")]
-    MerkleDepthGreaterThanMax(u64),
     /// The provided merkle root is not valid
     #[error("invalid merkle root")]
     InvalidMerkleRoot,
@@ -78,20 +78,17 @@ pub(crate) struct OprfService {
     merkle_watcher: MerkleWatcherService,
     signature_history: SignatureHistory,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
-    max_merkle_depth: u64,
     current_time_stamp_max_difference: Duration,
 }
 
 impl OprfService {
     /// Builds an [`OprfService`] from its core services and config values.
-    #[expect(clippy::too_many_arguments)]
     pub(crate) fn init(
         crypto_device: Arc<CryptoDevice>,
         merkle_watcher: MerkleWatcherService,
         vk: ark_groth16::VerifyingKey<Bn254>,
         request_lifetime: Duration,
         session_cleanup_interval: Duration,
-        max_merkle_depth: u64,
         current_time_stamp_max_difference: Duration,
         signature_history_cleanup_interval: Duration,
     ) -> Self {
@@ -104,7 +101,6 @@ impl OprfService {
             session_store: SessionStore::init(session_cleanup_interval, request_lifetime),
             merkle_watcher,
             vk: Arc::new(ark_groth16::prepare_verifying_key(&vk)),
-            max_merkle_depth,
             current_time_stamp_max_difference,
         }
     }
@@ -126,13 +122,6 @@ impl OprfService {
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
         let rp_id = request.rp_identifier.rp_id;
-
-        // check the merkle depth against the max
-        if request.merkle_depth > self.max_merkle_depth {
-            return Err(OprfServiceError::MerkleDepthGreaterThanMax(
-                self.max_merkle_depth,
-            ));
-        }
 
         // check the time stamp against system time +/- difference
         let req_time_stamp = Duration::from_secs(request.current_time_stamp);
@@ -173,7 +162,7 @@ impl OprfService {
             request.cred_pk.pk.y,
             request.current_time_stamp.into(),
             request.merkle_root.into_inner(),
-            request.merkle_depth.into(),
+            ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
             request.rp_identifier.rp_id.into(),
             request.action,
             request.nonce,

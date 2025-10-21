@@ -54,7 +54,6 @@ async fn start_service(
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
-        max_merkle_depth: 30,
         key_gen_contract,
         account_registry_contract,
         wallet_private_key: wallet_private_key.into(),

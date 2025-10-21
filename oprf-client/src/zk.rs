@@ -364,8 +364,7 @@ mod tests {
     use std::{fs::File, process::Command};
 
     use circom_types::Witness;
-
-    use crate::MAX_DEPTH;
+    use oprf_types::TREE_DEPTH;
 
     use super::*;
 
@@ -418,7 +417,7 @@ mod tests {
     #[ignore = "needs circom and node"]
     fn test_witness_calc_query() {
         let mut rng = rand::thread_rng();
-        let (input, _) = QueryProofInput::<MAX_DEPTH>::generate(&mut rng);
+        let (input, _) = QueryProofInput::<TREE_DEPTH>::generate(&mut rng);
         let should_witness = run_snarkjs_witness_gen(input.json(), "OPRFQueryProof");
         let inputs: HashMap<String, serde_json::Value> =
             serde_json::from_value(input.json()).expect("can deserialize input");
@@ -434,7 +433,7 @@ mod tests {
     #[ignore = "needs circom and node"]
     fn test_witness_calc_nullifier() {
         let mut rng = rand::thread_rng();
-        let input = NullifierProofInput::<MAX_DEPTH>::generate(&mut rng);
+        let input = NullifierProofInput::<TREE_DEPTH>::generate(&mut rng);
         let should_witness = run_snarkjs_witness_gen(input.json(), "OPRFNullifierProof");
         let inputs: HashMap<String, serde_json::Value> =
             serde_json::from_value(input.json()).expect("can deserialize input");
