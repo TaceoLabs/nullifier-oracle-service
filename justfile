@@ -125,6 +125,17 @@ deploy-rp-registry-with-deps *args:
     forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{args}}
 
 [group: 'deploy']
+[working-directory: 'contracts/script/test']
+deploy-account-registry-dry-run *args: 
+    forge script AccountRegistry.s.sol --interactives 1 -vvvvv {{args}}
+
+[group: 'deploy']
+[working-directory: 'contracts/script/test']
+deploy-account-registry *args: 
+    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{args}}
+
+
+[group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 register-participants *args: 
     forge script RegisterParticipants.s.sol --broadcast -vvvvv *args
@@ -144,6 +155,11 @@ deploy-rp-registry-with-deps-anvil:
 [working-directory: 'contracts/script/deploy']
 deploy-rp-registry-anvil: 
     TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script RpRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+[group: 'anvil']
+[working-directory: 'contracts/script/test']
+deploy-account-registry-anvil: 
+    forge script AccountRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group: 'anvil']
 [working-directory: 'contracts/script/deploy']
