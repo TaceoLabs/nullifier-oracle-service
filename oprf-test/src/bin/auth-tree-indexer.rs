@@ -29,10 +29,6 @@ pub struct AuthTreeIndexerConfig {
         default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
     )]
     contract_address: Address,
-
-    /// The depth of the merkle tree
-    #[clap(long, env = "AUTH_TREE_INDEXER_MERKLE_DEPTH", default_value = "10")]
-    pub merkle_depth: usize,
 }
 
 async fn get_proof(
@@ -51,14 +47,8 @@ async fn main() -> eyre::Result<()> {
     let config = AuthTreeIndexerConfig::parse();
 
     tracing::info!("init AuthTreeIndexer...");
-    let indexer = Arc::new(
-        AuthTreeIndexer::init(
-            config.merkle_depth,
-            config.contract_address,
-            &config.ws_rpc_url,
-        )
-        .await?,
-    );
+    let indexer =
+        Arc::new(AuthTreeIndexer::init(config.contract_address, &config.ws_rpc_url).await?);
 
     tracing::info!("starting axum server...");
     let app = Router::new().route(

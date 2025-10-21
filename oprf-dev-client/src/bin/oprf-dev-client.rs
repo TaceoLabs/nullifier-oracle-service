@@ -326,7 +326,7 @@ async fn main() -> eyre::Result<()> {
     .await?
     .json::<InclusionProofResponse>()
     .await?;
-    let merkle_membership = MerkleMembership::from(merkle_proof);
+    let merkle_membership = MerkleMembership::try_from(merkle_proof)?;
 
     match config.command {
         Command::Test => {

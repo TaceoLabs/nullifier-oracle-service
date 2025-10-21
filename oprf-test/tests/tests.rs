@@ -20,7 +20,7 @@ use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, init_rp_registry};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
-    world_id_protocol_mock::{self, ACCOUNT_REGISTRY_TREE_DEPTH, AuthTreeIndexer},
+    world_id_protocol_mock::{self, AuthTreeIndexer},
 };
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::RpNullifierKey;
@@ -40,22 +40,16 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let anvil = Anvil::new().spawn();
 
     println!("Deploying AccountRegistry contract...");
-    let account_registry_contract = world_id_protocol_mock::deploy_account_registry(
-        &anvil.endpoint(),
-        ACCOUNT_REGISTRY_TREE_DEPTH,
-    );
+    let account_registry_contract =
+        world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
     println!("Deploying KeyGen contract...");
     let key_gen_contract = init_rp_registry::start(&anvil.ws_endpoint(), "oprf/sk", true).await?;
     println!("deployed at address: {key_gen_contract}");
 
     println!("Starting AuthTreeIndexer...");
-    let auth_tree_indexer = AuthTreeIndexer::init(
-        ACCOUNT_REGISTRY_TREE_DEPTH,
-        account_registry_contract,
-        &anvil.ws_endpoint(),
-    )
-    .await?;
+    let auth_tree_indexer =
+        AuthTreeIndexer::init(account_registry_contract, &anvil.ws_endpoint()).await?;
 
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
@@ -92,7 +86,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let merkle_proof = auth_tree_indexer
         .get_proof(account_index.try_into().unwrap())
         .await?;
-    let merkle_membership = MerkleMembership::from(merkle_proof);
+    let merkle_membership = MerkleMembership::try_from(merkle_proof)?;
 
     println!("Creating nonce and and sign it...");
     println!("In a real-world scenario, the RP would sign the nonce.");

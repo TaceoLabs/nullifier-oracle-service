@@ -171,7 +171,6 @@ pub async fn start(
         vk.into(),
         config.request_lifetime,
         config.session_cleanup_interval,
-        config.max_merkle_depth,
         config.current_time_stamp_max_difference,
         config.signature_history_cleanup_interval,
     );
@@ -282,12 +281,12 @@ mod tests {
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
     use oprf_client::zk::Groth16Material;
-    use oprf_client::{MAX_DEPTH, MerkleMembership, OprfQuery};
+    use oprf_client::{MerkleMembership, OprfQuery};
     use oprf_core::ddlog_equality::DLogEqualityCommitments;
     use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::crypto::{PeerPublicKeyList, RpNullifierKey};
-    use oprf_types::{MerkleRoot, RpId, ShareEpoch};
+    use oprf_types::{MerkleRoot, RpId, ShareEpoch, TREE_DEPTH};
     use rand::Rng as _;
     use uuid::Uuid;
 
@@ -313,9 +312,9 @@ mod tests {
             let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
             let key_material = oprf_test::credentials::random_user_keys(&mut rng);
-            let siblings: [ark_babyjubjub::Fq; MAX_DEPTH] =
+            let siblings: [ark_babyjubjub::Fq; TREE_DEPTH] =
                 array::from_fn(|_| ark_babyjubjub::Fq::rand(&mut rng));
-            let mt_index = rng.gen_range(0..(1 << MAX_DEPTH)) as u64;
+            let mt_index = rng.gen_range(0..(1 << TREE_DEPTH)) as u64;
             let merkle_root = MerkleRoot::new(QueryProofInput::merkle_root_from_pks(
                 &key_material.pk_batch.clone().into_proof_input(),
                 &siblings,
@@ -344,7 +343,6 @@ mod tests {
             )?;
 
             let merkle_membership = MerkleMembership {
-                depth: MAX_DEPTH as u64, // TODO fix me
                 root: merkle_root,
                 mt_index,
                 siblings,
@@ -414,7 +412,6 @@ mod tests {
             let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);
             let session_cleanup_interval = Duration::from_secs(30);
-            let max_merkle_depth = 30;
             let current_time_stamp_max_difference = Duration::from_secs(60);
             let signature_history_cleanup_interval = Duration::from_secs(60);
             let oprf_service = OprfService::init(
@@ -423,7 +420,6 @@ mod tests {
                 vk.into(),
                 request_lifetime,
                 session_cleanup_interval,
-                max_merkle_depth,
                 current_time_stamp_max_difference,
                 signature_history_cleanup_interval,
             );
@@ -503,22 +499,6 @@ mod tests {
             .await;
         res.assert_text(format!("Cannot find RP with id: {unknown_rp_id}"));
         res.assert_status_not_found();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_init_wrong_merkle_depth() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let mut req = setup.oprf_req;
-        req.merkle_depth = u64::MAX;
-        let res = setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text("merkle tree depth greater than max: 30");
-        res.assert_status_bad_request();
         Ok(())
     }
 

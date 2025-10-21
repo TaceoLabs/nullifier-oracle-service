@@ -182,10 +182,6 @@ pub struct OprfPeerConfig {
     )]
     pub signature_history_cleanup_interval: Duration,
 
-    /// The max depth of the merkle tree
-    #[clap(long, env = "OPRF_SERVICE_MAX_MERKLE_DEPTH", default_value = "30")]
-    pub max_merkle_depth: u64,
-
     /// The location of the zkey for the key-gen proof in round 2 of KeyGen
     #[clap(long, env = "OPRF_SERVICE_KEY_GEN_ZKEY")]
     pub key_gen_zkey_path: PathBuf,

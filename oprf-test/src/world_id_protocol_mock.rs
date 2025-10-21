@@ -1,9 +1,9 @@
-use std::{collections::HashSet, path::PathBuf, process::Command, str::FromStr, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, process::Command, str::FromStr, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
     network::EthereumWallet,
-    primitives::{Address, TxHash, U256, address},
+    primitives::{Address, Log, TxHash, U256, address},
     providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
     rpc::types::{Filter, TransactionReceipt},
     signers::local::PrivateKeySigner,
@@ -13,13 +13,15 @@ use alloy::{
     uint,
 };
 use ark_ff::{AdditiveGroup as _, BigInt, PrimeField as _};
+use ark_serialize::CanonicalSerialize as _;
 use futures::StreamExt as _;
-use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MAX_DEPTH, MerkleMembership, UserKeyMaterial};
-use oprf_types::crypto::UserPublicKeyBatch;
+use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MerkleMembership, UserKeyMaterial};
+use oprf_types::{TREE_DEPTH, crypto::UserPublicKeyBatch};
 use poseidon2::{POSEIDON2_BN254_T2_PARAMS, Poseidon2};
 use regex::Regex;
 use semaphore_rs_hasher::Hasher;
-use semaphore_rs_trees::{Branch, InclusionProof, imt::MerkleTree};
+use semaphore_rs_trees::lazy::{Canonical, LazyMerkleTree as MerkleTree};
+use semaphore_rs_trees::{Branch, InclusionProof};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -64,18 +66,19 @@ impl Hasher for PoseidonHasher {
 }
 
 #[derive(Debug, Clone)]
-pub struct DecodedAccountCreated {
-    pub account_index_hex: String,
-    pub recovery_address_bytes: String,
-    pub authenticator_addresses_hex: Vec<String>,
-    pub offchain_signer_commitment_hex: String,
+pub struct AccountCreatedEvent {
+    pub account_index: U256,
+    pub recovery_address: Address,
+    pub authenticator_addresses: Vec<Address>,
+    pub authenticator_pubkeys: Vec<U256>,
+    pub offchain_signer_commitment: U256,
 }
 
 /// The response from an inclusion proof request.
 /// Copied from [here](https://github.com/worldcoin/world-id-protocol/blob/main/crates/world-id-core/src/types.rs).
 #[derive(Serialize, Deserialize)]
 pub struct InclusionProofResponse {
-    /// The account index
+    /// TODO: Add proper documentation.
     pub account_index: u64,
     /// The index of the leaf in the tree.
     pub leaf_index: u64,
@@ -83,56 +86,64 @@ pub struct InclusionProofResponse {
     pub root: U256,
     /// The entire proof of inclusion for all the nodes in the path.
     pub proof: Vec<U256>,
+    /// The authenticator public keys for the account.
+    pub authenticator_pubkeys: Vec<U256>,
 }
 
 impl InclusionProofResponse {
     /// Instantiates a new inclusion proof response.
-    pub const fn new(account_index: u64, leaf_index: u64, root: U256, proof: Vec<U256>) -> Self {
+    #[must_use]
+    pub const fn new(
+        account_index: u64,
+        leaf_index: u64,
+        root: U256,
+        proof: Vec<U256>,
+        authenticator_pubkeys: Vec<U256>,
+    ) -> Self {
         Self {
             account_index,
             leaf_index,
             root,
             proof,
+            authenticator_pubkeys,
         }
     }
 }
 
-impl From<InclusionProofResponse> for MerkleMembership {
-    fn from(value: InclusionProofResponse) -> Self {
-        let depth = value.proof.len() as u64;
-        let mut siblings = value
+impl TryFrom<InclusionProofResponse> for MerkleMembership {
+    type Error = eyre::Report;
+
+    fn try_from(value: InclusionProofResponse) -> Result<Self, Self::Error> {
+        let siblings = value
             .proof
             .into_iter()
             .map(|p| ark_babyjubjub::Fq::new(BigInt(p.into_limbs())))
             .collect::<Vec<_>>();
-        // pad siblings to max depth
-        for _ in 0..MAX_DEPTH as u64 - depth {
-            siblings.push(ark_babyjubjub::Fq::default());
+        if siblings.len() != TREE_DEPTH {
+            eyre::bail!("invalid siblings length");
         }
-        MerkleMembership {
+        Ok(MerkleMembership {
             root: value.root.into(),
-            depth, // send actual depth of contract merkle tree
             mt_index: value.leaf_index,
-            siblings: siblings.try_into().expect("padded ot correct len"),
-        }
+            siblings: siblings.try_into().expect("correct len"),
+        })
     }
 }
 
 pub struct AuthTreeIndexer {
     _provider: DynProvider,
-    tree: Arc<RwLock<MerkleTree<PoseidonHasher>>>,
-    accounts: Arc<RwLock<HashSet<u64>>>,
+    tree: Arc<RwLock<MerkleTree<PoseidonHasher, Canonical>>>,
+    accounts: Arc<RwLock<HashMap<u64, AccountCreatedEvent>>>,
 }
 
 impl AuthTreeIndexer {
-    pub async fn init(
-        depth: usize,
-        contract_address: Address,
-        ws_rpc_url: &str,
-    ) -> eyre::Result<Self> {
+    pub async fn init(contract_address: Address, ws_rpc_url: &str) -> eyre::Result<Self> {
         tracing::info!("creating provider...");
-        let tree = Arc::new(RwLock::new(MerkleTree::new(depth, U256::ZERO)));
-        let accounts = Arc::new(RwLock::new(HashSet::new()));
+        let tree = Arc::new(RwLock::new(MerkleTree::<_, Canonical>::new(
+            TREE_DEPTH,
+            U256::ZERO,
+        )));
+        let accounts = Arc::new(RwLock::new(HashMap::new()));
         let tree_clone = Arc::clone(&tree);
         let accounts_clone = Arc::clone(&accounts);
 
@@ -152,9 +163,14 @@ impl AuthTreeIndexer {
                 let account_created = decode_account_created(&log).expect("can decode");
                 println!(
                     "got account_created account_index: {}",
-                    account_created.account_index_hex
+                    account_created.account_index
                 );
-                update_tree_with_event(&tree_clone, &accounts_clone, &account_created)
+                let account_index = account_created.account_index.as_limbs()[0];
+                accounts_clone
+                    .write()
+                    .await
+                    .insert(account_index, account_created.clone());
+                update_tree_with_event(&tree_clone, &account_created)
                     .await
                     .expect("can update tree");
             }
@@ -170,88 +186,73 @@ impl AuthTreeIndexer {
         if account_index == 0 {
             eyre::bail!("account index cannot be zero");
         }
-        if !self.accounts.read().await.contains(&account_index) {
-            eyre::bail!("unknown account_index");
-        }
+        let account = self
+            .accounts
+            .read()
+            .await
+            .get(&account_index)
+            .cloned()
+            .ok_or_else(|| eyre::eyre!("unknown account index: {account_index}"))?;
         let leaf_index = (account_index - 1) as usize;
         let tree = self.tree.read().await;
-        match tree.proof(leaf_index) {
-            Some(proof) => {
-                let resp = InclusionProofResponse::new(
-                    account_index,
-                    leaf_index as u64,
-                    tree.root(),
-                    proof_to_vec(&proof),
-                );
-                Ok(resp)
-            }
-            None => Err(eyre::eyre!("leaf index out of range")),
-        }
+        let proof = tree.proof(leaf_index);
+        let resp = InclusionProofResponse::new(
+            account_index,
+            leaf_index as u64,
+            tree.root(),
+            proof_to_vec(&proof),
+            account.authenticator_pubkeys,
+        );
+        Ok(resp)
     }
 }
 
+fn tree_capacity() -> usize {
+    1usize << TREE_DEPTH
+}
+
 async fn update_tree_with_event(
-    tree: &RwLock<MerkleTree<PoseidonHasher>>,
-    accounts: &RwLock<HashSet<u64>>,
-    ev: &DecodedAccountCreated,
+    tree: &RwLock<MerkleTree<PoseidonHasher, Canonical>>,
+    ev: &AccountCreatedEvent,
 ) -> eyre::Result<()> {
-    let idx = hex_to_u64(&ev.account_index_hex)?;
-    if idx == 0 {
+    if ev.account_index == 0 {
         eyre::bail!("account index cannot be zero");
     }
-    accounts.write().await.insert(idx);
-    let leaf_index = (idx - 1) as usize;
-    let value = hex_to_u256(&ev.offchain_signer_commitment_hex)?;
+    let leaf_index = ev.account_index.as_limbs()[0] as usize - 1;
+    if leaf_index >= tree_capacity() {
+        eyre::bail!("leaf index out of range");
+    }
+    let value = ev.offchain_signer_commitment;
     set_leaf_at_index(tree, leaf_index, value).await;
     Ok(())
 }
 
 async fn set_leaf_at_index(
-    tree: &RwLock<MerkleTree<PoseidonHasher>>,
+    tree: &RwLock<MerkleTree<PoseidonHasher, Canonical>>,
     leaf_index: usize,
     value: U256,
 ) {
     let mut tree = tree.write().await;
-    if leaf_index >= tree.num_leaves() {
+    if leaf_index >= tree_capacity() {
         panic!("leaf index out of range");
     }
-    tree.set(leaf_index, value);
+    take_mut::take(&mut *tree, |tree| {
+        tree.update_with_mutation(leaf_index, &value)
+    });
 }
 
-pub fn decode_account_created(lg: &alloy::rpc::types::Log) -> eyre::Result<DecodedAccountCreated> {
-    use alloy::primitives::Log as PLog;
-    // Convert RPC log to primitives Log and use typed decoder
-    let prim = PLog::new(lg.address(), lg.topics().to_vec(), lg.data().data.clone())
+pub fn decode_account_created(lg: &alloy::rpc::types::Log) -> eyre::Result<AccountCreatedEvent> {
+    let prim = Log::new(lg.address(), lg.topics().to_vec(), lg.data().data.clone())
         .ok_or_else(|| eyre::eyre!("invalid log for decoding"))?;
-    let typed = AccountCreated::decode_log(&prim)?; // returns Log<AccountCreated>
-    let ev = typed.data;
+    let typed = AccountCreated::decode_log(&prim)?;
 
-    let account_index_hex = format!("0x{:x}", ev.accountIndex);
-    let recovery_address_bytes = format!("0x{:x}", ev.recoveryAddress);
-    let authenticator_addresses_hex = ev
-        .authenticatorAddresses
-        .into_iter()
-        .map(|a| format!("0x{:x}", a))
-        .collect();
-    let offchain_signer_commitment_hex = format!("0x{:x}", ev.offchainSignerCommitment);
-
-    Ok(DecodedAccountCreated {
-        account_index_hex,
-        recovery_address_bytes,
-        authenticator_addresses_hex,
-        offchain_signer_commitment_hex,
+    Ok(AccountCreatedEvent {
+        account_index: typed.data.accountIndex,
+        recovery_address: typed.data.recoveryAddress,
+        authenticator_addresses: typed.data.authenticatorAddresses,
+        authenticator_pubkeys: typed.data.authenticatorPubkeys,
+        offchain_signer_commitment: typed.data.offchainSignerCommitment,
     })
-}
-
-fn hex_to_u256(hex_str: &str) -> eyre::Result<U256> {
-    let s = hex_str.trim();
-    Ok(s.parse()?)
-}
-
-fn hex_to_u64(hex_str: &str) -> eyre::Result<u64> {
-    let s = hex_str.trim();
-    let s = s.strip_prefix("0x").unwrap_or(s);
-    Ok(u64::from_str_radix(s, 16)?)
 }
 
 fn proof_to_vec(proof: &InclusionProof<PoseidonHasher>) -> Vec<U256> {
@@ -265,14 +266,11 @@ fn proof_to_vec(proof: &InclusionProof<PoseidonHasher>) -> Vec<U256> {
         .collect()
 }
 
-pub const ACCOUNT_REGISTRY_TREE_DEPTH: usize = 10;
-
 // TREE_DEPTH=10 forge script script/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-pub fn deploy_account_registry(rpc_url: &str, tree_depth: usize) -> Address {
+pub fn deploy_account_registry(rpc_url: &str) -> Address {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cmd.current_dir(dir.join("../contracts"))
-        .env("TREE_DEPTH", tree_depth.to_string())
         .arg("script")
         .arg("script/AccountRegistry.s.sol")
         .arg("--rpc-url")
@@ -334,6 +332,13 @@ impl AuthenticatorSigner {
 
     pub fn offchain_signer_pubkey(&self) -> EdDSAPublicKey {
         self.offchain_signer.public()
+    }
+
+    pub fn offchain_pubkey_compressed(&self) -> eyre::Result<U256> {
+        let pk = self.offchain_signer_pubkey().pk;
+        let mut compressed_bytes = Vec::new();
+        pk.serialize_compressed(&mut compressed_bytes)?;
+        Ok(U256::from_le_slice(&compressed_bytes))
     }
 }
 
@@ -456,7 +461,7 @@ impl Authenticator {
             .createAccount(
                 address!("0x000000000000000000000000000000000000ABCD"),
                 vec![self.signer.onchain_signer_address()],
-                vec![ark_babyjubjub::Fq::from(123456789).into()],
+                vec![self.signer.offchain_pubkey_compressed()?],
                 leaf_hash.into(),
             )
             .send()

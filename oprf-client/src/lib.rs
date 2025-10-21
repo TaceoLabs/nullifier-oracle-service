@@ -44,6 +44,7 @@ use oprf_core::{
     ddlog_equality::DLogEqualityCommitments,
     proof_input_gen::{nullifier::NullifierProofInput, query::QueryProofInput},
 };
+use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
@@ -68,9 +69,6 @@ pub use types::MerkleMembership;
 pub use types::OprfQuery;
 pub use types::UserKeyMaterial;
 
-/// The maximal depth of the merkle-tree that persists users.
-pub const MAX_DEPTH: usize = 30;
-
 type Result<T> = std::result::Result<T, Error>;
 
 /// General error type for the OPRF client.
@@ -94,14 +92,6 @@ pub enum Error {
         n: usize,
         /// expected threshold
         threshold: usize,
-    },
-    /// Merkle membership proof does not have the expected number of siblings.
-    #[error("invalid merkle length, expected {expected}, but is {is}")]
-    InvalidSiblingsLength {
-        /// actual siblings
-        is: usize,
-        /// expected length
-        expected: usize,
     },
     /// The DLog equality proof failed verification.
     #[error("DLog proof could not be verified")]
@@ -135,7 +125,7 @@ pub struct SignedOprfQuery {
     query: OprfQuery,
     groth16_material: Groth16Material,
     blinded_request: BlindedOPrfRequest,
-    query_proof_input: QueryProofInput<MAX_DEPTH>,
+    query_proof_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
 }
 
@@ -195,7 +185,7 @@ pub struct Challenge {
     blinded_request: BlindedOPrfRequest,
     groth16_material: Groth16Material,
     blinded_response: ark_babyjubjub::EdwardsAffine,
-    query_proof_input: QueryProofInput<MAX_DEPTH>,
+    query_proof_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
     rp_nullifier_key: RpNullifierKey,
 }
@@ -266,7 +256,6 @@ impl SignedOprfQuery {
 /// # Errors
 ///
 /// Returns [`Error`] in the following cases:
-/// * `InvalidSiblingsLength` – the Merkle proof length does not match `MAX_DEPTH`.
 /// * `InvalidPublicKeyIndex` – the user key index is out of range.
 /// * `InvalidDLogProof` – the DLog equality proof could not be verified.
 /// * Other errors may propagate from network requests, proof generation, or Groth16 verification.
@@ -336,7 +325,6 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 /// # Errors
 ///
 /// Returns an [`Error`] if:
-/// - The Merkle tree siblings length does not match [`MAX_DEPTH`].
 /// - The public key index is out of bounds.
 /// - Groth16 proof generation fails.
 ///
@@ -355,12 +343,6 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     request_id: Uuid,
     rng: &mut R,
 ) -> Result<SignedOprfQuery> {
-    if merkle_membership.siblings.len() != MAX_DEPTH {
-        return Err(Error::InvalidSiblingsLength {
-            expected: MAX_DEPTH,
-            is: merkle_membership.siblings.len(),
-        });
-    }
     if key_material.pk_index >= MAX_PUBLIC_KEYS as u64 {
         return Err(Error::InvalidPublicKeyIndex(key_material.pk_index));
     }
@@ -374,7 +356,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query_hash, rng);
     let signature = key_material.sk.sign(blinding_factor.query());
 
-    let query_input = QueryProofInput::<MAX_DEPTH> {
+    let query_input = QueryProofInput::<TREE_DEPTH> {
         pk: key_material.pk_batch.into_proof_input(),
         pk_index: key_material.pk_index.into(),
         s: signature.s,
@@ -394,7 +376,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         ],
         current_time_stamp: query.current_time_stamp.into(),
         merkle_root: merkle_membership.root.into_inner(),
-        depth: merkle_membership.depth.into(),
+        depth: ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
         mt_index: merkle_membership.mt_index.into(),
         siblings: merkle_membership.siblings,
         beta: blinding_factor.beta(),
@@ -424,7 +406,6 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
             signature: query.nonce_signature,
             cred_pk: credentials_signature.issuer,
             current_time_stamp: query.current_time_stamp,
-            merkle_depth: merkle_membership.depth,
         },
         blinded_request,
         query,

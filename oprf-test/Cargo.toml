@@ -16,6 +16,7 @@ ark-babyjubjub = { workspace = true }
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
+ark-serialize.workspace = true
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
@@ -41,5 +42,6 @@ semaphore-rs-hasher = "0.5.0"
 semaphore-rs-trees = "0.5.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+take_mut = "0.2.2"
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true

@@ -7,7 +7,7 @@ import {CredentialSchemaIssuerRegistry} from "world-id-protocol/src/CredentialSc
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
-uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 10;
+uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 30;
 
 interface IGroth16VerifierKeyGen13 {
     function verifyProof(

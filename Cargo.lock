@@ -4751,6 +4751,7 @@ dependencies = [
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
  "aws-config",
  "aws-sdk-secretsmanager",
  "axum",
@@ -4776,6 +4777,7 @@ dependencies = [
  "semaphore-rs-trees",
  "serde",
  "serde_json",
+ "take_mut",
  "tokio",
  "tracing",
 ]
@@ -6321,6 +6323,12 @@ dependencies = [
  "thiserror 1.0.69",
  "walkdir",
 ]
+
+[[package]]
+name = "take_mut"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f764005d11ee5f36500a149ace24e00e3da98b0158b3e2d53a7495660d3f4d60"
 
 [[package]]
 name = "tap"
