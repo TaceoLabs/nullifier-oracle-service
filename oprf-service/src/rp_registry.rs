@@ -9,7 +9,6 @@ use alloy::{
     sol,
 };
 use ark_ec::AffineRepr as _;
-use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context as _;
 use k256::EncodedPoint;
 use oprf_types::{
@@ -19,6 +18,7 @@ use oprf_types::{
         RpSecretGenCiphertexts, RpSecretGenCommitment,
     },
 };
+use oprf_zk::groth16_serde::Groth16Proof;
 
 // Codegen from ABI file to interact with the contract.
 sol!(

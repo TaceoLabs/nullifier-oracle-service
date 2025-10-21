@@ -3,8 +3,6 @@ use std::str::FromStr;
 use ark_ec::{AffineRepr as _, CurveGroup as _};
 use serde::{Serializer, de, ser::SerializeSeq as _};
 
-pub mod groth16;
-
 #[derive(Debug, thiserror::Error)]
 pub enum SerializationError {
     #[error("invalid data")]

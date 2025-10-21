@@ -20,10 +20,10 @@
 use std::{fs::File, str::FromStr, sync::Arc};
 
 use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
-use ark_serde_compat::groth16::Groth16VerificationKey;
 use axum::extract::FromRef;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
+use oprf_zk::{Groth16Material, groth16_serde::Groth16VerificationKey};
 use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -126,14 +126,9 @@ pub async fn start(
 
     tracing::info!("init crypto device..");
     let crypto_device = Arc::new(
-        CryptoDevice::init(
-            secret_manager,
-            peer_public_keys.clone(),
-            &config.key_gen_zkey_path,
-            &config.key_gen_witness_graph_path,
-        )
-        .await
-        .context("while initiating crypto-device")?,
+        CryptoDevice::init(secret_manager, peer_public_keys.clone())
+            .await
+            .context("while initiating crypto-device")?,
     );
 
     let peer_public_key = crypto_device.peer_public_key();
@@ -176,10 +171,16 @@ pub async fn start(
     );
 
     tracing::info!("spawning chain event handler..");
+    let key_gen_material = Groth16Material::new(
+        &config.key_gen_zkey_path,
+        None,
+        &config.key_gen_witness_graph_path,
+    )?;
     let event_handler = ChainEventHandler::spawn(
         key_gen_watcher,
         Arc::clone(&crypto_device),
         cancellation_token.clone(),
+        key_gen_material,
     );
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
@@ -276,17 +277,16 @@ mod tests {
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
-    use ark_ff::{BigInteger as _, PrimeField as _, UniformRand};
-    use ark_serde_compat::groth16::Groth16VerificationKey;
+    use ark_ff::{BigInteger as _, PrimeField as _, UniformRand, Zero};
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
-    use oprf_client::zk::Groth16Material;
-    use oprf_client::{MerkleMembership, OprfQuery};
+    use oprf_client::{MAX_PUBLIC_KEYS, MerkleMembership, OprfQuery};
     use oprf_core::ddlog_equality::DLogEqualityCommitments;
-    use oprf_core::proof_input_gen::query::QueryProofInput;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::crypto::{PeerPublicKeyList, RpNullifierKey};
     use oprf_types::{MerkleRoot, RpId, ShareEpoch, TREE_DEPTH};
+    use oprf_zk::{Groth16Material, QUERY_FINGERPRINT, QUERY_GRAPH_BYTES};
+    use poseidon2::Poseidon2;
     use rand::Rng as _;
     use uuid::Uuid;
 
@@ -298,6 +298,46 @@ mod tests {
     };
 
     use super::*;
+
+    const PK_DS: &[u8] = b"World ID PK";
+
+    fn merkle_root_from_pks(
+        pks: &[ark_babyjubjub::EdwardsAffine; MAX_PUBLIC_KEYS],
+        siblings: &[ark_babyjubjub::Fq; TREE_DEPTH],
+        index: u64,
+    ) -> ark_babyjubjub::Fq {
+        // Hash pk
+        let poseidon2_16 = Poseidon2::<_, 16, 5>::default();
+        let mut input = array::from_fn(|_| ark_babyjubjub::Fq::zero());
+        input[0] = ark_babyjubjub::Fq::from_be_bytes_mod_order(PK_DS);
+        for (i, pk) in pks.iter().enumerate() {
+            input[1 + i * 2] = pk.x;
+            input[1 + i * 2 + 1] = pk.y;
+        }
+        let leaf = poseidon2_16.permutation(&input)[1];
+        merkle_root(leaf, siblings, index)
+    }
+
+    fn merkle_root(
+        leaf: ark_babyjubjub::Fq,
+        siblings: &[ark_babyjubjub::Fq; TREE_DEPTH],
+        mut index: u64,
+    ) -> ark_babyjubjub::Fq {
+        let mut current_hash = leaf;
+
+        // Merkle chain
+        let poseidon2_2 = Poseidon2::<_, 2, 5>::default();
+        for s in siblings {
+            if index & 1 == 0 {
+                current_hash = poseidon2_2.permutation(&[current_hash, *s])[0] + current_hash;
+            } else {
+                current_hash = poseidon2_2.permutation(&[*s, current_hash])[0] + s;
+            }
+            index >>= 1;
+        }
+
+        current_hash
+    }
 
     struct TestSetup {
         server: TestServer,
@@ -315,8 +355,8 @@ mod tests {
             let siblings: [ark_babyjubjub::Fq; TREE_DEPTH] =
                 array::from_fn(|_| ark_babyjubjub::Fq::rand(&mut rng));
             let mt_index = rng.gen_range(0..(1 << TREE_DEPTH)) as u64;
-            let merkle_root = MerkleRoot::new(QueryProofInput::merkle_root_from_pks(
-                &key_material.pk_batch.clone().into_proof_input(),
+            let merkle_root = MerkleRoot::new(merkle_root_from_pks(
+                &key_material.pk_batch.clone().into_inner(),
                 &siblings,
                 mt_index,
             ));
@@ -337,9 +377,10 @@ mod tests {
             msg.extend(current_time_stamp.to_le_bytes());
             let signature = rp_signing_key.sign(&msg);
 
-            let groth16_material = Groth16Material::new(
-                dir.join("../circom/main/OPRFQueryProof.zkey"),
-                dir.join("../circom/main/OPRFNullifierProof.zkey"),
+            let query_material = Groth16Material::from_bytes(
+                &std::fs::read(dir.join("../circom/query.zkey"))?,
+                QUERY_FINGERPRINT.into(),
+                QUERY_GRAPH_BYTES,
             )?;
 
             let merkle_membership = MerkleMembership {
@@ -364,7 +405,7 @@ mod tests {
             let signed_query = oprf_client::sign_oprf_query(
                 credential_signature,
                 merkle_membership,
-                groth16_material,
+                &query_material,
                 oprf_query,
                 key_material,
                 request_id,
@@ -395,19 +436,16 @@ mod tests {
                     ),
                 )]),
             ));
-            let graph = PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../keygen_graph.bin");
-            let zkey = PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../keygen_13.zkey");
 
             let crypto_device = Arc::new(
-                CryptoDevice::init(secret_manager, PeerPublicKeyList::from(vec![]), zkey, graph)
-                    .await?,
+                CryptoDevice::init(secret_manager, PeerPublicKeyList::from(vec![])).await?,
             );
             let max_merkle_store_size = 10;
             let merkle_watcher = Arc::new(TestMerkleWatcher::new(
                 HashMap::from([(merkle_root, 0)]),
                 max_merkle_store_size,
             )?);
-            let user_verification_key_path = dir.join("../circom/main/OPRFQueryProof.vk.json");
+            let user_verification_key_path = dir.join("../circom/query.vk.json");
             let vk = File::open(&user_verification_key_path)?;
             let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);

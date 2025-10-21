@@ -281,38 +281,6 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         println!("id_commitment: {}n,", self.id_commitment);
         println!("nullifier: {}n,", self.nullifier);
     }
-
-    pub fn json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "user_pk": self.user_pk.iter().map(|pk| [pk[0].to_string(), pk[1].to_string()]).collect::<Vec<_>>(),
-            "pk_index": self.pk_index.to_string(),
-            "query_s": self.query_s.to_string(),
-            "query_r": [self.query_r[0].to_string(), self.query_r[1].to_string()],
-            "cred_type_id": self.cred_type_id.to_string(),
-            "cred_pk": [self.cred_pk[0].to_string(), self.cred_pk[1].to_string()],
-            "cred_hashes": [self.cred_hashes[0].to_string(), self.cred_hashes[1].to_string()],
-            "cred_genesis_issued_at": self.cred_genesis_issued_at.to_string(),
-            "cred_expires_at": self.cred_expires_at.to_string(),
-            "cred_s": self.cred_s.to_string(),
-            "cred_r": [self.cred_r[0].to_string(), self.cred_r[1].to_string()],
-            "current_time_stamp": self.current_time_stamp.to_string(),
-            "merkle_root": self.merkle_root.to_string(),
-            "depth": self.depth.to_string(),
-            "mt_index": self.mt_index.to_string(),
-            "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-            "beta": self.beta.to_string(),
-            "rp_id": self.rp_id.to_string(),
-            "action": self.action.to_string(),
-            "dlog_e": self.dlog_e.to_string(),
-            "dlog_s": self.dlog_s.to_string(),
-            "oprf_pk": [self.oprf_pk[0].to_string(), self.oprf_pk[1].to_string()],
-            "oprf_response_blinded": [self.oprf_response_blinded[0].to_string(), self.oprf_response_blinded[1].to_string()],
-            "oprf_response": [self.oprf_response[0].to_string(), self.oprf_response[1].to_string()],
-            "signal_hash": self.signal_hash.to_string(),
-            "nonce": self.nonce.to_string(),
-            "id_commitment_r": self.id_commitment_r.to_string()
-        })
-    }
 }
 
 #[cfg(test)]

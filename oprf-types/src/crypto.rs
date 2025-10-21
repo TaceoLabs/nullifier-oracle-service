@@ -14,7 +14,7 @@
 
 use std::{fmt, ops::Index};
 
-use ark_serde_compat::groth16::Groth16Proof;
+use oprf_zk::groth16_serde::Groth16Proof;
 use serde::{Deserialize, Serialize};
 
 /// The party id of the OPRF-Peer.
@@ -58,9 +58,9 @@ pub struct UserPublicKeyBatch {
 }
 
 impl UserPublicKeyBatch {
-    /// Converts this batch into a proof input format, which is an array of pairs of coordinates.
-    pub fn into_proof_input(self) -> [[ark_babyjubjub::Fq; 2]; 7] {
-        self.values.map(|p| [p.x, p.y])
+    /// Convert to inner `[ark_babyjubjub::EdwardsAffine; 7]`.
+    pub fn into_inner(self) -> [ark_babyjubjub::EdwardsAffine; 7] {
+        self.values
     }
 }
 

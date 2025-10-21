@@ -48,7 +48,7 @@ async fn start_service(
         max_concurrent_jobs: 100000,
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
-        user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
+        user_verification_key_path: dir.join("../circom/query.vk.json"),
         private_key_secret_id: format!("oprf/sk/n{id}"),
         rp_secret_id_suffix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
@@ -58,8 +58,8 @@ async fn start_service(
         account_registry_contract,
         wallet_private_key: wallet_private_key.into(),
         chain_ws_rpc_url: chain_ws_rpc_url.to_string(),
-        key_gen_witness_graph_path: dir.join("../keygen_graph.bin"),
-        key_gen_zkey_path: dir.join("../keygen_13.zkey"),
+        key_gen_witness_graph_path: dir.join("../circom/keygen_graph.bin"),
+        key_gen_zkey_path: dir.join("../circom/keygen_13.zkey"),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
