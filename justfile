@@ -117,7 +117,7 @@ run-dev-client *args:
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 deploy-rp-registry-with-deps-dry-run *args: 
-    forge script RpRegistryWithDeps.s.sol --interactives 1 -vvvvv {{args}}
+    forge script RpRegistryWithDeps.s.sol -vvvvv {{args}}
 
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
@@ -127,7 +127,7 @@ deploy-rp-registry-with-deps *args:
 [group: 'deploy']
 [working-directory: 'contracts/script/test']
 deploy-account-registry-dry-run *args: 
-    forge script AccountRegistry.s.sol --interactives 1 -vvvvv {{args}}
+    forge script AccountRegistry.s.sol -vvvvv {{args}}
 
 [group: 'deploy']
 [working-directory: 'contracts/script/test']
@@ -138,12 +138,22 @@ deploy-account-registry *args:
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 register-participants *args: 
-    forge script RegisterParticipants.s.sol --broadcast -vvvvv *args
+    forge script RegisterParticipants.s.sol --broadcast --interactives 1 -vvvvv {{args}}
 
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 register-participants-dry-run *args: 
-    forge script RegisterParticipants.s.sol -vvvvv *args
+    forge script RegisterParticipants.s.sol -vvvvv {{args}}
+
+[group: 'deploy']
+[working-directory: 'contracts/script/test']
+create-account-auth-tree *args: 
+    forge script CreateAccount.s.sol --broadcast --interactives 1 -vvvvv {{args}}
+
+[group: 'deploy']
+[working-directory: 'contracts/script/test']
+create-account-auth-tree-dry-run *args: 
+    forge script CreateAccount.s.sol -vvvvv {{args}}
 
 
 [group: 'anvil']
@@ -166,7 +176,10 @@ deploy-account-registry-anvil:
 register-participants-anvil: 
     KEY_GEN_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9   ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-
+[group: 'anvil']
+[working-directory: 'contracts/script/test']
+create-account-auth-tree-anvil: 
+    ACCOUNT_REGISTRY=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 forge script CreateAccount.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group: 'docker']
 build-push-docker-image-oprf-service-amd TAG:
