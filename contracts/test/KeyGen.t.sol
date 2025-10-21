@@ -4,7 +4,8 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {KeyGen} from "../src/KeyGen.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
-import {Groth16Verifier} from "../src/Groth16Verifier.sol";
+import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
+import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {Types} from "../src/Types.sol";
 
 contract KeyGenTest is Test {
@@ -12,7 +13,8 @@ contract KeyGenTest is Test {
 
     KeyGen public gen;
     BabyJubJub public accumulator;
-    Groth16Verifier public verifier;
+    Groth16VerifierKeyGen13 public verifierKeyGen;
+    Groth16VerifierNullifier public verifierNullifier;
 
     address alice = address(0x1);
     address bob = address(0x2);
@@ -63,8 +65,9 @@ contract KeyGenTest is Test {
 
     function setUp() public {
         accumulator = new BabyJubJub();
-        verifier = new Groth16Verifier();
-        gen = new KeyGen(taceoAdmin, address(verifier), address(accumulator), 2, 3);
+        verifierKeyGen = new Groth16VerifierKeyGen13();
+        verifierNullifier = new Groth16VerifierNullifier();
+        gen = new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         // register participants for runs later
         address[] memory peerAddresses = new address[](3);
@@ -81,9 +84,11 @@ contract KeyGenTest is Test {
     }
 
     function testConstructedCorrectly() public {
-        KeyGen genTest = new KeyGen(taceoAdmin, address(verifier), address(accumulator), 2, 3);
+        KeyGen genTest =
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
         assertEq(genTest.taceoAdmin(), taceoAdmin);
-        assertEq(address(genTest.verifier()), address(verifier));
+        assertEq(address(genTest.keyGenVerifier()), address(verifierKeyGen));
+        assertEq(address(genTest.nullifierVerifier()), address(verifierNullifier));
         assertEq(address(genTest.accumulator()), address(accumulator));
         assertEq(genTest.threshold(), 2);
         assertEq(genTest.numPeers(), 3);
@@ -93,7 +98,8 @@ contract KeyGenTest is Test {
     }
 
     function testRegisterParticipants() public {
-        KeyGen genTest = new KeyGen(taceoAdmin, address(verifier), address(accumulator), 2, 3);
+        KeyGen genTest =
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -146,7 +152,8 @@ contract KeyGenTest is Test {
     }
 
     function testRegisterParticipantsNotTACEO() public {
-        KeyGen genTest = new KeyGen(taceoAdmin, address(verifier), address(accumulator), 2, 3);
+        KeyGen genTest =
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -178,7 +185,8 @@ contract KeyGenTest is Test {
     }
 
     function testRegisterParticipantsWrongNumberKeys() public {
-        KeyGen genTest = new KeyGen(taceoAdmin, address(verifier), address(accumulator), 2, 3);
+        KeyGen genTest =
+            new KeyGen(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
         address[] memory peerAddressesCorrect = new address[](3);
         peerAddressesCorrect[0] = alice;
         peerAddressesCorrect[1] = bob;
@@ -292,8 +300,8 @@ contract KeyGenTest is Test {
         assertEq(material.ecdsaKey.yParity, 2);
     }
 
-    function aliceProof() public pure returns (Types.Groth16ProofKeyGen13 memory) {
-        return Types.Groth16ProofKeyGen13({
+    function aliceProof() public pure returns (Types.Groth16Proof memory) {
+        return Types.Groth16Proof({
             pA: [
                 0x0730d45e94d07a4b54f225fd0d0b89bae66f89d8731f9cc50f6a87e072871ea6,
                 0x2f20d1bdef6a6417b268bd954cd8e1d4be12d4cd51fa05eb9b76b990f931fe7f
@@ -315,8 +323,8 @@ contract KeyGenTest is Test {
         });
     }
 
-    function bobProof() public pure returns (Types.Groth16ProofKeyGen13 memory) {
-        return Types.Groth16ProofKeyGen13({
+    function bobProof() public pure returns (Types.Groth16Proof memory) {
+        return Types.Groth16Proof({
             pA: [
                 0x1775f93c20a9d661e64c77d5b926242dc180f504878e185b3df0e2ae078c66dc,
                 0x26d55220a7396de0477d01d9e72163d74b6b3b1642ed262bbcfce6ec250739ff
@@ -338,8 +346,8 @@ contract KeyGenTest is Test {
         });
     }
 
-    function carolProof() public pure returns (Types.Groth16ProofKeyGen13 memory) {
-        return Types.Groth16ProofKeyGen13({
+    function carolProof() public pure returns (Types.Groth16Proof memory) {
+        return Types.Groth16Proof({
             pA: [
                 0x01c16ff2a1a1768ae54f6227eeb4b1d75a30bd4e5903a344b811086a97abd7a9,
                 0x262a56b0984658af82b7bdc5ee162a173a5b4292693ef05f38ff82131c37f87d

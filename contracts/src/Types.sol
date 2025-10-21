@@ -16,7 +16,7 @@ library Types {
     }
 
     struct Round2Contribution {
-        Groth16ProofKeyGen13 proof;
+        Groth16Proof proof;
         // Hash of the polynomial created by participant
         SecretGenCiphertext[] ciphers;
     }
@@ -40,7 +40,7 @@ library Types {
         bool exists;
     }
 
-    struct Groth16ProofKeyGen13 {
+    struct Groth16Proof {
         uint256[2] pA;
         uint256[2][2] pB;
         uint256[2] pC;

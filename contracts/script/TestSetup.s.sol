@@ -3,7 +3,8 @@ pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
 import {KeyGen} from "../src/KeyGen.sol";
-import {Groth16Verifier} from "../src/Groth16Verifier.sol";
+import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
+import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
 import {Types} from "../src/Types.sol";
 
@@ -14,9 +15,15 @@ contract KeyGenScript is Script {
 
     function setUp() public {}
 
-    function deployGroth16Verifier() public returns (address) {
-        Groth16Verifier verifier = new Groth16Verifier();
-        console.log("Groth16Verifier deployed to:", address(verifier));
+    function deployGroth16VerifierKeyGen() public returns (address) {
+        Groth16VerifierKeyGen13 verifier = new Groth16VerifierKeyGen13();
+        console.log("Groth16VerifierKeyGen13 deployed to:", address(verifier));
+        return address(verifier);
+    }
+
+    function deployGroth16VerifierNullifier() public returns (address) {
+        Groth16VerifierNullifier verifier = new Groth16VerifierNullifier();
+        console.log("Groth16VerifierNullifier deployed to:", address(verifier));
         return address(verifier);
     }
 
@@ -30,7 +37,8 @@ contract KeyGenScript is Script {
         vm.startBroadcast();
 
         address accumulatorAddress = deployAccumulator();
-        address verifierAddress = deployGroth16Verifier();
+        address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
+        address nullifierVerifierAddress = deployGroth16VerifierNullifier();
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
         uint256 aliceX = vm.envUint("ALICE_PK_X");
         uint256 aliceY = vm.envUint("ALICE_PK_Y");
@@ -51,7 +59,7 @@ contract KeyGenScript is Script {
 
         Types.BabyJubJubElement memory publicKeyCarol = Types.BabyJubJubElement({x: carolX, y: carolY});
 
-        gen = new KeyGen(taceoAdminAddress, verifierAddress, accumulatorAddress, 2, 3);
+        gen = new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3);
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = aliceAddress;

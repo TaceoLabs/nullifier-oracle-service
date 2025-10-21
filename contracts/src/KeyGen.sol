@@ -3,8 +3,11 @@ pragma solidity ^0.8.20;
 
 import "./Types.sol";
 import {console} from "forge-std/Script.sol";
+import {CredentialSchemaIssuerRegistry} from "world-id-protocol/src/CredentialSchemaIssuerRegistry.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
+uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
+uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 10;
 
 interface IGroth16VerifierKeyGen13 {
     function verifyProof(
@@ -12,6 +15,15 @@ interface IGroth16VerifierKeyGen13 {
         uint256[2][2] calldata _pB,
         uint256[2] calldata _pC,
         uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] calldata _pubSignals
+    ) external view returns (bool);
+}
+
+interface IGroth16VerifierNullifier {
+    function verifyProof(
+        uint256[2] calldata _pA,
+        uint256[2][2] calldata _pB,
+        uint256[2] calldata _pC,
+        uint256[PUBLIC_INPUT_LENGTH_NULLIFIER] calldata _pubSignals
     ) external view returns (bool);
 }
 
@@ -28,6 +40,7 @@ contract KeyGen {
     using Types for Types.Round1Contribution;
     using Types for Types.RpMaterial;
     using Types for Types.RpNullifierGenState;
+    using Types for Types.Groth16Proof;
     // Gets set to ready state once OPRF participants are registered
 
     bool public isContractReady;
@@ -36,7 +49,8 @@ contract KeyGen {
     //**IMPORTANT** If this key gets lost or the entity controlling this key
     // goes offline then effectively the system halts...
     address public immutable taceoAdmin;
-    IGroth16VerifierKeyGen13 public immutable verifier;
+    IGroth16VerifierKeyGen13 public immutable keyGenVerifier;
+    IGroth16VerifierNullifier public immutable nullifierVerifier;
     IBabyJubJub public immutable accumulator;
     uint256 public immutable threshold;
     uint256 public immutable numPeers;
@@ -68,11 +82,13 @@ contract KeyGen {
     error UnexpectedAmountPeers(uint256 expectedParties);
     error BadContribution();
     error InvalidProof();
+    error OutdatedNullifier();
     error UnknownId(uint128 id);
 
     constructor(
         address _taceoAdmin,
-        address _verifierAddress,
+        address _keyGenVerifierAddress,
+        address _nullifierVerifierAddress,
         address _accumulatorAddress,
         uint256 _threshold,
         uint256 _numPeers
@@ -80,7 +96,8 @@ contract KeyGen {
         require(_numPeers >= 3);
         require(_threshold <= _numPeers);
         taceoAdmin = _taceoAdmin;
-        verifier = IGroth16VerifierKeyGen13(_verifierAddress);
+        keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
+        nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
         threshold = _threshold;
         numPeers = _numPeers;
@@ -125,6 +142,67 @@ contract KeyGen {
 
         // Emit Round1 event for everyone
         emit Types.SecretGenRound1(rpId, threshold);
+    }
+
+    // ==================================
+    //        Public FUNCTIONS
+    // ==================================
+    function verifyNullifierProof(
+        uint256 nullifier,
+        uint256 nullifierAction,
+        uint128 rpId,
+        uint256 identityCommitment,
+        uint256 nonce,
+        uint256 signalHash,
+        uint256 authenticatorMerkleRoot,
+        uint256 proofTimestamp,
+        CredentialSchemaIssuerRegistry.Pubkey calldata credentialPublicKey,
+        Types.Groth16Proof calldata proof
+    ) external view isReady returns (bool) {
+        // do not allow proofs from the future
+        if (proofTimestamp > block.timestamp) {
+            revert OutdatedNullifier();
+        }
+        // do not allow proofs older than 5 hours
+        if (proofTimestamp + 5 hours < block.timestamp) {
+            revert OutdatedNullifier();
+        }
+
+        // check if we have a valid rp id and get the rp material if so
+        Types.BabyJubJubElement memory rpKey = getRpNullifierKey(rpId);
+
+        // for this specific proof, we have 13 public signals
+        // [0]: identity commitment
+        // [1]: nullifier
+        // [2]: credential public key x coordinate
+        // [3]: credential public key y coordinate
+        // [4]: current time stamp
+        // [5]: Authenticator merkle tree root hash
+        // [6]: Current depth of the Authenticator merkle tree
+        // [7]: RP ID
+        // [8]: Nullifier action
+        // [9]: RP OPRF public key x coordinate
+        // [10]: RP OPRF public key y coordinate
+        // [11]: signal hash
+        // [12]: nonce for the RP signature
+        // use calldata since we set it once
+        uint256[13] memory pubSignals;
+
+        pubSignals[0] = identityCommitment;
+        pubSignals[1] = nullifier;
+        pubSignals[2] = credentialPublicKey.x;
+        pubSignals[3] = credentialPublicKey.y;
+        pubSignals[4] = proofTimestamp;
+        pubSignals[5] = authenticatorMerkleRoot;
+        pubSignals[6] = AUTHENTICATOR_MERKLE_TREE_DEPTH;
+        pubSignals[7] = uint256(rpId);
+        pubSignals[8] = nullifierAction;
+        pubSignals[9] = rpKey.x;
+        pubSignals[10] = rpKey.y;
+        pubSignals[11] = signalHash;
+        pubSignals[12] = nonce;
+
+        return nullifierVerifier.verifyProof(proof.pA, proof.pB, proof.pC, pubSignals);
     }
 
     // ==================================
@@ -203,7 +281,9 @@ contract KeyGen {
         }
         _tryEmitRound3Event(rpId, st);
         // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
-        if (!verifier.verifyProof(data.proof.pA, data.proof.pB, data.proof.pC, publicInputs)) revert InvalidProof();
+        if (!keyGenVerifier.verifyProof(data.proof.pA, data.proof.pB, data.proof.pC, publicInputs)) {
+            revert InvalidProof();
+        }
     }
 
     function addRound3Contribution(uint128 rpId) external isReady {
@@ -270,7 +350,7 @@ contract KeyGen {
         return peerPublicKeys;
     }
 
-    function getRpNullifierKey(uint128 rpId) external view isReady returns (Types.BabyJubJubElement memory) {
+    function getRpNullifierKey(uint128 rpId) public view isReady returns (Types.BabyJubJubElement memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId].nullifierKey;
