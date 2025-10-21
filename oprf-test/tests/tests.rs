@@ -16,7 +16,7 @@ use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Materia
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::{KeyGen, Types};
 use oprf_test::world_id_protocol_mock::Authenticator;
-use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, init_rp_registry};
+use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
@@ -44,7 +44,8 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
     println!("Deploying KeyGen contract...");
-    let key_gen_contract = init_rp_registry::start(&anvil.ws_endpoint(), "oprf/sk", true).await?;
+    let key_gen_contract =
+        test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
     println!("deployed at address: {key_gen_contract}");
 
     println!("Starting AuthTreeIndexer...");

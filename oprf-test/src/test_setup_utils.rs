@@ -16,14 +16,20 @@ use crate::{
     TACEO_ADMIN_PRIVATE_KEY, rp_registry_scripts,
 };
 
-pub async fn start(
+pub async fn deploy_and_keygen(
     ws_rps_url: &str,
     private_key_secret_id_prefix: &str,
     overwrite_old_keys: bool,
 ) -> eyre::Result<Address> {
     let peer_public_keys =
         generate_keys(3, private_key_secret_id_prefix, overwrite_old_keys).await?;
+    deploy_rp_registry(ws_rps_url, peer_public_keys)
+}
 
+pub fn deploy_rp_registry(
+    ws_rps_url: &str,
+    peer_public_keys: Vec<PeerPublicKey>,
+) -> eyre::Result<Address> {
     let elements = peer_public_keys
         .into_iter()
         .map(Types::BabyJubJubElement::from)
@@ -48,7 +54,7 @@ pub async fn start(
 }
 
 /// Generate and upload OPRF keys ot AWS secrets-manger
-async fn generate_keys(
+pub async fn generate_keys(
     amount_parties: usize,
     private_key_secret_id_prefix: &str,
     overwrite_old_keys: bool,

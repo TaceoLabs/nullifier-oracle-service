@@ -65,7 +65,7 @@ run-auth-tree-indexer *args:
 [private]
 run-rp-registry:
     cargo build --workspace --release
-    ./target/release/init-rp-registry-contract --overwrite-old-keys  
+    ./target/release/test-setup-helper --overwrite-old-keys --chain-ws-rpc-url ws://127.0.0.1:8545
 
 [group: 'local-setup']
 run-services:
@@ -117,12 +117,12 @@ run-dev-client *args:
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 deploy-rp-registry-with-deps-dry-run *args: 
-    forge script RpRegistryWithDeps.s.sol -vvvvv *args
+    forge script RpRegistryWithDeps.s.sol --interactives 1 -vvvvv {{args}}
 
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 deploy-rp-registry-with-deps *args: 
-    forge script RpRegistryWithDeps.s.sol --broadcast -vvvvv *args
+    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{args}}
 
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']

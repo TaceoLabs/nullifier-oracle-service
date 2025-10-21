@@ -4,8 +4,8 @@ use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
 
 pub mod credentials;
-pub mod init_rp_registry;
 pub mod rp_registry_scripts;
+pub mod test_setup_utils;
 pub mod world_id_protocol_mock;
 
 /// anvil wallet 0
