@@ -58,7 +58,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ steps.login-ecr.outputs.registry }}${{ inputs.registry-alias }}/nullifier-oracle-service/${{ inputs.image-name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
           flavor: |
             latest=false
