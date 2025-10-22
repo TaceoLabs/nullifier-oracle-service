@@ -24,6 +24,10 @@ on:
         type: string
         default: 'eu-central-1'
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 permissions:
   contents: read # Required for the checkout action
   # id-token: write # Required for OIDC authentication with AWS
@@ -45,7 +49,7 @@ jobs:
       - name: Log in to the Github Container registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
