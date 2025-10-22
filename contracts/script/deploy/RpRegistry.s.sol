@@ -27,9 +27,8 @@ contract DeployRpRegistryScript is Script {
         console.log("using key-gen verifier address:", keyGenVerifierAddress);
         console.log("using nullifier verifier address:", nullifierVerifierAddress);
 
-        RpRegistry rpRegistry = new RpRegistry(
-            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2
-        );
+        RpRegistry rpRegistry =
+            new RpRegistry(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3);
 
         vm.stopBroadcast();
         console.log("RpRegistry deployed to:", address(rpRegistry));

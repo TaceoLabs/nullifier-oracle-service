@@ -41,9 +41,8 @@ contract DeployRpRegistryWithDepsScript is Script {
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
         address nullifierVerifierAddress = deployGroth16VerifierNullifier();
-        rpRegistry = new RpRegistry(
-            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2
-        );
+        rpRegistry =
+            new RpRegistry(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3);
 
         console.log("RpRegistry deployed to:", address(rpRegistry));
     }
