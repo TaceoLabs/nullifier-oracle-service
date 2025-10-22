@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "./Types.sol";
 import {console} from "forge-std/Script.sol";
-import {CredentialSchemaIssuerRegistry} from "world-id-protocol/src/CredentialSchemaIssuerRegistry.sol";
+import {CredentialSchemaIssuerRegistry} from "@world-id-protocol/contracts/CredentialSchemaIssuerRegistry.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;

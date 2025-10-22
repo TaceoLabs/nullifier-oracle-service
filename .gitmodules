@@ -10,3 +10,6 @@
 [submodule "contracts/lib/world-id-protocol"]
 	path = contracts/lib/world-id-protocol
 	url = https://github.com/worldcoin/world-id-protocol
+[submodule "contracts/lib/openzeppelin-contracts-upgradeable"]
+	path = contracts/lib/openzeppelin-contracts-upgradeable
+	url = https://github.com/openzeppelin/openzeppelin-contracts-upgradeable

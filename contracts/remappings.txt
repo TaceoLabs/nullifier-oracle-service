@@ -1,0 +1,3 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@world-id-protocol/contracts/=lib/world-id-protocol/contracts/src/
+@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
