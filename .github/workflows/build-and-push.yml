@@ -18,7 +18,6 @@ env:
 
 permissions:
   contents: read # Required for the checkout action
-  # id-token: write # Required for OIDC authentication with AWS
   packages: write
 
 jobs:
