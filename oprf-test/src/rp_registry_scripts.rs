@@ -71,9 +71,6 @@ pub fn init_key_gen(
         .arg(taceo_admin_private_key);
     tracing::debug!("executing cmd: {:?}", cmd);
     let output = cmd.output().expect("failed to run forge script");
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("{stdout}");
     assert!(
         output.status.success(),
         "forge script failed: {}",
