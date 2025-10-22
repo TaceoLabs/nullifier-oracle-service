@@ -19,8 +19,8 @@ use oprf_client::{
     zk::Groth16Material,
 };
 use oprf_service::rp_registry::{RpRegistry, Types};
+use oprf_test::world_id_protocol_mock::InclusionProofResponse;
 use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
-use oprf_test::{TACEO_ADMIN_PRIVATE_KEY, world_id_protocol_mock::InclusionProofResponse};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
 use parking_lot::Mutex;
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -117,6 +117,10 @@ pub struct OprfDevClientConfig {
     /// rp id of already registered rp
     #[clap(long, env = "OPRF_DEV_CLIENT_RP_ID")]
     pub rp_id: Option<u128>,
+
+    /// max wait time for init key-gen to succeed.
+    #[clap(long, env = "OPRF_DEV_CLIENT_KEY_GEN_WAIT_TIME", default_value="2min", value_parser=humantime::parse_duration)]
+    pub max_wait_time_key_gen: Duration,
 
     /// Command
     #[command(subcommand)]
@@ -305,10 +309,18 @@ async fn fetch_inclusion_proof(
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     nodes_telemetry::install_tracing("info");
+    // install rustls crypto provider
+    if rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .is_err()
+    {
+        tracing::warn!("cannot install rustls crypto provider!");
+        tracing::warn!("we continue but this should not happen...");
+    };
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 
-    tracing::info!("health check for all peers and SC Mock...");
+    tracing::info!("health check for all peers...");
     let health_checks = config
         .services
         .iter()
@@ -320,7 +332,7 @@ async fn main() -> eyre::Result<()> {
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
 
-    let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)?;
+    let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
     let rp_registry = RpRegistry::init(
         &config.chain_ws_rpc_url,
@@ -331,7 +343,9 @@ async fn main() -> eyre::Result<()> {
 
     let (rp_id, rp_nullifier_key) = if let Some(rp_id) = config.rp_id {
         let rp_id = RpId::new(rp_id);
-        let rp_nullifier_key = rp_registry.fetch_rp_nullifier_key(rp_id).await?;
+        let rp_nullifier_key = rp_registry
+            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
+            .await?;
         (rp_id, rp_nullifier_key)
     } else {
         let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
@@ -343,7 +357,9 @@ async fn main() -> eyre::Result<()> {
         )?;
         tracing::info!("registered rp with rp_id: {rp_id}");
 
-        let rp_nullifier_key = rp_registry.fetch_rp_nullifier_key(rp_id).await?;
+        let rp_nullifier_key = rp_registry
+            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
+            .await?;
         (rp_id, rp_nullifier_key)
     };
 

@@ -27,6 +27,7 @@ parking_lot = { workspace = true }
 rand.workspace = true
 rand_chacha.workspace = true
 reqwest = { workspace = true }
+rustls = { workspace = true }
 secrecy.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true

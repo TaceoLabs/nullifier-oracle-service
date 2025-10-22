@@ -11,7 +11,7 @@ contract InitKeyGenScript is Script {
     KeyGen public keyGenContract;
 
     function setUp() public {
-        keyGenContract = KeyGen(vm.envAddress("KEYGEN_CONTRACT"));
+        keyGenContract = KeyGen(vm.envAddress("KEY_GEN_ADDRESS"));
     }
 
     function run() external {
@@ -22,6 +22,7 @@ contract InitKeyGenScript is Script {
         Types.EcDsaPubkeyCompressed memory ecdsaPubKey =
             Types.EcDsaPubkeyCompressed({x: bytes32(ecdsaKeyX), yParity: ecdsaKeyYParity});
 
+        console.log("init key-gen with sessionId", sessionId);
         vm.startBroadcast();
         keyGenContract.initKeyGen(sessionId, ecdsaPubKey);
         vm.stopBroadcast();
