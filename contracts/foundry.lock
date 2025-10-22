@@ -1,21 +1,6 @@
 {
-  "contracts/lib/forge-std": {
-    "rev": "f90623596aecbf678c41d4d45ca81ce0e43c8219"
-  },
-  "contracts/lib/openzeppelin-foundry-upgrades": {
-    "rev": "cbce1e00305e943aa1661d43f41e5ac72c662b07"
-  },
-  "contracts/lib/poseidon-solidity": {
-    "rev": "8205c97ec4a35a9adb854b70b2c9ba92668d1304"
-  },
-  "contracts/lib/world-id-protocol": {
-    "rev": "7728889394db47079988d9d34dfa15c84a2106ef"
-  },
   "lib/forge-std": {
     "rev": "17a9b2398a7d629931dc66a168a098d051d53dc6"
-  },
-  "lib/openzeppelin-contracts": {
-    "rev": "765b288a6a273f8c267adcd409094212dbd5e3cb"
   },
   "lib/openzeppelin-contracts-upgradeable": {
     "tag": {
