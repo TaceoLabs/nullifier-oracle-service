@@ -4677,6 +4677,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "clap",
  "eyre",
+ "humantime",
  "k256",
  "nodes-telemetry",
  "oprf-client",
