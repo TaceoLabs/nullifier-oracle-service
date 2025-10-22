@@ -17,6 +17,7 @@ use axum_test::TestServer;
 
 pub(crate) mod errors;
 pub(crate) mod health;
+pub(crate) mod info;
 pub(crate) mod v1;
 
 /// Builds the main API router for the OPRF peer service.
@@ -37,6 +38,7 @@ pub(crate) fn new_app(party_id: PartyId, oprf_service: OprfService) -> Router {
     Router::new()
         .nest("/api/v1", v1::build())
         .merge(health::routes())
+        .merge(info::routes())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
 }
