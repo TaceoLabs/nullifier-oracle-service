@@ -11,18 +11,6 @@ on:
         description: 'Path to the Dockerfile'
         required: true
         type: string
-      registry-type:
-        description: 'Type of the registry (e.g., public, private)'
-        type: string
-        default: 'private'
-      registry-alias:
-        description: 'Alias for the registry, prefixed with / (optional, used for public ECR)'
-        type: string
-        default: ''
-      aws-region:
-        description: 'AWS region for ECR (default: eu-central-1)' #TODO: can probably be removed if we only push to ghcr
-        type: string
-        default: 'eu-central-1'
 
 env:
   REGISTRY: ghcr.io
