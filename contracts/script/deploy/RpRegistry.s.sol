@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../../src/KeyGen.sol";
+import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
 import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
@@ -27,10 +27,11 @@ contract DeployRpRegistryScript is Script {
         console.log("using key-gen verifier address:", keyGenVerifierAddress);
         console.log("using nullifier verifier address:", nullifierVerifierAddress);
 
-        KeyGen gen =
-            new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2);
+        RpRegistry rpRegistry = new RpRegistry(
+            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3
+        );
 
         vm.stopBroadcast();
-        console.log("RpRegistry deployed to:", address(gen));
+        console.log("RpRegistry deployed to:", address(rpRegistry));
     }
 }

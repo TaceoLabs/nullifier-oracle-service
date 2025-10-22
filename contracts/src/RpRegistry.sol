@@ -33,7 +33,7 @@ interface IBabyJubJub {
     function isOnCurve(uint256 x, uint256 y) external view returns (bool);
 }
 
-contract KeyGen {
+contract RpRegistry {
     using Types for Types.BabyJubJubElement;
     using Types for Types.EcDsaPubkeyCompressed;
     using Types for Types.OprfPeer;
@@ -90,8 +90,8 @@ contract KeyGen {
         address _keyGenVerifierAddress,
         address _nullifierVerifierAddress,
         address _accumulatorAddress,
-        uint256 _numPeers,
-        uint256 _threshold
+        uint256 _threshold,
+        uint256 _numPeers
     ) {
         require(_numPeers >= 3);
         require(_threshold <= _numPeers);
@@ -99,8 +99,8 @@ contract KeyGen {
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
-        numPeers = _numPeers;
         threshold = _threshold;
+        numPeers = _numPeers;
         isContractReady = false;
     }
 

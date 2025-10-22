@@ -74,7 +74,7 @@ This command does multiple things in order:
 
 1. run the [key-gen](./oprf-service/src/bin/key-gen.rs) binary to fill the AWS secretsmanager and generate a `pubkey-list.hex` file in `contracts/script/script-data`.
 2. start `anvil`
-3. deploy the `AccountRegistry` and `KeyGen` smart contracts
+3. deploy the `AccountRegistry` and `RpRegistry` smart contracts
 4. start the [auth-tree-indexer](./oprf-test/src/bin/auth-tree-indexer.rs) binary.
 5. start 3 OPRF services/nodes
 

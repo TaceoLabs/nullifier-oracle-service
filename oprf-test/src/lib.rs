@@ -34,7 +34,7 @@ async fn start_service(
     id: usize,
     chain_ws_rpc_url: &str,
     wallet_private_key: &str,
-    key_gen_contract: Address,
+    rp_registry_contract: Address,
     account_registry_contract: Address,
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -54,7 +54,7 @@ async fn start_service(
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
-        key_gen_contract,
+        rp_registry_contract,
         account_registry_contract,
         wallet_private_key: wallet_private_key.into(),
         chain_ws_rpc_url: chain_ws_rpc_url.to_string(),

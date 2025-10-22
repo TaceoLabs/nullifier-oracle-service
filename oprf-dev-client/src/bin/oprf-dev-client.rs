@@ -18,7 +18,7 @@ use oprf_client::{
     MerkleMembership, NullifierArgs, OprfQuery, SignedOprfQuery, UserKeyMaterial, groth16::Groth16,
     zk::Groth16Material,
 };
-use oprf_service::rp_registry::{RpRegistry, Types};
+use oprf_service::rp_registry::{RpRegistryProxy, Types};
 use oprf_test::world_id_protocol_mock::InclusionProofResponse;
 use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
@@ -66,15 +66,15 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_THRESHOLD", default_value = "2")]
     pub threshold: usize,
 
-    /// The Address of the KeyGen contract.
+    /// The Address of the RpRegistry contract.
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_KEY_GEN_CONTRACT",
+        env = "OPRF_DEV_CLIENT_RP_REGISTRY_CONTRACT",
         default_value = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
     )]
-    pub key_gen_contract: Address,
+    pub rp_registry_contract: Address,
 
-    /// The Address of the KeyGen contract.
+    /// The Address of the AccountRegistry contract.
     #[clap(
         long,
         env = "OPRF_DEV_CLIENT_ACCOUNT_REGISTRY_CONTRACT",
@@ -482,9 +482,9 @@ async fn main() -> eyre::Result<()> {
 
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
-    let rp_registry = RpRegistry::init(
+    let rp_registry = RpRegistryProxy::init(
         &config.chain_ws_rpc_url,
-        config.key_gen_contract,
+        config.rp_registry_contract,
         wallet.clone(),
     )
     .await?;
@@ -499,7 +499,7 @@ async fn main() -> eyre::Result<()> {
         let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
         let rp_id = rp_registry_scripts::init_key_gen(
             &config.chain_ws_rpc_url,
-            config.key_gen_contract,
+            config.rp_registry_contract,
             rp_pk,
             config.taceo_private_key.expose_secret(),
         )?;

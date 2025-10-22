@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../../src/KeyGen.sol";
+import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
 import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
@@ -11,12 +11,12 @@ import {Types} from "../../src/Types.sol";
 contract RegisterParticipantScript is Script {
     using Types for Types.BabyJubJubElement;
 
-    KeyGen public gen;
+    RpRegistry public rpRegistry;
 
     function setUp() public {
         address keyGenAddress = vm.envAddress("KEY_GEN_ADDRESS");
-        console.log("register Participants for KeyGen contract at:", keyGenAddress);
-        gen = KeyGen(keyGenAddress);
+        console.log("register Participants for RpRegistry contract at:", keyGenAddress);
+        rpRegistry = RpRegistry(keyGenAddress);
     }
 
     function run() public {
@@ -54,10 +54,10 @@ contract RegisterParticipantScript is Script {
         console.log("bob address:", bobAddress);
         console.log("carol address:", carolAddress);
 
-        gen.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
 
         // check that contract is ready
-        assert(gen.isContractReady());
+        assert(rpRegistry.isContractReady());
         vm.stopBroadcast();
         console.log("Contract is ready!");
     }

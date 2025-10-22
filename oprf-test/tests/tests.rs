@@ -14,7 +14,7 @@ use eyre::Context as _;
 use groth16::Groth16;
 use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
-use oprf_service::rp_registry::{KeyGen, Types};
+use oprf_service::rp_registry::{RpRegistry, Types};
 use oprf_test::world_id_protocol_mock::Authenticator;
 use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
 use oprf_test::{
@@ -43,10 +43,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let account_registry_contract =
         world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
-    println!("Deploying KeyGen contract...");
-    let key_gen_contract =
+    println!("Deploying RpRegistry contract...");
+    let rp_registry_contract =
         test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
-    println!("deployed at address: {key_gen_contract}");
 
     println!("Starting AuthTreeIndexer...");
     let auth_tree_indexer =
@@ -55,7 +54,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
         &anvil.ws_endpoint(),
-        key_gen_contract,
+        rp_registry_contract,
         account_registry_contract,
     )
     .await;
@@ -63,7 +62,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
     let rp_id = rp_registry_scripts::init_key_gen(
         &anvil.ws_endpoint(),
-        key_gen_contract,
+        rp_registry_contract,
         rp_pk,
         TACEO_ADMIN_PRIVATE_KEY,
     )?;
@@ -134,15 +133,13 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
 
-    println!("Running KeyGen flow...");
-    let time = Instant::now();
-
+    println!("Fetching RpNullifierKey...");
     let ws = WsConnect::new(anvil.ws_endpoint()); // rpc-url of anvil
     let provider = ProviderBuilder::new()
         .connect_ws(ws)
         .await
         .context("while connecting to RPC")?;
-    let contract = KeyGen::new(key_gen_contract, provider.clone());
+    let contract = RpRegistry::new(rp_registry_contract, provider.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(500));
     let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -169,9 +166,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         rp_nullifier_key,
     };
 
+    let time = Instant::now();
     let (proof, public, nullifier, id_commitment) =
         oprf_client::nullifier(oprf_services.as_slice(), 2, args, &mut rng).await?;
-    let elapsed = time.elapsed();
 
     println!("Verifying proof...");
     Groth16::verify(&nullifier_vk, &proof.clone().into(), &public).expect("verifies");
@@ -200,6 +197,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         .await?;
     assert!(result, "on-chain verification failed");
 
+    let elapsed = time.elapsed();
     println!("Success! Completed in {:?}", elapsed);
     println!("Produced nullifier: {nullifier}");
     Ok(())
