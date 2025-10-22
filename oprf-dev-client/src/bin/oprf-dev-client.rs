@@ -5,7 +5,11 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use alloy::{network::EthereumWallet, primitives::Address, signers::local::PrivateKeySigner};
+use alloy::{
+    network::EthereumWallet,
+    primitives::{Address, U256},
+    signers::local::PrivateKeySigner,
+};
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
@@ -100,6 +104,15 @@ pub struct OprfDevClientConfig {
         default_value = "http://localhost:8080"
     )]
     pub auth_tree_indexer_api_url: String,
+
+    /// Timeout for fetching indexer inclusion proof
+    #[clap(
+        long,
+        env = "OPRF_DEV_CLIENT_INDEXER_INCLUSION_PROOF_TIMEOUT",
+        default_value = "30s",
+        value_parser = humantime::parse_duration
+    )]
+    pub indexer_inclusion_proof_timeout: Duration,
 
     /// rp id of already registered rp
     #[clap(long, env = "OPRF_DEV_CLIENT_RP_ID")]
@@ -263,6 +276,32 @@ async fn health_check(health_url: String) {
     tracing::info!("healthy: {health_url}");
 }
 
+async fn fetch_inclusion_proof(
+    indexer_url: &str,
+    indexer_inclusion_proof_timeout: Duration,
+    account_index: U256,
+) -> eyre::Result<InclusionProofResponse> {
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let rp_nullifier_key = tokio::time::timeout(indexer_inclusion_proof_timeout, async move {
+        loop {
+            interval.tick().await;
+            let merkle_proof_res =
+                reqwest::get(format!("{indexer_url}/proof/{account_index}",)).await?;
+            if merkle_proof_res.status().is_success() {
+                return eyre::Ok(merkle_proof_res.json::<InclusionProofResponse>().await?);
+            } else {
+                let error = merkle_proof_res.text().await?;
+                tracing::debug!("indexer returned error: {error}");
+                tracing::debug!("trying again..");
+            }
+        }
+    })
+    .await
+    .context("could not fetch proof in 30 seconds")?
+    .context("while polling proof")?;
+    Ok(rp_nullifier_key)
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     nodes_telemetry::install_tracing("info");
@@ -319,14 +358,13 @@ async fn main() -> eyre::Result<()> {
     let key_material = authenticator.create_account().await?;
     let account_idx = authenticator.account_index().await?;
 
-    let merkle_proof = reqwest::get(format!(
-        "{}/proof/{account_idx}",
-        config.auth_tree_indexer_api_url
-    ))
+    let merkle_membership = fetch_inclusion_proof(
+        &config.auth_tree_indexer_api_url,
+        config.indexer_inclusion_proof_timeout,
+        account_idx,
+    )
     .await?
-    .json::<InclusionProofResponse>()
-    .await?;
-    let merkle_membership = MerkleMembership::try_from(merkle_proof)?;
+    .try_into()?;
 
     match config.command {
         Command::Test => {
