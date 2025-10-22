@@ -15,18 +15,10 @@ contract InitKeyGenScript is Script {
     }
 
     function run() external {
-        uint128 sessionId = uint128(vm.envUint("SESSION_ID"));
-        uint256 ecdsaKeyX = vm.envUint("ECDSA_X");
-        uint256 ecdsaKeyYParity = vm.envUint("ECDSA_Y_PARITY");
-
-        Types.EcDsaPubkeyCompressed memory ecdsaPubKey =
-            Types.EcDsaPubkeyCompressed({x: bytes32(ecdsaKeyX), yParity: ecdsaKeyYParity});
-
-        console.log("init key-gen with sessionId", sessionId);
         vm.startBroadcast();
-        keyGenContract.initKeyGen(sessionId, ecdsaPubKey);
+        address taceoAdmin = keyGenContract.taceoAdmin();
         vm.stopBroadcast();
 
-        console.log("Initialized new key gen session with ID:", sessionId);
+        console.log("TACEO admin is", taceoAdmin);
     }
 }

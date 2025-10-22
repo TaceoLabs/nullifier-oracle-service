@@ -4,17 +4,14 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {AccountRegistry} from "world-id-protocol/src/AccountRegistry.sol";
 
-contract CounterScript is Script {
+contract AccountRegistryDeployScript is Script {
     AccountRegistry public accountRegistry;
 
     function setUp() public {}
 
     function run() public {
         vm.startBroadcast();
-
-        uint256 treeDepth = uint256(vm.envOr("TREE_DEPTH", uint256(30)));
-        accountRegistry = new AccountRegistry(treeDepth);
-
+        accountRegistry = new AccountRegistry(30);
         vm.stopBroadcast();
 
         console.log("AccountRegistry deployed to:", address(accountRegistry));

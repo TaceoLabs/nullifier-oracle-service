@@ -194,11 +194,15 @@ impl RpRegistry {
     }
 
     /// Fetch the `RpNullifierKey` key from the contract
-    pub async fn fetch_rp_nullifier_key(&self, rp_id: RpId) -> eyre::Result<RpNullifierKey> {
+    pub async fn fetch_rp_nullifier_key(
+        &self,
+        rp_id: RpId,
+        wait_time: Duration,
+    ) -> eyre::Result<RpNullifierKey> {
         tracing::info!("fetching rp_nullifier_key..");
         let contract = KeyGen::new(self.contract_address, self.provider.clone());
         let mut interval = tokio::time::interval(Duration::from_millis(500));
-        let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async move {
+        let rp_nullifier_key = tokio::time::timeout(wait_time, async move {
             loop {
                 interval.tick().await;
                 let maybe_rp_nullifier_key =

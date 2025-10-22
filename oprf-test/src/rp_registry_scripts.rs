@@ -53,19 +53,23 @@ pub fn init_key_gen(
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let rp_id = rand::random::<u128>();
+    tracing::debug!("init key gen with rp_id: {rp_id}");
+    tracing::debug!("with rpc url: {rpc_url}");
+    tracing::debug!("on contract: {key_gen_contract}");
     let cmd = cmd
-        .current_dir(dir.join("../contracts"))
-        .env("KEYGEN_CONTRACT", key_gen_contract.to_string())
+        .current_dir(dir.join("../contracts/script/deploy/"))
+        .env("KEY_GEN_ADDRESS", key_gen_contract.to_string())
         .env("SESSION_ID", rp_id.to_string())
         .env("ECDSA_X", pk_x)
         .env("ECDSA_Y_PARITY", pk_y_parity)
         .arg("script")
-        .arg("script/deploy/InitKeyGen.s.sol")
+        .arg("InitKeyGen.s.sol")
         .arg("--rpc-url")
         .arg(rpc_url)
         .arg("--broadcast")
         .arg("--private-key")
         .arg(taceo_admin_private_key);
+    tracing::debug!("executing cmd: {:?}", cmd);
     let output = cmd.output().expect("failed to run forge script");
     assert!(
         output.status.success(),

@@ -1,7 +1,7 @@
 use std::{
+    collections::HashMap,
     path::PathBuf,
     str::FromStr as _,
-    sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -19,10 +19,9 @@ use oprf_client::{
     zk::Groth16Material,
 };
 use oprf_service::rp_registry::{RpRegistry, Types};
+use oprf_test::world_id_protocol_mock::InclusionProofResponse;
 use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
-use oprf_test::{TACEO_ADMIN_PRIVATE_KEY, world_id_protocol_mock::InclusionProofResponse};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
-use parking_lot::Mutex;
 use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
@@ -37,6 +36,10 @@ pub struct StressTestCommand {
     /// Send requests sequentially instead of concurrently
     #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
     pub sequential: bool,
+
+    /// Send requests sequentially instead of concurrently
+    #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
+    pub skip_checks: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -117,6 +120,10 @@ pub struct OprfDevClientConfig {
     /// rp id of already registered rp
     #[clap(long, env = "OPRF_DEV_CLIENT_RP_ID")]
     pub rp_id: Option<u128>,
+
+    /// max wait time for init key-gen to succeed.
+    #[clap(long, env = "OPRF_DEV_CLIENT_KEY_GEN_WAIT_TIME", default_value="2min", value_parser=humantime::parse_duration)]
+    pub max_wait_time_key_gen: Duration,
 
     /// Command
     #[command(subcommand)]
@@ -302,13 +309,166 @@ async fn fetch_inclusion_proof(
     Ok(rp_nullifier_key)
 }
 
+async fn stress_test(
+    cmd: StressTestCommand,
+    services: &[String],
+    threshold: usize,
+    rp_id: RpId,
+    rp_nullifier_key: RpNullifierKey,
+    merkle_membership: MerkleMembership,
+    key_material: UserKeyMaterial,
+) -> eyre::Result<()> {
+    tracing::info!("preparing requests..");
+    let mut oprf_queries = HashMap::with_capacity(cmd.nullifier_num);
+    let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
+
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let groth16_material = Groth16Material::new(
+        dir.join("../circom/main/OPRFQueryProof.zkey"),
+        dir.join("../circom/main/OPRFNullifierProof.zkey"),
+    )?;
+    let nullifier_vk = groth16_material.nullifier_vk();
+    for idx in 0..cmd.nullifier_num {
+        let (query, req) = prepare_nullifier_stress_test_oprf_request(
+            rp_id,
+            merkle_membership.clone(),
+            key_material.clone(),
+        )?;
+        oprf_queries.insert(idx, query);
+        init_requests.push(req);
+    }
+
+    let mut init_results = JoinSet::new();
+    let client = reqwest::Client::new();
+
+    tracing::info!("start sending init requests..");
+    let start = Instant::now();
+    for (idx, req) in init_requests.into_iter().enumerate() {
+        let client = client.clone();
+        let services = services.to_vec();
+        init_results.spawn(async move {
+            let init_start = Instant::now();
+            let sessions =
+                oprf_client::nonblocking::init_sessions(&client, &services, threshold, req).await?;
+            eyre::Ok((idx, sessions, init_start.elapsed()))
+        });
+        if cmd.sequential {
+            init_results.join_next().await;
+        }
+    }
+    let init_results = init_results.join_all().await;
+    let init_full_duration = start.elapsed();
+    let mut sessions = Vec::with_capacity(cmd.nullifier_num);
+    let mut durations = Vec::with_capacity(cmd.nullifier_num);
+    for result in init_results {
+        match result {
+            Ok((idx, session, duration)) => {
+                sessions.push((idx, session));
+                durations.push(duration);
+            }
+            Err(err) => tracing::error!("Got an error during init: {err:?}"),
+        }
+    }
+    if durations.len() != cmd.nullifier_num {
+        eyre::bail!("init did encounter errors - see logs");
+    }
+    let init_throughput = cmd.nullifier_num as f64 / init_full_duration.as_secs_f64();
+    let init_avg = avg(&durations);
+
+    let mut finish_challenges = sessions
+        .iter()
+        .map(|(idx, sessions)| {
+            eyre::Ok((
+                *idx,
+                oprf_client::compute_challenges(
+                    oprf_queries.remove(idx).expect("is there"),
+                    sessions,
+                    rp_nullifier_key,
+                )?,
+            ))
+        })
+        .collect::<eyre::Result<HashMap<_, _>>>()?;
+
+    let mut finish_results = JoinSet::new();
+    let client = reqwest::Client::new();
+
+    tracing::info!("start sending finish requests..");
+    durations.clear();
+    let start = Instant::now();
+    for (idx, sessions) in sessions {
+        let client = client.clone();
+        let challenge = finish_challenges.remove(&idx).expect("is there");
+        finish_results.spawn(async move {
+            let finish_start = Instant::now();
+            let responses = oprf_client::nonblocking::finish_sessions(
+                &client,
+                sessions,
+                challenge.get_request(),
+            )
+            .await?;
+            let duration = finish_start.elapsed();
+            eyre::Ok((responses, challenge, duration))
+        });
+        if cmd.sequential {
+            finish_results.join_next().await;
+        }
+    }
+    let finish_results = finish_results.join_all().await;
+    if cmd.skip_checks {
+        tracing::info!("got all results - skipping checks");
+    } else {
+        tracing::info!("got all results - checking nullifiers + proofs");
+    }
+    let finish_full_duration = start.elapsed();
+
+    // let mut sessions = Vec::with_capacity(cmd.nullifier_num);
+    let mut durations = Vec::with_capacity(cmd.nullifier_num);
+
+    let mut rng = rand::thread_rng();
+    for result in finish_results {
+        match result {
+            Ok((responses, challenge, duration)) => {
+                if !cmd.skip_checks {
+                    let (proof, public, _, _) = oprf_client::verify_challenges(
+                        challenge,
+                        responses,
+                        ark_babyjubjub::Fq::rand(&mut rng),
+                        &mut rng,
+                    )?;
+                    Groth16::verify(&nullifier_vk, &proof.into(), &public)?;
+                }
+                durations.push(duration);
+            }
+            Err(err) => tracing::error!("Got an error during finish: {err:?}"),
+        }
+    }
+
+    tracing::info!(
+        "init req - total time: {init_full_duration:?} avg: {init_avg:?} throughput: {init_throughput} req/s"
+    );
+    let final_throughput = cmd.nullifier_num as f64 / finish_full_duration.as_secs_f64();
+    let finish_avg = avg(&durations);
+    tracing::info!(
+        "finish req - total time: {finish_full_duration:?} avg: {finish_avg:?} throughput: {final_throughput} req/s"
+    );
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    nodes_telemetry::install_tracing("info");
+    nodes_telemetry::install_tracing("oprf_dev_client=trace,info");
+    // install rustls crypto provider
+    if rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .is_err()
+    {
+        tracing::warn!("cannot install rustls crypto provider!");
+        tracing::warn!("we continue but this should not happen...");
+    };
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 
-    tracing::info!("health check for all peers and SC Mock...");
+    tracing::info!("health check for all peers...");
     let health_checks = config
         .services
         .iter()
@@ -320,7 +480,7 @@ async fn main() -> eyre::Result<()> {
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
 
-    let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)?;
+    let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
     let rp_registry = RpRegistry::init(
         &config.chain_ws_rpc_url,
@@ -331,7 +491,9 @@ async fn main() -> eyre::Result<()> {
 
     let (rp_id, rp_nullifier_key) = if let Some(rp_id) = config.rp_id {
         let rp_id = RpId::new(rp_id);
-        let rp_nullifier_key = rp_registry.fetch_rp_nullifier_key(rp_id).await?;
+        let rp_nullifier_key = rp_registry
+            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
+            .await?;
         (rp_id, rp_nullifier_key)
     } else {
         let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
@@ -343,7 +505,9 @@ async fn main() -> eyre::Result<()> {
         )?;
         tracing::info!("registered rp with rp_id: {rp_id}");
 
-        let rp_nullifier_key = rp_registry.fetch_rp_nullifier_key(rp_id).await?;
+        let rp_nullifier_key = rp_registry
+            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
+            .await?;
         (rp_id, rp_nullifier_key)
     };
 
@@ -381,99 +545,18 @@ async fn main() -> eyre::Result<()> {
             tracing::info!("nullifier successful");
         }
         Command::StressTest(cmd) => {
-            tracing::info!("preparing requests..");
-            let mut oprf_queries = Vec::with_capacity(cmd.nullifier_num);
-            let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
-            for _ in 0..cmd.nullifier_num {
-                let (query, req) = prepare_nullifier_stress_test_oprf_request(
-                    rp_id,
-                    merkle_membership.clone(),
-                    key_material.clone(),
-                )?;
-                oprf_queries.push(query);
-                init_requests.push(req);
-            }
-
-            let mut init_results = JoinSet::new();
-            let durations = Arc::new(Mutex::new(Vec::with_capacity(cmd.nullifier_num)));
-            let client = reqwest::Client::new();
-
-            tracing::info!("start sending init requests..");
-            let start = Instant::now();
-            for req in init_requests {
-                let client = client.clone();
-                let durations_clone = Arc::clone(&durations);
-                let services = config.services.clone();
-                let threshold = config.threshold;
-                init_results.spawn(async move {
-                    let init_start = Instant::now();
-                    let sessions =
-                        oprf_client::nonblocking::init_sessions(&client, &services, threshold, req)
-                            .await?;
-                    let duration = init_start.elapsed();
-                    durations_clone.lock().push(duration);
-                    eyre::Ok(sessions)
-                });
-                if cmd.sequential {
-                    init_results.join_next().await;
-                }
-            }
-            let sessions = init_results.join_all().await;
-            let duration = start.elapsed();
-            let throughput = cmd.nullifier_num as f64 / duration.as_secs_f64();
-            {
-                let durations = durations.lock();
-                assert_eq!(durations.len(), cmd.nullifier_num);
-                let init_avg = avg(&durations);
-                tracing::info!(
-                    "init req - total time: {duration:?} avg: {init_avg:?} throughput: {throughput} req/s"
-                );
-            }
-
-            let sessions = sessions.into_iter().collect::<eyre::Result<Vec<_>>>()?;
-            let finish_requests = sessions
-                .iter()
-                .zip(oprf_queries)
-                .map(|(sessions, query)| {
-                    Ok(
-                        oprf_client::compute_challenges(query, sessions, rp_nullifier_key)?
-                            .get_request(),
-                    )
-                })
-                .collect::<eyre::Result<Vec<_>>>()?;
-
-            let mut finish_results = JoinSet::new();
-            let durations = Arc::new(Mutex::new(Vec::with_capacity(cmd.nullifier_num)));
-            let client = reqwest::Client::new();
-
-            tracing::info!("start sending finish requests..");
-            let start = Instant::now();
-            for (sessions, req) in sessions.into_iter().zip(finish_requests) {
-                let client = client.clone();
-                let durations_clone = Arc::clone(&durations);
-                finish_results.spawn(async move {
-                    let finish_start = Instant::now();
-                    let _responses =
-                        oprf_client::nonblocking::finish_sessions(&client, sessions, req).await?;
-                    let duration = finish_start.elapsed();
-                    durations_clone.lock().push(duration);
-                    eyre::Ok(())
-                });
-                if cmd.sequential {
-                    finish_results.join_next().await;
-                }
-            }
-            finish_results.join_all().await;
-            let duration = start.elapsed();
-            let throughput = cmd.nullifier_num as f64 / duration.as_secs_f64();
-            {
-                let durations = durations.lock();
-                assert_eq!(durations.len(), cmd.nullifier_num);
-                let init_avg = avg(&durations);
-                tracing::info!(
-                    "finish req - total time: {duration:?} avg: {init_avg:?} throughput: {throughput} req/s"
-                );
-            }
+            tracing::info!("running stress-test");
+            stress_test(
+                cmd,
+                &config.services,
+                config.threshold,
+                rp_id,
+                rp_nullifier_key,
+                merkle_membership,
+                key_material,
+            )
+            .await?;
+            tracing::info!("stress-test successful");
         }
     }
 
