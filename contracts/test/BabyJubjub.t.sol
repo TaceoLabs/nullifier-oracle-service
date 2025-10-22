@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-import "../src/BabyJubJub.sol";
+import {Test} from "forge-std/Test.sol";
+import {BabyJubJub} from "../src/BabyJubJub.sol";
 
 contract BabyJubJubTest is Test {
     BabyJubJub public babyJubJub;
