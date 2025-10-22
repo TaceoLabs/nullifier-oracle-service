@@ -3,6 +3,9 @@ pragma solidity ^0.8.20;
 
 import {Types} from "./Types.sol";
 import {CredentialSchemaIssuerRegistry} from "@world-id-protocol/contracts/CredentialSchemaIssuerRegistry.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
@@ -32,7 +35,7 @@ interface IBabyJubJub {
     function isOnCurve(uint256 x, uint256 y) external view returns (bool);
 }
 
-contract RpRegistry {
+contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     using Types for Types.BabyJubJubElement;
     using Types for Types.EcDsaPubkeyCompressed;
     using Types for Types.OprfPeer;
@@ -47,12 +50,12 @@ contract RpRegistry {
     // Admin to start KeyGens
     //**IMPORTANT** If this key gets lost or the entity controlling this key
     // goes offline then effectively the system halts...
-    address public immutable taceoAdmin;
-    IGroth16VerifierKeyGen13 public immutable keyGenVerifier;
-    IGroth16VerifierNullifier public immutable nullifierVerifier;
-    IBabyJubJub public immutable accumulator;
-    uint256 public immutable threshold;
-    uint256 public immutable numPeers;
+    address public taceoAdmin;
+    IGroth16VerifierKeyGen13 public keyGenVerifier;
+    IGroth16VerifierNullifier public nullifierVerifier;
+    IBabyJubJub public accumulator;
+    uint256 public threshold;
+    uint256 public numPeers;
 
     Types.BabyJubJubElement[] public peerPublicKeys;
     mapping(address => Types.OprfPeer) addressToPeer;
@@ -84,14 +87,21 @@ contract RpRegistry {
     error OutdatedNullifier();
     error UnknownId(uint128 id);
 
-    constructor(
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
         address _taceoAdmin,
         address _keyGenVerifierAddress,
         address _nullifierVerifierAddress,
         address _accumulatorAddress,
         uint256 _threshold,
         uint256 _numPeers
-    ) {
+    ) public initializer {
+        __Ownable_init(msg.sender);
+        __Ownable2Step_init();
         require(_numPeers >= 3);
         require(_threshold <= _numPeers);
         taceoAdmin = _taceoAdmin;
@@ -416,4 +426,38 @@ contract RpRegistry {
     function _isEmpty(Types.BabyJubJubElement memory element) private pure returns (bool) {
         return element.x == 0 && element.y == 0;
     }
+    ////////////////////////////////////////////////////////////
+    //                    Upgrade Authorization               //
+    ////////////////////////////////////////////////////////////
+
+    /**
+     *
+     *
+     * @dev Authorize upgrade to a new implementation
+     *
+     *
+     * @param newImplementation Address of the new implementation contract
+     *
+     *
+     * @notice Only the contract owner can authorize upgrades
+     *
+     *
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    ////////////////////////////////////////////////////////////
+    //                    Storage Gap                         //
+    ////////////////////////////////////////////////////////////
+
+    /**
+     *
+     *
+     * @dev Storage gap to allow for future upgrades without storage collisions
+     *
+     *
+     * This reserves 50 storage slots for future state variables
+     *
+     *
+     */
+    uint256[50] private __gap;
 }

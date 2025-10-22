@@ -4,9 +4,12 @@ pragma solidity ^0.8.20;
 import {Script, console} from "forge-std/Script.sol";
 import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Types} from "../../src/Types.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployRpRegistryScript is Script {
     using Types for Types.BabyJubJubElement;
+    RpRegistry public rpRegistry;
+    ERC1967Proxy public proxy;
 
     function setUp() public {}
 
@@ -24,11 +27,24 @@ contract DeployRpRegistryScript is Script {
         console.log("using key-gen verifier address:", keyGenVerifierAddress);
         console.log("using nullifier verifier address:", nullifierVerifierAddress);
 
-        RpRegistry rpRegistry = new RpRegistry(
-            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector,
+            taceoAdminAddress,
+            keyGenVerifierAddress,
+            nullifierVerifierAddress,
+            accumulatorAddress,
+            2,
+            3
         );
+        // Deploy proxy
+        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        rpRegistry = RpRegistry(address(proxy));
 
         vm.stopBroadcast();
+        console.log("RpRegistry implementation deployed to:", address(implementation));
         console.log("RpRegistry deployed to:", address(rpRegistry));
     }
 }

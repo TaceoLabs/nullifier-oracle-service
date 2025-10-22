@@ -7,6 +7,7 @@ import {BabyJubJub} from "../src/BabyJubJub.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
 import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {Types} from "../src/Types.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract RpRegistryTest is Test {
     using Types for Types.BabyJubJubElement;
@@ -15,6 +16,7 @@ contract RpRegistryTest is Test {
     BabyJubJub public accumulator;
     Groth16VerifierKeyGen13 public verifierKeyGen;
     Groth16VerifierNullifier public verifierNullifier;
+    ERC1967Proxy public proxy;
 
     address alice = address(0x1);
     address bob = address(0x2);
@@ -67,8 +69,15 @@ contract RpRegistryTest is Test {
         accumulator = new BabyJubJub();
         verifierKeyGen = new Groth16VerifierKeyGen13();
         verifierNullifier = new Groth16VerifierNullifier();
-        rpRegistry =
-            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+        );
+        // Deploy proxy
+        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        rpRegistry = RpRegistry(address(proxy));
 
         // register participants for runs later
         address[] memory peerAddresses = new address[](3);
@@ -85,8 +94,16 @@ contract RpRegistryTest is Test {
     }
 
     function testConstructedCorrectly() public {
-        RpRegistry rpRegistryTest =
-            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+        );
+        // Deploy proxy
+        ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
+        RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
+
         assertEq(rpRegistryTest.taceoAdmin(), taceoAdmin);
         assertEq(address(rpRegistryTest.keyGenVerifier()), address(verifierKeyGen));
         assertEq(address(rpRegistryTest.nullifierVerifier()), address(verifierNullifier));
@@ -99,8 +116,15 @@ contract RpRegistryTest is Test {
     }
 
     function testRegisterParticipants() public {
-        RpRegistry rpRegistryTest =
-            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+        );
+        // Deploy proxy
+        ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
+        RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -153,8 +177,15 @@ contract RpRegistryTest is Test {
     }
 
     function testRegisterParticipantsNotTACEO() public {
-        RpRegistry rpRegistryTest =
-            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+        );
+        // Deploy proxy
+        ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
+        RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
@@ -186,8 +217,16 @@ contract RpRegistryTest is Test {
     }
 
     function testRegisterParticipantsWrongNumberKeys() public {
-        RpRegistry rpRegistryTest =
-            new RpRegistry(taceoAdmin, address(verifierKeyGen), address(verifierNullifier), address(accumulator), 2, 3);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+        );
+        // Deploy proxy
+        ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
+        RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
+
         address[] memory peerAddressesCorrect = new address[](3);
         peerAddressesCorrect[0] = alice;
         peerAddressesCorrect[1] = bob;
