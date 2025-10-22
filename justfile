@@ -125,6 +125,16 @@ deploy-rp-registry-with-deps *args:
     forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{args}}
 
 [group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry-dry-run *args: 
+    forge script RpRegistry.s.sol -vvvvv {{args}}
+
+[group: 'deploy']
+[working-directory: 'contracts/script/deploy']
+deploy-rp-registry *args: 
+    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{args}}
+
+[group: 'deploy']
 [working-directory: 'contracts/script/test']
 deploy-account-registry-dry-run *args: 
     forge script AccountRegistry.s.sol -vvvvv {{args}}

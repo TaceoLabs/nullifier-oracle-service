@@ -36,6 +36,10 @@ pub struct StressTestCommand {
     /// Send requests sequentially instead of concurrently
     #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
     pub sequential: bool,
+
+    /// Send requests sequentially instead of concurrently
+    #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
+    pub skip_checks: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -410,6 +414,11 @@ async fn stress_test(
         }
     }
     let finish_results = finish_results.join_all().await;
+    if cmd.skip_checks {
+        tracing::info!("got all results - skipping checks");
+    } else {
+        tracing::info!("got all results - checking nullifiers + proofs");
+    }
     let finish_full_duration = start.elapsed();
 
     // let mut sessions = Vec::with_capacity(cmd.nullifier_num);
@@ -419,13 +428,15 @@ async fn stress_test(
     for result in finish_results {
         match result {
             Ok((responses, challenge, duration)) => {
-                let (proof, public, _, _) = oprf_client::verify_challenges(
-                    challenge,
-                    responses,
-                    ark_babyjubjub::Fq::rand(&mut rng),
-                    &mut rng,
-                )?;
-                Groth16::verify(&nullifier_vk, &proof.into(), &public)?;
+                if !cmd.skip_checks {
+                    let (proof, public, _, _) = oprf_client::verify_challenges(
+                        challenge,
+                        responses,
+                        ark_babyjubjub::Fq::rand(&mut rng),
+                        &mut rng,
+                    )?;
+                    Groth16::verify(&nullifier_vk, &proof.into(), &public)?;
+                }
                 durations.push(duration);
             }
             Err(err) => tracing::error!("Got an error during finish: {err:?}"),
