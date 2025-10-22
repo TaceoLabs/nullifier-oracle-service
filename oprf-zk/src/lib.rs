@@ -90,16 +90,15 @@ pub enum Groth16Error {
 /// Provides methods to:
 /// - Generate proofs from structured inputs
 /// - Verify proofs internally immediately after generation
-#[derive(Clone)]
 pub struct Groth16Material {
     /// Proving key for the OPRFQuery circuit
-    pub pk: Arc<ProvingKey<Bn254>>,
+    pub pk: ProvingKey<Bn254>,
     /// Constraint matrices for the OPRFQuery circuit
-    pub matrices: Arc<ConstraintMatrices<ark_bn254::Fr>>,
+    pub matrices: ConstraintMatrices<ark_bn254::Fr>,
     /// The graph for witness extension
-    pub graph: Arc<Graph>,
+    pub graph: Graph,
     /// The black-box functions needed for witness extension
-    pub bbfs: Arc<HashMap<String, BlackBoxFunction>>,
+    pub bbfs: HashMap<String, BlackBoxFunction>,
 }
 
 impl Groth16Material {
@@ -144,10 +143,10 @@ impl Groth16Material {
         };
         let graph = witness::init_graph(graph_bytes).map_err(ZkError::GraphInvalid)?;
         Ok(Self {
-            pk: Arc::new(pk),
-            matrices: Arc::new(matrices),
-            graph: Arc::new(graph),
-            bbfs: Arc::new(black_box_functions()),
+            pk,
+            matrices,
+            graph,
+            bbfs: black_box_functions(),
         })
     }
 

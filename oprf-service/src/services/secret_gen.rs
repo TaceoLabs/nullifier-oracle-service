@@ -226,13 +226,11 @@ mod tests {
         let threshold = 2;
         let graph =
             PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_graph.bin");
+        let graph = std::fs::read(graph)?;
         let key_gen_zkey =
             PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_13.zkey");
-        let key_gen_material = Groth16Material::from_bytes(
-            &std::fs::read(key_gen_zkey)?,
-            None,
-            &std::fs::read(graph)?,
-        )?;
+        let key_gen_zkey = std::fs::read(key_gen_zkey)?;
+        let key_gen_material = Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?;
 
         let sk0 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
         let sk1 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
@@ -244,15 +242,24 @@ mod tests {
             sk2.get_public_key(),
         ]);
 
-        let (secret_manager0, mut dlog_secret_gen0) =
-            secret_manager_and_dlog_secret_gen(sk0, peers.clone(), key_gen_material.clone())
-                .await?;
-        let (secret_manager1, mut dlog_secret_gen1) =
-            secret_manager_and_dlog_secret_gen(sk1, peers.clone(), key_gen_material.clone())
-                .await?;
-        let (secret_manager2, mut dlog_secret_gen2) =
-            secret_manager_and_dlog_secret_gen(sk2, peers.clone(), key_gen_material.clone())
-                .await?;
+        let (secret_manager0, mut dlog_secret_gen0) = secret_manager_and_dlog_secret_gen(
+            sk0,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
+        let (secret_manager1, mut dlog_secret_gen1) = secret_manager_and_dlog_secret_gen(
+            sk1,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
+        let (secret_manager2, mut dlog_secret_gen2) = secret_manager_and_dlog_secret_gen(
+            sk2,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
 
         let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, threshold);
         let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, threshold);
