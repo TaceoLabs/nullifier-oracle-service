@@ -11,7 +11,7 @@ contract InitKeyGenScript is Script {
     RpRegistry public rpRegistry;
 
     function setUp() public {
-        rpRegistry = RpRegistry(vm.envAddress("KEY_GEN_ADDRESS"));
+        rpRegistry = RpRegistry(vm.envAddress("RP_REGISTRY_ADDRESS"));
     }
 
     function run() external {
