@@ -14,9 +14,9 @@ contract RegisterParticipantScript is Script {
     RpRegistry public rpRegistry;
 
     function setUp() public {
-        address keyGenAddress = vm.envAddress("KEY_GEN_ADDRESS");
-        console.log("register Participants for RpRegistry contract at:", keyGenAddress);
-        rpRegistry = RpRegistry(keyGenAddress);
+        address rpRegistryAddress = vm.envAddress("RP_REGISTRY_ADDRESS");
+        console.log("register Participants for RpRegistry contract at:", rpRegistryAddress);
+        rpRegistry = RpRegistry(rpRegistryAddress);
     }
 
     function run() public {

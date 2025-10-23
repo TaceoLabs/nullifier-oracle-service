@@ -58,7 +58,7 @@ pub fn init_key_gen(
     tracing::debug!("on contract: {key_gen_contract}");
     let cmd = cmd
         .current_dir(dir.join("../contracts/script/deploy/"))
-        .env("KEY_GEN_ADDRESS", key_gen_contract.to_string())
+        .env("RP_REGISTRY_ADDRESS", key_gen_contract.to_string())
         .env("SESSION_ID", rp_id.to_string())
         .env("ECDSA_X", pk_x)
         .env("ECDSA_Y_PARITY", pk_y_parity)

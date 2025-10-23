@@ -8,7 +8,7 @@ import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16Veri
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
 import {Types} from "../../src/Types.sol";
 
-contract KeyGenScript is Script {
+contract TestSetupScript is Script {
     using Types for Types.BabyJubJubElement;
 
     RpRegistry public rpRegistry;
