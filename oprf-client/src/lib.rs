@@ -40,7 +40,6 @@ use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 use ark_ec::AffineRepr;
 use oprf_core::ddlog_equality::DLogEqualityCommitments;
 use oprf_core::shamir;
-use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
@@ -62,9 +61,11 @@ pub mod nonblocking;
 mod types;
 
 pub use types::CredentialsSignature;
-pub use types::MerkleMembership;
 pub use types::OprfQuery;
 pub use types::UserKeyMaterial;
+use world_id_types::merkle::MerkleInclusionProof;
+use world_id_types::proof::SingleProofInput;
+use world_id_types::{Credential, TREE_DEPTH};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -182,28 +183,6 @@ pub struct Challenge {
     rp_nullifier_key: RpNullifierKey,
 }
 
-/// Arguments required to generate a nullifier proof.
-///
-/// This struct bundles all inputs needed for [`nullifier`] to produce a
-/// Groth16 nullifier proof. Users typically construct this from their
-/// credentials, key material, and query context.
-pub struct NullifierArgs {
-    /// Signature over the user's credentials.
-    pub credential_signature: CredentialsSignature,
-    /// Merkle membership proof of the user's credential in the registry.
-    pub merkle_membership: MerkleMembership,
-    /// The original OPRF query (RP ID, action, nonce, timestamp, etc.).
-    pub query: OprfQuery,
-    /// User's key material (private and public keys, batch index, etc.).
-    pub key_material: UserKeyMaterial,
-    /// RP-specific nullifier key.
-    pub rp_nullifier_key: RpNullifierKey,
-    /// Signal hash as in semaphore
-    pub signal_hash: ark_babyjubjub::Fq,
-    /// Commitment to the id
-    pub id_commitment_r: ark_babyjubjub::Fq,
-}
-
 impl Challenge {
     /// Returns the [`ChallengeRequest`] for this challenge.
     pub fn get_request(&self) -> ChallengeRequest {
@@ -234,7 +213,7 @@ impl SignedOprfQuery {
 ///
 /// * `services` - List of OPRF service URLs to contact.
 /// * `threshold` - Minimum number of valid peer responses required.
-/// * `args` - [`NullifierArgs`] containing all input data (credentials, Merkle membership, query, keys, signal, etc.).
+/// * `input` - [`SingleProofInput`] containing all input data from the user and the RP.
 /// * `query_material` - Groth16 material (proving key and matrices) used for the query proof.
 /// * `nullifier_material` - Groth16 material (proving key and matrices) used for the nullifier proof.
 /// * `rng` - A cryptographically secure random number generator.
@@ -253,12 +232,12 @@ impl SignedOprfQuery {
 /// * `InvalidPublicKeyIndex` – the user key index is out of range.
 /// * `InvalidDLogProof` – the DLog equality proof could not be verified.
 /// * Other errors may propagate from network requests, proof generation, or Groth16 verification.
-pub async fn nullifier<R: Rng + CryptoRng>(
+pub async fn nullifier<const TREE_DEPTH: usize, R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
     query_material: &Groth16Material,
     nullifier_material: &Groth16Material,
-    args: NullifierArgs,
+    input: SingleProofInput<TREE_DEPTH>,
     rng: &mut R,
 ) -> Result<(
     Groth16Proof,
@@ -266,20 +245,10 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     ark_babyjubjub::Fq,
     ark_babyjubjub::Fq,
 )> {
-    let NullifierArgs {
-        credential_signature,
-        merkle_membership,
-        query,
-        key_material,
-        rp_nullifier_key,
-        signal_hash,
-        id_commitment_r,
-    } = args;
-
     let request_id = Uuid::new_v4();
     let signed_query = sign_oprf_query(
-        credential_signature,
-        merkle_membership,
+        &input.credential,
+        input.inclusion_proof,
         query_material,
         query,
         key_material,
@@ -291,14 +260,14 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let req = signed_query.get_request();
     let sessions = nonblocking::init_sessions(&client, services, threshold, req).await?;
 
-    let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
+    let challenges = compute_challenges(signed_query, &sessions, input.rp_nullifier_key)?;
     let req = challenges.get_request();
     let responses = nonblocking::finish_sessions(&client, sessions, req).await?;
     verify_challenges(
         nullifier_material,
         challenges,
         responses,
-        signal_hash,
+        input.signal_hash.into(),
         id_commitment_r,
         rng,
     )
@@ -338,8 +307,8 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 /// - The blinding factor and query hash used for later computations.
 /// - The Groth16 proof input for verification in the nullifier step.
 pub fn sign_oprf_query<R: Rng + CryptoRng>(
-    credentials_signature: CredentialsSignature,
-    merkle_membership: MerkleMembership,
+    credential: &Credential,
+    merkle_membership: MerkleInclusionProof<TREE_DEPTH>,
     query_material: &Groth16Material,
     query: OprfQuery,
     key_material: UserKeyMaterial,
@@ -351,7 +320,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     }
 
     let query_hash = OprfClient::generate_query(
-        merkle_membership.mt_index.into(),
+        merkle_membership.leaf_index.into(),
         query.rp_id.into_inner().into(),
         query.action,
     );
@@ -364,8 +333,8 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         pk_index: key_material.pk_index.into(),
         s: signature.s,
         r: signature.r,
-        cred_type_id: credentials_signature.type_id,
-        cred_pk: credentials_signature.issuer.pk,
+        cred_type_id: credential.issuer_schema_id.into(),
+        cred_pk: credential.issuer.pk,
         cred_hashes: credentials_signature.hashes,
         cred_genesis_issued_at: credentials_signature.genesis_issued_at.into(),
         cred_expires_at: credentials_signature.expires_at.into(),
@@ -374,7 +343,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         current_time_stamp: query.current_time_stamp.into(),
         merkle_root: merkle_membership.root.into_inner(),
         depth: ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
-        mt_index: merkle_membership.mt_index.into(),
+        mt_index: merkle_membership.leaf_index.into(),
         siblings: merkle_membership.siblings,
         beta: blinding_factor.beta(),
         rp_id: query.rp_id.into_inner().into(),

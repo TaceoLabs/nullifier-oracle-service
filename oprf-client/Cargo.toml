@@ -29,6 +29,7 @@ thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
+world-id-types = { workspace = true }
 
 [features]
 default = ["tokio"]

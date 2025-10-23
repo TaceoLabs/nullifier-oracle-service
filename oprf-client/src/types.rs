@@ -34,22 +34,6 @@ pub struct CredentialsSignature {
     pub signature: EdDSASignature,
 }
 
-/// Artifacts required to compute the Merkle inclusion proof
-/// for a user’s public key.
-///
-/// Each public key is tied to a leaf in a Merkle tree.
-/// To prove validity, the user shows membership in the tree
-/// with a sibling path up to the root.
-#[derive(Clone)]
-pub struct MerkleMembership {
-    /// The actual Merkle root (not sent to the OPRF service, only used for computing the proof).
-    pub root: MerkleRoot,
-    /// The index of the user’s leaf in the Merkle tree.
-    pub mt_index: u64,
-    /// The sibling path up to the Merkle root.  
-    pub siblings: [ark_babyjubjub::Fq; TREE_DEPTH],
-}
-
 /// The basic request a client sends to the OPRF service.
 ///
 /// It contains the relying party’s ID, the share epoch, the action

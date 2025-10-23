@@ -934,6 +934,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-babyjubjub"
+version = "0.5.0"
+source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
+dependencies = [
+ "ark-bn254 0.5.0",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+]
+
+[[package]]
 name = "ark-bn254"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1298,10 +1309,24 @@ dependencies = [
 name = "ark-serde-compat"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "serde",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "ark-serde-compat"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
+dependencies = [
+ "ark-babyjubjub 0.5.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "ark-bn254 0.5.0",
+ "ark-ec 0.5.0",
+ "ark-groth16 0.5.0",
+ "serde",
+ "serde_json",
  "thiserror 2.0.17",
 ]
 
@@ -2909,15 +2934,34 @@ dependencies = [
 name = "eddsa-babyjubjub"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
- "ark-serde-compat",
+ "ark-serde-compat 0.1.0",
  "ark-serialize 0.5.0",
  "blake3",
  "eyre",
  "num-bigint",
- "poseidon2",
+ "poseidon2 0.1.0",
+ "rand 0.8.5",
+ "serde",
+ "zeroize",
+]
+
+[[package]]
+name = "eddsa-babyjubjub"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
+dependencies = [
+ "ark-babyjubjub 0.5.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serde-compat 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "ark-serialize 0.5.0",
+ "blake3",
+ "eyre",
+ "num-bigint",
+ "poseidon2 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
  "rand 0.8.5",
  "serde",
  "zeroize",
@@ -4618,10 +4662,10 @@ dependencies = [
 name = "oprf-client"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-ec 0.5.0",
  "circom-types",
- "eddsa-babyjubjub",
+ "eddsa-babyjubjub 0.1.0",
  "eyre",
  "futures",
  "groth16",
@@ -4636,21 +4680,22 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "world-id-types",
 ]
 
 [[package]]
 name = "oprf-core"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
- "ark-serde-compat",
+ "ark-serde-compat 0.1.0",
  "criterion",
- "eddsa-babyjubjub",
+ "eddsa-babyjubjub 0.1.0",
  "itertools 0.14.0",
  "num-bigint",
- "poseidon2",
+ "poseidon2 0.1.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -4665,7 +4710,7 @@ name = "oprf-dev-client"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-ff 0.5.0",
  "clap",
  "eyre",
@@ -4693,19 +4738,19 @@ name = "oprf-service"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
- "ark-serde-compat",
+ "ark-serde-compat 0.1.0",
  "async-trait",
  "aws-config",
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
  "clap",
- "eddsa-babyjubjub",
+ "eddsa-babyjubjub 0.1.0",
  "eyre",
  "futures",
  "git-version",
@@ -4722,7 +4767,7 @@ dependencies = [
  "oprf-types",
  "oprf-zk",
  "parking_lot",
- "poseidon2",
+ "poseidon2 0.1.0",
  "rand 0.8.5",
  "rustls 0.23.33",
  "secrecy",
@@ -4743,7 +4788,7 @@ name = "oprf-test"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
@@ -4753,7 +4798,7 @@ dependencies = [
  "axum",
  "circom-types",
  "clap",
- "eddsa-babyjubjub",
+ "eddsa-babyjubjub 0.1.0",
  "eyre",
  "futures",
  "groth16",
@@ -4765,7 +4810,7 @@ dependencies = [
  "oprf-service",
  "oprf-types",
  "oprf-zk",
- "poseidon2",
+ "poseidon2 0.1.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
@@ -4784,10 +4829,10 @@ name = "oprf-types"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-ff 0.5.0",
- "ark-serde-compat",
- "eddsa-babyjubjub",
+ "ark-serde-compat 0.1.0",
+ "eddsa-babyjubjub 0.1.0",
  "k256",
  "oprf-core",
  "oprf-zk",
@@ -4799,12 +4844,12 @@ dependencies = [
 name = "oprf-zk"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
+ "ark-babyjubjub 0.5.0",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
- "ark-serde-compat",
+ "ark-serde-compat 0.1.0",
  "circom-types",
  "eyre",
  "groth16",
@@ -5015,6 +5060,18 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-std 0.5.0",
  "criterion",
+ "num-bigint",
+ "num-traits",
+]
+
+[[package]]
+name = "poseidon2"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
+dependencies = [
+ "ark-bn254 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
  "num-bigint",
  "num-traits",
 ]
@@ -7555,6 +7612,26 @@ dependencies = [
  "ruint",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "world-id-types"
+version = "0.1.0"
+source = "git+https://github.com/worldcoin/world-id-protocol?rev=685f63a#685f63a3bba75ab01f8d267d34455d0ebea62ba8"
+dependencies = [
+ "ark-babyjubjub 0.5.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "ark-bn254 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-groth16 0.5.0",
+ "ark-serde-compat 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "ark-serialize 0.5.0",
+ "eddsa-babyjubjub 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f)",
+ "hex",
+ "k256",
+ "ruint",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
