@@ -109,6 +109,18 @@ run-setup:
     trap "kill $anvil_pid" SIGINT SIGTERM
     wait $anvil_pid
 
+[group: 'local-setup']
+run-rp-registry-and-services account_registry:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    echo "starting RpRegistry contract.."
+    just run-rp-registry | tee logs/rp_registry.log
+    address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
+    echo $address
+    sleep 2
+    echo "starting OPRF services..."
+    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{account_registry}} OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services
+
 [group: 'dev-client']
 run-dev-client *args:
     cargo build --workspace --release
