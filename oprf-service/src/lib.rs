@@ -38,7 +38,6 @@ use crate::{
         },
         merkle_watcher::{MerkleWatcherService, alloy_merkle_watcher::AlloyMerkleWatcher},
         oprf::OprfService,
-        secret_manager::aws::AwsSecretManager,
     },
 };
 
@@ -95,10 +94,6 @@ pub async fn start(
     let vk: Groth16VerificationKey = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
-    // Load the secret manager. For now we only support AWS.
-    // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
-    let secret_manager = Arc::new(AwsSecretManager::init(config.private_key_secret_id).await);
-
     tracing::info!("connecting to wallet..");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
         .context("while reading wallet private key")?;
@@ -128,11 +123,10 @@ pub async fn start(
     }
 
     tracing::info!("init crypto device..");
-    let crypto_device = Arc::new(
-        CryptoDevice::init(secret_manager, peer_public_keys.clone())
-            .await
-            .context("while initiating crypto-device")?,
-    );
+    let crypto_device = Arc::new(CryptoDevice::new(
+        config.private_key,
+        peer_public_keys.clone(),
+    )?);
 
     tracing::info!("load rp materials..");
     crypto_device
@@ -304,13 +298,10 @@ mod tests {
     use rand::Rng as _;
     use uuid::Uuid;
 
+    use crate::services::crypto_device::CryptoDevice;
     use crate::services::crypto_device::DLogShare;
     use crate::services::crypto_device::dlog_storage::RpMaterial;
     use crate::services::merkle_watcher::test::TestMerkleWatcher;
-    use crate::services::{
-        crypto_device::{CryptoDevice, PeerPrivateKey},
-        secret_manager::test::TestSecretManager,
-    };
 
     use super::*;
 
@@ -437,12 +428,10 @@ mod tests {
                 rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
             };
 
-            let secret_manager = Arc::new(TestSecretManager::new(PeerPrivateKey::from(
-                ark_babyjubjub::Fr::rand(&mut rng),
-            )));
-
-            let mut crypto_device =
-                CryptoDevice::init(secret_manager, PeerPublicKeyList::from(vec![])).await?;
+            let mut crypto_device = CryptoDevice::new(
+                ark_babyjubjub::Fr::rand(&mut rng).to_string().into(),
+                PeerPublicKeyList::from(vec![]),
+            )?;
             crypto_device.set_rp_materials(HashMap::from([(
                 rp_id,
                 RpMaterial::new(

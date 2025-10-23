@@ -48,8 +48,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
     println!("Deploying RpRegistry contract...");
+    let (peer_public_keys, peer_private_keys) = test_setup_utils::generate_keys(3);
     let rp_registry_contract =
-        test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
+        test_setup_utils::deploy_rp_registry(&anvil.ws_endpoint(), peer_public_keys)?;
 
     println!("Starting AuthTreeIndexer...");
     let auth_tree_indexer =
@@ -58,6 +59,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
         &anvil.ws_endpoint(),
+        peer_private_keys,
         rp_registry_contract,
         account_registry_contract,
     )

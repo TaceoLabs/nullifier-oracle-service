@@ -166,7 +166,7 @@ mod tests {
     };
     use rand::Rng;
 
-    use crate::services::{crypto_device::PeerPrivateKey, secret_manager::test::TestSecretManager};
+    use crate::services::crypto_device::PeerPrivateKey;
 
     use super::*;
 
@@ -175,8 +175,10 @@ mod tests {
         public_key_list: PeerPublicKeyList,
         key_gen_material: Groth16Material,
     ) -> eyre::Result<(DLogSecretGenService, Arc<CryptoDevice>)> {
-        let secret_manager = Arc::new(TestSecretManager::new(private_key));
-        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, public_key_list).await?);
+        let crypto_device = Arc::new(CryptoDevice::new(
+            private_key.inner().to_string().into(),
+            public_key_list,
+        )?);
         let dlog_secret_gen =
             DLogSecretGenService::init(Arc::clone(&crypto_device), key_gen_material);
         Ok((dlog_secret_gen, crypto_device))
