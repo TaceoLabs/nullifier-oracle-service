@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -46,6 +46,7 @@ impl AlloyMerkleWatcher {
 
         tracing::info!("get current root...");
         let current_root = contract.currentRoot().call().await?;
+        tracing::info!("root = {current_root}");
 
         let merkle_root_store = Arc::new(Mutex::new(
             MerkleRootStore::new(
@@ -105,13 +106,21 @@ impl MerkleWatcher for AlloyMerkleWatcher {
             }
         }
         tracing::debug!("check in contract");
-        // if it is valid, we should receive this root as a RootRecorded event soon, no need to add here
         let contract = AccountRegistry::new(self.contract_address, self.provider.clone());
         let valid = contract
             .isValidRoot(root.into())
             .call()
             .await
             .map_err(|err| MerkleWatcherError(err.to_string()))?;
+        {
+            tracing::debug!("add root to store");
+            let mut store = self.merkle_root_store.lock();
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("system time is after unix epoch")
+                .as_secs();
+            store.insert(root, timestamp);
+        }
         tracing::debug!("root valid: {valid}");
         return Ok(valid);
     }
