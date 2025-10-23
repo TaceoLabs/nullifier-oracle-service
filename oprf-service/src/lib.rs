@@ -111,8 +111,12 @@ pub async fn start(
         wallet.clone(),
     )
     .await?;
-    let peer_public_keys = rp_registry.fetch_peer_public_keys().await?;
-    let head = rp_registry.provider.get_block_number().await?;
+    let (peer_public_keys, head) = tokio::join!(
+        rp_registry.fetch_peer_public_keys(),
+        rp_registry.provider.get_block_number()
+    );
+    let peer_public_keys = peer_public_keys?;
+    let head = head?;
 
     for (idx, p) in peer_public_keys
         .clone()

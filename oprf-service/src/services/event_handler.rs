@@ -121,12 +121,11 @@ async fn run(
 
 /// Processes a single [`ChainEvent`] using the provided [`DLogSecretGenService`].
 ///
-/// For round 1 and round 2 secret generation events, blocks the current thread to call synchronous methods.
-/// Finalization is handled asynchronously, because we need to store the
-/// resulting DLog-share into our secret-manager.
-///
 /// # Errors
 /// Returns an error if processing the event fails.
+///
+/// # Notes
+/// This function performs heavy CPU work and should not be run on a async runtime.
 pub(crate) fn handle_chain_event(
     secret_gen: &mut DLogSecretGenService,
     event: ChainEvent,

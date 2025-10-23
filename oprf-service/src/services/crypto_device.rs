@@ -12,6 +12,8 @@
 //! the device ensures type-safe and consistent handling of cryptographic
 //! values.
 
+use std::time::Instant;
+
 use alloy::{
     primitives::Address,
     providers::{DynProvider, Provider as _},
@@ -190,7 +192,8 @@ impl CryptoDevice {
             .to_block(to_block)
             .event_signature(RpRegistry::SecretGenFinalize::SIGNATURE_HASH);
 
-        // TODO maybe load in chunks? but should not be needed unless we have many tens of thousands RPs
+        let start = Instant::now();
+        // could load in chunks, but should not be needed unless we have many tens of thousands RPs
         let logs = rp_registry_provider.get_logs(&filter).await?;
         for log in logs {
             match RpRegistry::SecretGenFinalize::decode_log(log.as_ref()) {
@@ -225,7 +228,10 @@ impl CryptoDevice {
 
         let num_rp_materials = self.rp_materials.len();
         metrics::counter!(METRICS_RP_SECRETS).absolute(num_rp_materials as u64);
-        tracing::debug!("loaded {num_rp_materials} rp materials");
+        tracing::debug!(
+            "loaded {num_rp_materials} rp materials in {:?}",
+            start.elapsed()
+        );
 
         Ok(())
     }
