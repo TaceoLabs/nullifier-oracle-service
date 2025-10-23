@@ -19,7 +19,7 @@
 //! - `api`: REST API routes.
 use std::{fs::File, str::FromStr, sync::Arc};
 
-use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
+use alloy::{network::EthereumWallet, providers::Provider as _, signers::local::PrivateKeySigner};
 use axum::extract::FromRef;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
@@ -97,9 +97,7 @@ pub async fn start(
 
     // Load the secret manager. For now we only support AWS.
     // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
-    let secret_manager = Arc::new(
-        AwsSecretManager::init(config.private_key_secret_id, config.rp_secret_id_suffix).await,
-    );
+    let secret_manager = Arc::new(AwsSecretManager::init(config.private_key_secret_id).await);
 
     tracing::info!("connecting to wallet..");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
@@ -114,6 +112,7 @@ pub async fn start(
     )
     .await?;
     let peer_public_keys = rp_registry.fetch_peer_public_keys().await?;
+    let head = rp_registry.provider.get_block_number().await?;
 
     for (idx, p) in peer_public_keys
         .clone()
@@ -131,6 +130,16 @@ pub async fn start(
             .context("while initiating crypto-device")?,
     );
 
+    tracing::info!("load rp materials..");
+    crypto_device
+        .load_rp_materials(
+            rp_registry.contract_address,
+            rp_registry.provider.clone(),
+            config.key_gen_from_block,
+            head,
+        )
+        .await?;
+
     let peer_public_key = crypto_device.peer_public_key();
     let party_id = PartyId::from(u16::try_from(
         peer_public_keys
@@ -146,6 +155,7 @@ pub async fn start(
     let key_gen_watcher: KeyGenEventListenerService = Arc::new(AlloyKeyGenWatcher::new(
         rp_registry.contract_address,
         rp_registry.provider,
+        head,
     ));
 
     tracing::info!("spawning merkle watcher..");
@@ -290,10 +300,11 @@ mod tests {
     use rand::Rng as _;
     use uuid::Uuid;
 
+    use crate::services::crypto_device::DLogShare;
     use crate::services::crypto_device::dlog_storage::RpMaterial;
     use crate::services::merkle_watcher::test::TestMerkleWatcher;
     use crate::services::{
-        crypto_device::{CryptoDevice, DLogShare, PeerPrivateKey},
+        crypto_device::{CryptoDevice, PeerPrivateKey},
         secret_manager::test::TestSecretManager,
     };
 
@@ -422,24 +433,23 @@ mod tests {
                 rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
             };
 
-            let secret_manager = Arc::new(TestSecretManager::new(
-                PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng)),
-                HashMap::from([(
-                    rp_id,
-                    RpMaterial::new(
-                        HashMap::from([(
-                            ShareEpoch::default(),
-                            DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
-                        )]),
-                        rp_public_key.into(),
-                        RpNullifierKey::new(rng.r#gen()),
-                    ),
-                )]),
-            ));
+            let secret_manager = Arc::new(TestSecretManager::new(PeerPrivateKey::from(
+                ark_babyjubjub::Fr::rand(&mut rng),
+            )));
 
-            let crypto_device = Arc::new(
-                CryptoDevice::init(secret_manager, PeerPublicKeyList::from(vec![])).await?,
-            );
+            let mut crypto_device =
+                CryptoDevice::init(secret_manager, PeerPublicKeyList::from(vec![])).await?;
+            crypto_device.set_rp_materials(HashMap::from([(
+                rp_id,
+                RpMaterial::new(
+                    HashMap::from([(
+                        ShareEpoch::default(),
+                        DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
+                    )]),
+                    rp_public_key.into(),
+                    RpNullifierKey::new(rng.r#gen()),
+                ),
+            )]));
             let max_merkle_store_size = 10;
             let merkle_watcher = Arc::new(TestMerkleWatcher::new(
                 HashMap::from([(merkle_root, 0)]),
@@ -453,7 +463,7 @@ mod tests {
             let current_time_stamp_max_difference = Duration::from_secs(60);
             let signature_history_cleanup_interval = Duration::from_secs(60);
             let oprf_service = OprfService::init(
-                crypto_device,
+                crypto_device.into(),
                 merkle_watcher,
                 vk.into(),
                 request_lifetime,

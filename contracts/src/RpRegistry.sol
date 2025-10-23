@@ -304,9 +304,8 @@ contract RpRegistry {
             // cleanup all old data
             delete st.ecdsaPubKey;
             delete st.round1;
-            // we keep round2 ciphertexts in case we need to restore shares
+            // we keep round2 ciphertexts and round2Done to restore shares
             delete st.keyAggregate;
-            delete st.round2Done;
             delete st.round3Done;
             // we keep the eventsEmitted and exists to prevent participants to double submit
             emit Types.SecretGenFinalize(rpId);

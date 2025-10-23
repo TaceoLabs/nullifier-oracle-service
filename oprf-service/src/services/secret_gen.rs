@@ -132,7 +132,7 @@ impl DLogSecretGenService {
     }
 
     #[instrument(level = "info", skip(self, rp_public_key, rp_nullifier_key))]
-    pub(crate) async fn finalize(
+    pub(crate) fn finalize(
         &mut self,
         rp_id: RpId,
         rp_public_key: k256::PublicKey,
@@ -143,10 +143,12 @@ impl DLogSecretGenService {
             .finished_shares
             .remove(&rp_id)
             .context("cannot find computed DLogShare")?;
-        self.crypto_device
-            .register_nullifier_share(rp_id, rp_public_key.into(), rp_nullifier_key, dlog_share)
-            .await
-            .context("while persisting DLogShare")?;
+        self.crypto_device.register_nullifier_share(
+            rp_id,
+            rp_public_key.into(),
+            rp_nullifier_key,
+            dlog_share,
+        );
         Ok(())
     }
 }
@@ -168,16 +170,16 @@ mod tests {
 
     use super::*;
 
-    async fn secret_manager_and_dlog_secret_gen(
+    async fn dlog_secret_gen_and_crypto_device(
         private_key: PeerPrivateKey,
         public_key_list: PeerPublicKeyList,
         key_gen_material: Groth16Material,
-    ) -> eyre::Result<(Arc<TestSecretManager>, DLogSecretGenService)> {
-        let secret_manager = Arc::new(TestSecretManager::new(private_key, HashMap::new()));
-        let secret_manager_ = Arc::clone(&secret_manager);
+    ) -> eyre::Result<(DLogSecretGenService, Arc<CryptoDevice>)> {
+        let secret_manager = Arc::new(TestSecretManager::new(private_key));
         let crypto_device = Arc::new(CryptoDevice::init(secret_manager, public_key_list).await?);
-        let dlog_secret_gen = DLogSecretGenService::init(crypto_device, key_gen_material);
-        Ok((secret_manager_, dlog_secret_gen))
+        let dlog_secret_gen =
+            DLogSecretGenService::init(Arc::clone(&crypto_device), key_gen_material);
+        Ok((dlog_secret_gen, crypto_device))
     }
 
     fn build_public_inputs(
@@ -242,19 +244,19 @@ mod tests {
             sk2.get_public_key(),
         ]);
 
-        let (secret_manager0, mut dlog_secret_gen0) = secret_manager_and_dlog_secret_gen(
+        let (mut dlog_secret_gen0, crypto_device0) = dlog_secret_gen_and_crypto_device(
             sk0,
             peers.clone(),
             Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
         )
         .await?;
-        let (secret_manager1, mut dlog_secret_gen1) = secret_manager_and_dlog_secret_gen(
+        let (mut dlog_secret_gen1, crypto_device1) = dlog_secret_gen_and_crypto_device(
             sk1,
             peers.clone(),
             Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
         )
         .await?;
-        let (secret_manager2, mut dlog_secret_gen2) = secret_manager_and_dlog_secret_gen(
+        let (mut dlog_secret_gen2, crypto_device2) = dlog_secret_gen_and_crypto_device(
             sk2,
             peers.clone(),
             Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
@@ -376,51 +378,23 @@ mod tests {
 
         let rp_public_key = k256::SecretKey::random(&mut rng).public_key();
         // finalize round
-        dlog_secret_gen0
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
-        dlog_secret_gen1
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
-        dlog_secret_gen2
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
+        dlog_secret_gen0.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
+        dlog_secret_gen1.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
+        dlog_secret_gen2.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
 
-        let dlog_secret0 = secret_manager0
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
+        let dlog_secret0 = crypto_device0
+            .rp_dlog_share(rp_id, ShareEpoch::default())
             .unwrap();
-        let dlog_secret1 = secret_manager1
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
+        let dlog_secret1 = crypto_device1
+            .rp_dlog_share(rp_id, ShareEpoch::default())
             .unwrap();
-        let dlog_secret2 = secret_manager2
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
+        let dlog_secret2 = crypto_device2
+            .rp_dlog_share(rp_id, ShareEpoch::default())
             .unwrap();
 
         let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
         let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
-            &[
-                dlog_secret0.into(),
-                dlog_secret1.into(),
-                dlog_secret2.into(),
-            ],
+            &[dlog_secret0, dlog_secret1, dlog_secret2],
             &lagrange,
         );
 

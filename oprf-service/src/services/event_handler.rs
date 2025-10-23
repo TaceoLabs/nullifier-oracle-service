@@ -110,8 +110,7 @@ async fn run(
             }
         };
 
-        let result = handle_chain_event(&mut secret_gen, event)
-            .await
+        let result = tokio::task::block_in_place(|| handle_chain_event(&mut secret_gen, event))
             .context("while handling chain event")?;
         event_listener
             .report_result(result)
@@ -128,33 +127,25 @@ async fn run(
 ///
 /// # Errors
 /// Returns an error if processing the event fails.
-pub(crate) async fn handle_chain_event(
+pub(crate) fn handle_chain_event(
     secret_gen: &mut DLogSecretGenService,
     event: ChainEvent,
 ) -> eyre::Result<ChainEventResult> {
     match event {
-        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound1(
-                    secret_gen.round1(rp_id, threshold),
-                ))
-            })
-        }
+        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => Ok(
+            ChainEventResult::SecretGenRound1(secret_gen.round1(rp_id, threshold)),
+        ),
         ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound2(
-                    secret_gen.round2(rp_id).context("while doing round2")?,
-                ))
-            })
+            Ok(ChainEventResult::SecretGenRound2(
+                secret_gen.round2(rp_id).context("while doing round2")?,
+            ))
         }
         ChainEvent::SecretGenRound3(SecretGenRound3Event { rp_id, ciphers }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound3(
-                    secret_gen
-                        .round3(rp_id, ciphers)
-                        .context("while doing round3")?,
-                ))
-            })
+            Ok(ChainEventResult::SecretGenRound3(
+                secret_gen
+                    .round3(rp_id, ciphers)
+                    .context("while doing round3")?,
+            ))
         }
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
             rp_id,
@@ -163,7 +154,6 @@ pub(crate) async fn handle_chain_event(
         }) => {
             secret_gen
                 .finalize(rp_id, rp_public_key, rp_nullifier_key)
-                .await
                 .context("while finalizing secret-gen")?;
             Ok(ChainEventResult::NothingToReport)
         }
