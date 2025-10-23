@@ -9,11 +9,11 @@
 //! they can be sent over the wire.
 use std::fmt;
 
-use ark_serde_compat::groth16::Groth16Proof;
 use eddsa_babyjubjub::EdDSAPublicKey;
 use oprf_core::ddlog_equality::{
     DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
+use oprf_zk::groth16_serde::Groth16Proof;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

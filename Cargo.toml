@@ -9,6 +9,7 @@ members = [
     "oprf-service",
     "oprf-test",
     "oprf-types",
+    "oprf-zk",
     "poseidon2"
 ]
 resolver = "3"
@@ -65,6 +66,7 @@ oprf-core = { path = "oprf-core" }
 oprf-service = { path = "oprf-service" }
 oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }
+oprf-zk = { path = "oprf-zk" }
 parking_lot = "0.12"
 poseidon2 = { path = "poseidon2" }
 rand = { version = "0.8" }
@@ -75,7 +77,6 @@ rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }
 serde_json = { version = "1" }
-tempfile = "3"
 thiserror = { version = "2" }
 tokio = { version = "1" }
 tokio-util = "0.7"

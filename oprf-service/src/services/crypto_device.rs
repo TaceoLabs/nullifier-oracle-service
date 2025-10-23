@@ -12,8 +12,6 @@
 //! the device ensures type-safe and consistent handling of cryptographic
 //! values.
 
-use std::{collections::HashMap, path::Path};
-
 use ark_ec::{AffineRepr, CurveGroup as _};
 use ark_ff::{BigInteger as _, PrimeField as _};
 use k256::ecdsa::signature::Verifier;
@@ -33,19 +31,17 @@ use oprf_types::{
     crypto::{PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
-use witness::BlackBoxFunction;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
     metrics::METRICS_RP_SECRETS,
     services::{
-        crypto_device::{dlog_storage::RpMaterialStore, zk::Groth16Material},
-        secret_manager::SecretManagerService,
+        crypto_device::dlog_storage::RpMaterialStore, secret_manager::SecretManagerService,
     },
 };
 
 pub(crate) mod dlog_storage;
-mod zk;
+mod key_gen;
 
 /// The private key of an OPRF peer.
 ///
@@ -119,11 +115,6 @@ pub(crate) struct CryptoDevice {
     public_key_list: PeerPublicKeyList,
     /// Service to persist secret material.
     secret_manager: SecretManagerService,
-    /// The groth16 material needed to compute the proof in round 2 of
-    /// the KeyGen protocol.
-    key_gen_zk_material: Groth16Material,
-    /// The black box functions for the witness extensions
-    bbfs: HashMap<String, BlackBoxFunction>,
 }
 
 type CryptoDeviceResult<T> = std::result::Result<T, CryptoDeviceError>;
@@ -156,8 +147,6 @@ impl CryptoDevice {
     pub(crate) async fn init(
         secret_manager: SecretManagerService,
         public_key_list: PeerPublicKeyList,
-        key_gen_zkey_path: impl AsRef<Path>,
-        key_gen_witness_graph: impl AsRef<Path>,
     ) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
         let (private_key, shares) = secret_manager
@@ -171,12 +160,6 @@ impl CryptoDevice {
             shares: RpMaterialStore::new(shares),
             public_key_list,
             secret_manager,
-            key_gen_zk_material: Groth16Material::from_paths(
-                key_gen_zkey_path,
-                key_gen_witness_graph,
-            )
-            .context("while loading key-gen groth16 material")?,
-            bbfs: zk::black_box_functions(),
         })
     }
 

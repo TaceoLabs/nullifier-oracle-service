@@ -23,6 +23,7 @@ use oprf_types::{
     },
     crypto::{RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCommitment},
 };
+use oprf_zk::Groth16Material;
 use tracing::instrument;
 
 use crate::services::crypto_device::{CryptoDevice, DLogShare};
@@ -37,15 +38,20 @@ pub(crate) struct DLogSecretGenService {
     round1: HashMap<RpId, KeyGenPoly>,
     finished_shares: HashMap<RpId, DLogShare>,
     crypto_device: Arc<CryptoDevice>,
+    key_gen_material: Groth16Material,
 }
 
 impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
-    pub(crate) fn init(crypto_device: Arc<CryptoDevice>) -> Self {
+    pub(crate) fn init(
+        crypto_device: Arc<CryptoDevice>,
+        key_gen_material: Groth16Material,
+    ) -> Self {
         Self {
             crypto_device,
             round1: HashMap::new(),
             finished_shares: HashMap::new(),
+            key_gen_material,
         }
     }
 
@@ -92,7 +98,7 @@ impl DLogSecretGenService {
         let my_poly = self.round1.remove(&rp_id).expect("todo how to handle this");
         let contribution = self
             .crypto_device
-            .compute_keygen_proof_max_degree1_parties3(&my_poly)
+            .compute_keygen_proof_max_degree1_parties3(&self.key_gen_material, &my_poly)
             .context("while computing proof for round2")?;
         Ok(SecretGenRound2Contribution {
             rp_id,
@@ -147,7 +153,7 @@ impl DLogSecretGenService {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use ark_ec::{CurveGroup as _, PrimeGroup};
     use ark_ff::UniformRand as _;
@@ -165,19 +171,13 @@ mod tests {
     async fn secret_manager_and_dlog_secret_gen(
         private_key: PeerPrivateKey,
         public_key_list: PeerPublicKeyList,
-        zkey: impl AsRef<Path>,
-        graph: impl AsRef<Path>,
-    ) -> eyre::Result<(
-        Arc<TestSecretManager>,
-        DLogSecretGenService,
-        Arc<CryptoDevice>,
-    )> {
+        key_gen_material: Groth16Material,
+    ) -> eyre::Result<(Arc<TestSecretManager>, DLogSecretGenService)> {
         let secret_manager = Arc::new(TestSecretManager::new(private_key, HashMap::new()));
         let secret_manager_ = Arc::clone(&secret_manager);
-        let crypto_device =
-            Arc::new(CryptoDevice::init(secret_manager, public_key_list, zkey, graph).await?);
-        let dlog_secret_gen = DLogSecretGenService::init(Arc::clone(&crypto_device));
-        Ok((secret_manager_, dlog_secret_gen, crypto_device))
+        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, public_key_list).await?);
+        let dlog_secret_gen = DLogSecretGenService::init(crypto_device, key_gen_material);
+        Ok((secret_manager_, dlog_secret_gen))
     }
 
     fn build_public_inputs(
@@ -224,8 +224,13 @@ mod tests {
         let mut rng = rand::thread_rng();
         let rp_id = RpId::new(rng.r#gen());
         let threshold = 2;
-        let graph = PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../keygen_graph.bin");
-        let keygen = PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../keygen_13.zkey");
+        let graph =
+            PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_graph.bin");
+        let graph = std::fs::read(graph)?;
+        let key_gen_zkey =
+            PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_13.zkey");
+        let key_gen_zkey = std::fs::read(key_gen_zkey)?;
+        let key_gen_material = Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?;
 
         let sk0 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
         let sk1 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
@@ -237,12 +242,24 @@ mod tests {
             sk2.get_public_key(),
         ]);
 
-        let (secret_manager0, mut dlog_secret_gen0, crypto_device0) =
-            secret_manager_and_dlog_secret_gen(sk0, peers.clone(), &keygen, &graph).await?;
-        let (secret_manager1, mut dlog_secret_gen1, crypto_device1) =
-            secret_manager_and_dlog_secret_gen(sk1, peers.clone(), &keygen, &graph).await?;
-        let (secret_manager2, mut dlog_secret_gen2, crypto_device2) =
-            secret_manager_and_dlog_secret_gen(sk2, peers.clone(), &keygen, &graph).await?;
+        let (secret_manager0, mut dlog_secret_gen0) = secret_manager_and_dlog_secret_gen(
+            sk0,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
+        let (secret_manager1, mut dlog_secret_gen1) = secret_manager_and_dlog_secret_gen(
+            sk1,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
+        let (secret_manager2, mut dlog_secret_gen2) = secret_manager_and_dlog_secret_gen(
+            sk2,
+            peers.clone(),
+            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
+        )
+        .await?;
 
         let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, threshold);
         let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, threshold);
@@ -308,9 +325,9 @@ mod tests {
         let proof0 = dlog_secret_gen0_round2.contribution.proof;
         let proof1 = dlog_secret_gen1_round2.contribution.proof;
         let proof2 = dlog_secret_gen2_round2.contribution.proof;
-        crypto_device0.verify_keygen_proof_max_degree1_parties3(&proof0.into(), &public_inputs0)?;
-        crypto_device1.verify_keygen_proof_max_degree1_parties3(&proof1.into(), &public_inputs1)?;
-        crypto_device2.verify_keygen_proof_max_degree1_parties3(&proof2.into(), &public_inputs2)?;
+        key_gen_material.verify_proof(&proof0.into(), &public_inputs0)?;
+        key_gen_material.verify_proof(&proof1.into(), &public_inputs1)?;
+        key_gen_material.verify_proof(&proof2.into(), &public_inputs2)?;
 
         let ciphers = (0..3)
             .map(|i| {

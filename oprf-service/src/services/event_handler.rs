@@ -25,6 +25,7 @@ use oprf_types::chain::SecretGenFinalizeEvent;
 use oprf_types::chain::SecretGenRound1Event;
 use oprf_types::chain::SecretGenRound2Event;
 use oprf_types::chain::SecretGenRound3Event;
+use oprf_zk::Groth16Material;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -52,8 +53,10 @@ impl ChainEventHandler {
         watcher: KeyGenEventListenerService,
         crypto_device: Arc<CryptoDevice>,
         cancellation_token: CancellationToken,
+        key_gen_material: Groth16Material,
     ) -> ChainEventHandler {
-        let dlog_secret_gen_service = DLogSecretGenService::init(Arc::clone(&crypto_device));
+        let dlog_secret_gen_service =
+            DLogSecretGenService::init(Arc::clone(&crypto_device), key_gen_material);
 
         Self(tokio::task::spawn(async move {
             match run(watcher, dlog_secret_gen_service, cancellation_token.clone()).await {

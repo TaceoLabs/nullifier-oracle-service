@@ -38,17 +38,17 @@ use oprf_core::ddlog_equality::PartialDLogEqualityCommitments;
 use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 
 use ark_ec::AffineRepr;
-use ark_serde_compat::groth16::Groth16Proof;
+use oprf_core::ddlog_equality::DLogEqualityCommitments;
 use oprf_core::shamir;
-use oprf_core::{
-    ddlog_equality::DLogEqualityCommitments,
-    proof_input_gen::{nullifier::NullifierProofInput, query::QueryProofInput},
-};
 use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
 use oprf_types::crypto::{PartyId, RpNullifierKey};
+use oprf_zk::groth16_serde::Groth16Proof;
+use oprf_zk::proof_inputs::nullifier::NullifierProofInput;
+use oprf_zk::proof_inputs::query::QueryProofInput;
+use oprf_zk::{Groth16Error, Groth16Material};
 use rand::{CryptoRng, Rng};
 use reqwest::StatusCode;
 use uuid::Uuid;
@@ -58,11 +58,8 @@ pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
-use crate::zk::{Groth16Error, Groth16Material};
-
 pub mod nonblocking;
 mod types;
-pub mod zk;
 
 pub use types::CredentialsSignature;
 pub use types::MerkleMembership;
@@ -114,18 +111,15 @@ pub enum Error {
 /// - `oprf_request`: The fully formed [`OprfRequest`] including the
 ///   blinded query point and Groth16 proof.
 /// - `query`: Original query details (RP ID, action, nonce, timestamp).
-/// - `groth16_material`: The Groth16 proving key and matrices used to generate
-///   the query proof; needed later for OPRFNullifier proof.
 /// - `blinded_request`: The result of blinding the query with the user's key.
-/// - `query_proof_input`: Input data for the OPRFQuery proof.
+/// - `query_input`: Input data for the OPRFQuery proof.
 /// - `query_hash`: The generated query hash.
 pub struct SignedOprfQuery {
     request_id: Uuid,
     oprf_request: OprfRequest,
     query: OprfQuery,
-    groth16_material: Groth16Material,
     blinded_request: BlindedOPrfRequest,
-    query_proof_input: QueryProofInput<TREE_DEPTH>,
+    query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
 }
 
@@ -171,11 +165,10 @@ impl OprfSessions {
 /// - `challenge_request`: The challenge request that will be sent to OPRF peers.
 /// - `lagrange`: Lagrange coefficients used to combine shares.
 /// - `blinded_request`: The original blinded OPRF request from the user.
-/// - `groth16_material`: Groth16 proving key and matrices, needed later for
 ///   generating the OPRFNullifier proof.
 /// - `blinded_response`: The combined blinded response after aggregating
 ///   peer commitments.
-/// - `query_proof_input`: Input data used to generate the OPRFQuery proof.
+/// - `query_input`: Input data used to generate the OPRFQuery proof.
 /// - `query_hash`: The hash of the query used in proofs.
 /// - `rp_nullifier_key`: The RP-specific nullifier public-key.
 pub struct Challenge {
@@ -183,9 +176,8 @@ pub struct Challenge {
     challenge_request: ChallengeRequest,
     lagrange: Vec<ark_babyjubjub::Fr>,
     blinded_request: BlindedOPrfRequest,
-    groth16_material: Groth16Material,
     blinded_response: ark_babyjubjub::EdwardsAffine,
-    query_proof_input: QueryProofInput<TREE_DEPTH>,
+    query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
     rp_nullifier_key: RpNullifierKey,
 }
@@ -202,14 +194,14 @@ pub struct NullifierArgs {
     pub merkle_membership: MerkleMembership,
     /// The original OPRF query (RP ID, action, nonce, timestamp, etc.).
     pub query: OprfQuery,
-    /// Groth16 material (proving key and matrices) used for query and nullifier proofs.
-    pub groth16_material: Groth16Material,
     /// User's key material (private and public keys, batch index, etc.).
     pub key_material: UserKeyMaterial,
     /// RP-specific nullifier key.
     pub rp_nullifier_key: RpNullifierKey,
     /// Signal hash as in semaphore
     pub signal_hash: ark_babyjubjub::Fq,
+    /// Commitment to the id
+    pub id_commitment_r: ark_babyjubjub::Fq,
 }
 
 impl Challenge {
@@ -243,6 +235,8 @@ impl SignedOprfQuery {
 /// * `services` - List of OPRF service URLs to contact.
 /// * `threshold` - Minimum number of valid peer responses required.
 /// * `args` - [`NullifierArgs`] containing all input data (credentials, Merkle membership, query, keys, signal, etc.).
+/// * `query_material` - Groth16 material (proving key and matrices) used for the query proof.
+/// * `nullifier_material` - Groth16 material (proving key and matrices) used for the nullifier proof.
 /// * `rng` - A cryptographically secure random number generator.
 ///
 /// # Returns
@@ -262,6 +256,8 @@ impl SignedOprfQuery {
 pub async fn nullifier<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
+    query_material: &Groth16Material,
+    nullifier_material: &Groth16Material,
     args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(
@@ -274,17 +270,17 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         credential_signature,
         merkle_membership,
         query,
-        groth16_material,
         key_material,
-        signal_hash,
         rp_nullifier_key,
+        signal_hash,
+        id_commitment_r,
     } = args;
 
     let request_id = Uuid::new_v4();
     let signed_query = sign_oprf_query(
         credential_signature,
         merkle_membership,
-        groth16_material,
+        query_material,
         query,
         key_material,
         request_id,
@@ -298,7 +294,14 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
     let req = challenges.get_request();
     let responses = nonblocking::finish_sessions(&client, sessions, req).await?;
-    verify_challenges(challenges, responses, signal_hash, rng)
+    verify_challenges(
+        nullifier_material,
+        challenges,
+        responses,
+        signal_hash,
+        id_commitment_r,
+        rng,
+    )
 }
 
 /// Signs an OPRF query and prepares it for sending to OPRF peers.
@@ -317,7 +320,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 ///
 /// * `credentials_signature` - The user's credential signature issued by the RP.
 /// * `merkle_membership` - Used to compute proof for membership in the Merkle tree.
-/// * `groth16_material` - Groth16 proving key and constraint matrices.
+/// * `query_material` - Groth16 proving key and constraint matrices for query proof.
 /// * `query` - The query details (RP ID, action, nonce, timestamp).
 /// * `key_material` - User key material including private signing key.
 /// * `rng` - Cryptographically secure random number generator.
@@ -337,7 +340,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 pub fn sign_oprf_query<R: Rng + CryptoRng>(
     credentials_signature: CredentialsSignature,
     merkle_membership: MerkleMembership,
-    groth16_material: Groth16Material,
+    query_material: &Groth16Material,
     query: OprfQuery,
     key_material: UserKeyMaterial,
     request_id: Uuid,
@@ -357,23 +360,17 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     let signature = key_material.sk.sign(blinding_factor.query());
 
     let query_input = QueryProofInput::<TREE_DEPTH> {
-        pk: key_material.pk_batch.into_proof_input(),
+        pk: key_material.pk_batch.into_inner(),
         pk_index: key_material.pk_index.into(),
         s: signature.s,
-        r: [signature.r.x, signature.r.y],
+        r: signature.r,
         cred_type_id: credentials_signature.type_id,
-        cred_pk: [
-            credentials_signature.issuer.pk.x,
-            credentials_signature.issuer.pk.y,
-        ],
+        cred_pk: credentials_signature.issuer.pk,
         cred_hashes: credentials_signature.hashes,
         cred_genesis_issued_at: credentials_signature.genesis_issued_at.into(),
         cred_expires_at: credentials_signature.expires_at.into(),
         cred_s: credentials_signature.signature.s,
-        cred_r: [
-            credentials_signature.signature.r.x,
-            credentials_signature.signature.r.y,
-        ],
+        cred_r: credentials_signature.signature.r,
         current_time_stamp: query.current_time_stamp.into(),
         merkle_root: merkle_membership.root.into_inner(),
         depth: ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
@@ -383,15 +380,20 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         rp_id: query.rp_id.into_inner().into(),
         action: query.action,
         nonce: query.nonce,
-        q: blinded_request.blinded_query_as_public_output(),
     };
 
-    let (proof, _) = groth16_material.generate_query_proof(&query_input, rng)?;
+    let query_input_json = serde_json::to_value(&query_input)
+        .expect("can serialize")
+        .as_object()
+        .expect("is object")
+        .to_owned();
+    let witness = query_material.generate_witness(query_input_json)?;
+    let (proof, _) = query_material.generate_proof(&witness, rng)?;
+
     Ok(SignedOprfQuery {
         request_id,
-        groth16_material,
         query_hash,
-        query_proof_input: query_input,
+        query_input,
         oprf_request: OprfRequest {
             request_id,
             proof,
@@ -450,8 +452,7 @@ pub fn compute_challenges(
         DLogEqualityCommitments::combine_commitments_shamir(&sessions.commitments, &lagrange);
     let blinded_response = challenge.blinded_response();
     Ok(Challenge {
-        groth16_material: query.groth16_material,
-        query_proof_input: query.query_proof_input,
+        query_input: query.query_input,
         query_hash: query.query_hash,
         request_id: query.request_id,
         lagrange,
@@ -481,10 +482,12 @@ pub fn compute_challenges(
 ///
 /// # Arguments
 ///
+/// * `nullifier_material` - Groth16 material (proving key and matrices) used for nullifier proof.
 /// * `challenges` - The [`Challenge`] struct containing all challenge data.
 /// * `responses` - Responses from peers during the finish session. Must be in the same order
 ///   as the initial sessions to match the Lagrange coefficients.
-/// * `signal_hash` - The signal hash as in semaphore
+/// * `signal_hash` - The signal hash as in semaphore.
+/// * `id_commitment_r` - Commitment to the id.
 /// * `rng` - Cryptographically secure RNG.
 ///
 /// # Returns
@@ -500,9 +503,11 @@ pub fn compute_challenges(
 /// Returns [`Error::InvalidDLogProof`] if the combined DLogEquality proof
 /// fails verification, or any [`Groth16Error`] if proof generation fails.
 pub fn verify_challenges<R: Rng + CryptoRng>(
+    nullifier_material: &Groth16Material,
     challenges: Challenge,
     responses: Vec<ChallengeResponse>,
     signal_hash: ark_babyjubjub::Fq,
+    id_commitment_r: ark_babyjubjub::Fq,
     rng: &mut R,
 ) -> Result<(
     Groth16Proof,
@@ -534,21 +539,26 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
 
     let nullifier_input = NullifierProofInput::new(
         challenges.request_id,
-        challenges.rp_nullifier_key.inner(),
-        signal_hash,
-        challenges.query_proof_input,
-        challenges.query_hash,
-        challenges.blinded_response,
+        challenges.query_input,
         dlog_proof,
-        rng.r#gen(),
+        challenges.rp_nullifier_key.inner(),
+        challenges.blinded_response,
+        signal_hash,
+        id_commitment_r,
+        challenges.query_hash,
     );
-    let (proof, public) = challenges
-        .groth16_material
-        .generate_nullifier_proof(&nullifier_input, rng)?;
-    Ok((
-        proof,
-        public,
-        nullifier_input.nullifier,
-        nullifier_input.id_commitment,
-    ))
+
+    let nullifier_input_json = serde_json::to_value(&nullifier_input)
+        .expect("can serialize")
+        .as_object()
+        .expect("is object")
+        .to_owned();
+    let witness = nullifier_material.generate_witness(nullifier_input_json)?;
+    let (proof, public) = nullifier_material.generate_proof(&witness, rng)?;
+
+    // 2 outputs, 0 is id_commitment, 1 is nullifier
+    let id_commitment = public[0];
+    let nullifier = public[1];
+
+    Ok((proof, public, nullifier, id_commitment))
 }

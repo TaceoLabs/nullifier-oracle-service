@@ -27,7 +27,6 @@ async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
-circom-types.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
@@ -41,6 +40,7 @@ metrics = { workspace = true }
 nodes-telemetry = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
+oprf-zk = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
 rustls = { workspace = true }
@@ -68,3 +68,4 @@ axum-test = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
+poseidon2 = { workspace = true }
