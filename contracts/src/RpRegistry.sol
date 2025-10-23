@@ -304,8 +304,9 @@ contract RpRegistry {
             // cleanup all old data
             delete st.ecdsaPubKey;
             delete st.round1;
-            // we keep round2 ciphertexts and round2Done to restore shares
+            // we keep round2 ciphertexts to restore shares
             delete st.keyAggregate;
+            delete st.round2Done;
             delete st.round3Done;
             // we keep the eventsEmitted and exists to prevent participants to double submit
             emit Types.SecretGenFinalize(rpId);
@@ -340,8 +341,6 @@ contract RpRegistry {
         // check if there exists this a key-gen
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
-        // check that round2 ciphers are finished
-        if (!allRound2Submitted(st)) revert NotReady();
         return st.round2[peer.partyId];
     }
 
