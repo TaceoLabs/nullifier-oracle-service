@@ -1,5 +1,10 @@
 FROM lukemathwalker/cargo-chef:0.1.72-rust-1.90.0-bookworm AS chef
 WORKDIR /app
+ENV PKG_CONFIG_SYSROOT_DIR=/
+RUN apk add --no-cache musl-dev openssl-dev zig
+RUN cargo install --locked cargo-zigbuild cargo-chef
+RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
 
 FROM chef AS planner
 # look at .dockerignore if this does not copy what you want
@@ -11,10 +16,17 @@ ARG GIT_HASH
 RUN apt-get update && apt-get install -y pkg-config
 COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --release --zigbuild \
+    --target x86_64-unknown-linux-musl --target aarch64-unknown-linux-musl
 # Build application
 COPY . .
-RUN cargo build --release --bin oprf-service
+RUN cargo zigbuild -r \
+    --target x86_64-unknown-linux-musl --target aarch64-unknown-linux-musl --release --bin oprf-service && \
+    mkdir /app/linux && \
+    cp target/aarch64-unknown-linux-musl/release/prog /app/linux/arm64 && \
+    cp target/x86_64-unknown-linux-musl/release/prog /app/linux/amd64
+
+# RUN cargo build --release --bin oprf-service
 
 
 
