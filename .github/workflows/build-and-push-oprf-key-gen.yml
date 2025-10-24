@@ -1,0 +1,17 @@
+name: Build and Push (oprf-service)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'key-gen-v*'
+
+jobs:
+  workflow:
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      image-name: key-gen
+      dockerfile: build/Dockerfile.key-gen
+

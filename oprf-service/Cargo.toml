@@ -24,8 +24,8 @@ ark-ff.workspace = true
 ark-groth16.workspace = true
 ark-serde-compat = { workspace = true }
 async-trait = { workspace = true }
-aws-config = { workspace = true, features = ["behavior-version-latest"] }
-aws-sdk-secretsmanager = { workspace = true }
+aws-config = { workspace = true, features = ["behavior-version-latest"], optional = true }
+aws-sdk-secretsmanager = { workspace = true, optional = true }
 axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
@@ -69,3 +69,10 @@ eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
 poseidon2 = { workspace = true }
+
+[features]
+key-gen-bin = ["dep:aws-sdk-secretsmanager", "dep:aws-config"]
+
+[[bin]]
+name = "key-gen"
+required-features = ["key-gen-bin"]

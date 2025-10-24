@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use alloy::primitives::Address;
 use ark_ec::{AffineRepr as _, CurveGroup as _};
 use ark_ff::UniformRand as _;
-use aws_sdk_secretsmanager::operation::create_secret::CreateSecretError;
 use itertools::Itertools as _;
 use oprf_service::rp_registry::Types;
 use oprf_types::crypto::PeerPublicKey;
@@ -15,16 +14,6 @@ use crate::{
     OPRF_PEER_ADDRESS_0, OPRF_PEER_ADDRESS_1, OPRF_PEER_ADDRESS_2, TACEO_ADMIN_ADDRESS,
     TACEO_ADMIN_PRIVATE_KEY, rp_registry_scripts,
 };
-
-pub async fn deploy_and_keygen(
-    ws_rps_url: &str,
-    private_key_secret_id_prefix: &str,
-    overwrite_old_keys: bool,
-) -> eyre::Result<Address> {
-    let peer_public_keys =
-        generate_keys(3, private_key_secret_id_prefix, overwrite_old_keys).await?;
-    deploy_rp_registry(ws_rps_url, peer_public_keys)
-}
 
 pub fn deploy_rp_registry(
     ws_rps_url: &str,
@@ -53,76 +42,17 @@ pub fn deploy_rp_registry(
     Ok(key_gen_contract)
 }
 
-/// Generate and upload OPRF keys ot AWS secrets-manger
-pub async fn generate_keys(
-    amount_parties: usize,
-    private_key_secret_id_prefix: &str,
-    overwrite_old_keys: bool,
-) -> eyre::Result<Vec<PeerPublicKey>> {
-    tracing::info!("generating private keys for {amount_parties} services");
-    tracing::debug!("prefix: {private_key_secret_id_prefix}");
-    tracing::debug!("overwrite: {overwrite_old_keys}");
-    let client = aws_sdk_secretsmanager::Client::new(&aws_config::load_from_env().await);
-
+pub fn generate_keys(amount_parties: usize) -> (Vec<PeerPublicKey>, Vec<ark_babyjubjub::Fr>) {
     let mut public_keys = Vec::with_capacity(amount_parties);
-    for i in 0..amount_parties {
-        let secret_id = format!("{private_key_secret_id_prefix}/n{i}");
+    let mut private_keys = Vec::with_capacity(amount_parties);
+    for _ in 0..amount_parties {
         let private_key = ark_babyjubjub::Fr::rand(&mut rand::thread_rng());
-        upload_to_aws(
-            &client,
-            secret_id,
-            private_key.to_string(),
-            overwrite_old_keys,
-        )
-        .await?;
-        public_keys.push(PeerPublicKey::from(
+        let public_key = PeerPublicKey::from(
             (ark_babyjubjub::EdwardsAffine::generator() * private_key).into_affine(),
-        ));
+        );
+        private_keys.push(private_key);
+        public_keys.push(public_key);
     }
 
-    Ok(public_keys)
-}
-
-async fn upload_to_aws(
-    client: &aws_sdk_secretsmanager::Client,
-    secret_id: String,
-    message: String,
-    overwrite_old_keys: bool,
-) -> eyre::Result<()> {
-    // If we don't allow overwrite we simply create the secret and propagate any errors
-    if !overwrite_old_keys {
-        tracing::debug!("creating secret: {secret_id}");
-        client
-            .create_secret()
-            .name(secret_id)
-            .secret_string(message)
-            .send()
-            .await?;
-    } else {
-        tracing::debug!("creating secret: {secret_id}");
-        // Try to create first, if it exists then add a new version
-        match client
-            .create_secret()
-            .name(secret_id.clone())
-            .secret_string(message.clone())
-            .send()
-            .await
-        {
-            Ok(_) => (),
-            Err(e) => match e.into_service_error() {
-                CreateSecretError::ResourceExistsException(_) => {
-                    // Resource exist so do put
-                    tracing::debug!("already exists - overwrite");
-                    client
-                        .put_secret_value()
-                        .secret_id(secret_id)
-                        .secret_string(message)
-                        .send()
-                        .await?;
-                }
-                x => Err(x)?,
-            },
-        }
-    }
-    Ok(())
+    (public_keys, private_keys)
 }

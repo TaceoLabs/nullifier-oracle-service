@@ -139,13 +139,9 @@ pub struct OprfPeerConfig {
     )]
     pub chain_ws_rpc_url: String,
 
-    /// The name/ARN of the service's private-key.
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_PRIVATE_KEY_SECRET_ID",
-        default_value = "oprf/sk"
-    )]
-    pub private_key_secret_id: String,
+    /// The service's private-key.
+    #[clap(long, env = "OPRF_SERVICE_PRIVATE_KEY")]
+    pub private_key: SecretString,
 
     /// The maximum size of the merkle store.
     ///

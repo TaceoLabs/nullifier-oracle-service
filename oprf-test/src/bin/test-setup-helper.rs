@@ -1,17 +1,13 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use oprf_test::test_setup_utils;
 
 #[derive(Parser, Debug)]
-pub struct InitRpRegistryConfig {
-    /// The secret ID prefix
-    ///
-    /// The final secret ID will then be `secret_id0`|`PartyID`
-    #[clap(long, env = "SECRET_ID_PREFIX", default_value = "oprf/sk")]
-    pub private_key_secret_id_prefix: String,
-
-    /// Whether old keys should be overwritten
-    #[clap(long, env = "OVERWRITE", default_value = "false")]
-    pub overwrite_old_keys: bool,
+pub struct TestSetupHelperConfig {
+    /// The dir to write the private keys to
+    #[clap(long, env = "PRIVATE_KEYS_OUT_DIR")]
+    pub private_keys_out_dir: PathBuf,
 
     /// The websocket rpc url of the chain
     #[clap(long, env = "CHAIN_WS_RPC_URL")]
@@ -21,16 +17,20 @@ pub struct InitRpRegistryConfig {
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     nodes_telemetry::install_tracing("test_setup_helper=debug");
-    let config = InitRpRegistryConfig::parse();
-    let InitRpRegistryConfig {
-        private_key_secret_id_prefix,
-        overwrite_old_keys,
+    let config = TestSetupHelperConfig::parse();
+    let TestSetupHelperConfig {
+        private_keys_out_dir,
         chain_ws_rpc_url,
     } = config;
 
-    let peer_public_keys =
-        test_setup_utils::generate_keys(3, &private_key_secret_id_prefix, overwrite_old_keys)
-            .await?;
+    let (peer_public_keys, peer_private_keys) = test_setup_utils::generate_keys(3);
+
+    for (i, private_key) in peer_private_keys.into_iter().enumerate() {
+        std::fs::write(
+            private_keys_out_dir.join(format!("oprf_peer_private_key_{i}")),
+            private_key.to_string(),
+        )?;
+    }
 
     if let Some(chain_ws_rpc_url) = chain_ws_rpc_url {
         tracing::info!("deploying rp-registry-test-setup at {chain_ws_rpc_url}");

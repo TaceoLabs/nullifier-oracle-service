@@ -14,7 +14,6 @@
 //! - [`merkle_watcher`] – watches the blockchain for merkle-root update events.
 //! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
 //! - [`secret_gen`] – handles multi-round secret generation protocols.
-//! - [`secret_manager`] – stores and retrieves secrets (AWS or local file based).
 //! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
 //! - [`signature_history`] – keeps track of nonce + time_stamp signatures to detect replays
 pub(crate) mod crypto_device;
@@ -23,6 +22,5 @@ pub(crate) mod key_event_watcher;
 pub(crate) mod merkle_watcher;
 pub(crate) mod oprf;
 pub(crate) mod secret_gen;
-pub(crate) mod secret_manager;
 pub(crate) mod session_store;
 pub(crate) mod signature_history;

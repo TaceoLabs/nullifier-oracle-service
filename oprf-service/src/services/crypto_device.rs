@@ -7,12 +7,8 @@
 //! them outside the device. It provides functions to compute public keys,
 //! evaluate polynomials, generate partial commitments, decrypt received
 //! ciphertexts, and verifies signature from the RPs.
-//!
-//! All secret material is persisted using the [`SecretManagerService`] and
-//! the device ensures type-safe and consistent handling of cryptographic
-//! values.
 
-use std::time::Instant;
+use std::{str::FromStr, time::Instant};
 
 use alloy::{
     primitives::Address,
@@ -23,6 +19,7 @@ use alloy::{
 use ark_ec::{AffineRepr, CurveGroup as _};
 use ark_ff::{BigInteger as _, PrimeField as _};
 use k256::ecdsa::signature::Verifier;
+use secrecy::{ExposeSecret as _, SecretString};
 use tracing::instrument;
 
 use eyre::Context;
@@ -42,11 +39,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
-    metrics::METRICS_RP_SECRETS,
-    rp_registry::RpRegistry,
-    services::{
-        crypto_device::dlog_storage::RpMaterialStore, secret_manager::SecretManagerService,
-    },
+    metrics::METRICS_RP_SECRETS, rp_registry::RpRegistry,
+    services::crypto_device::dlog_storage::RpMaterialStore,
 };
 
 pub(crate) mod dlog_storage;
@@ -146,21 +140,15 @@ pub(crate) enum CryptoDeviceError {
 }
 
 impl CryptoDevice {
-    /// Initializes the [`CryptoDevice`] by loading secret material from
-    /// the provided [`SecretManagerService`].
-    ///
-    /// Returns an error if loading secrets fails.
-    #[instrument(level = "info", skip_all)]
-    pub(crate) async fn init(
-        secret_manager: SecretManagerService,
+    /// Create a [`CryptoDevice`]
+    pub(crate) fn new(
+        private_key: SecretString,
         public_key_list: PeerPublicKeyList,
     ) -> eyre::Result<Self> {
-        tracing::info!("invoking secret manager to load secrets..");
-        let private_key = secret_manager
-            .load_secrets()
-            .await
-            .context("while loading secrets from AWS")?;
-
+        let private_key = PeerPrivateKey::from(
+            ark_babyjubjub::Fr::from_str(private_key.expose_secret())
+                .map_err(|_| eyre::eyre!("failed to parse private key"))?,
+        );
         Ok(Self {
             private_key,
             rp_materials: RpMaterialStore::default(),
@@ -315,8 +303,6 @@ impl CryptoDevice {
     }
 
     /// Registers a new nullifier share for the given relying-party.
-    ///
-    /// Persists the share using the [`SecretManagerService`].
     pub(crate) fn register_nullifier_share(
         &self,
         rp_id: RpId,
