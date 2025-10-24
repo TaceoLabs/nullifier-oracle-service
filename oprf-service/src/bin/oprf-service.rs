@@ -15,6 +15,9 @@ async fn main() -> eyre::Result<ExitCode> {
         env!("CARGO_PKG_VERSION"),
         option_env!("GIT_HASH").unwrap_or(git_version!(fallback = "UNKNOWN"))
     );
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("can install");
 
     let result = oprf_service::start(
         OprfPeerConfig::parse(),
