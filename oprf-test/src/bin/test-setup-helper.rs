@@ -34,7 +34,9 @@ async fn main() -> eyre::Result<()> {
 
     if let Some(chain_ws_rpc_url) = chain_ws_rpc_url {
         tracing::info!("deploying rp-registry-test-setup at {chain_ws_rpc_url}");
-        test_setup_utils::deploy_rp_registry(&chain_ws_rpc_url, peer_public_keys)?;
+        let rp_registry =
+            test_setup_utils::deploy_rp_registry(&chain_ws_rpc_url, peer_public_keys)?;
+        tracing::info!("RpRegistry deployed to {rp_registry}");
     } else {
         tracing::info!("skipping rp-registry-deployment");
         tracing::info!("==== Public Keys ====");
