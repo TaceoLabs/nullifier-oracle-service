@@ -12,6 +12,9 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 contract TestSetupScript is Script {
     using Types for Types.BabyJubJubElement;
 
+    uint256 public constant THRESHOLD = 2;
+    uint256 public constant MAX_PEERS = 3;
+
     RpRegistry public rpRegistry;
     ERC1967Proxy public proxy;
 
@@ -70,8 +73,8 @@ contract TestSetupScript is Script {
             keyGenVerifierAddress,
             nullifierVerifierAddress,
             accumulatorAddress,
-            2,
-            3
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
         proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);

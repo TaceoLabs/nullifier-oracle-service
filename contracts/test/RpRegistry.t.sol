@@ -12,6 +12,9 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 contract RpRegistryTest is Test {
     using Types for Types.BabyJubJubElement;
 
+    uint256 public constant THRESHOLD = 2;
+    uint256 public constant MAX_PEERS = 3;
+
     RpRegistry public rpRegistry;
     BabyJubJub public accumulator;
     Groth16VerifierKeyGen13 public verifierKeyGen;
@@ -181,7 +184,13 @@ contract RpRegistryTest is Test {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+            RpRegistry.initialize.selector,
+            taceoAdmin,
+            verifierKeyGen,
+            verifierNullifier,
+            accumulator,
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
@@ -221,7 +230,13 @@ contract RpRegistryTest is Test {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+            RpRegistry.initialize.selector,
+            taceoAdmin,
+            verifierKeyGen,
+            verifierNullifier,
+            accumulator,
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
@@ -277,7 +292,7 @@ contract RpRegistryTest is Test {
         uint128 rpId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound1(rpId, 2);
+        emit Types.SecretGenRound1(rpId, THRESHOLD);
         rpRegistry.initKeyGen(rpId, ecdsaPubKey);
         vm.stopPrank();
 
