@@ -461,14 +461,9 @@ async fn stress_test(
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     nodes_telemetry::install_tracing("oprf_dev_client=trace,info");
-    // install rustls crypto provider
-    if rustls::crypto::aws_lc_rs::default_provider()
+    rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .is_err()
-    {
-        tracing::warn!("cannot install rustls crypto provider!");
-        tracing::warn!("we continue but this should not happen...");
-    };
+        .expect("can install");
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 

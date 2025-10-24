@@ -77,15 +77,6 @@ pub async fn start(
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
-    // install rustls crypto provider
-    if rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .is_err()
-    {
-        tracing::warn!("cannot install rustls crypto provider!");
-        tracing::warn!("we continue but this should not happen...");
-    };
-
     tracing::info!(
         "loading Groth16 verification key from: {:?}",
         config.user_verification_key_path
@@ -117,15 +108,6 @@ pub async fn start(
     );
     let peer_public_keys = peer_public_keys?;
     let head = head?;
-
-    for (idx, p) in peer_public_keys
-        .clone()
-        .into_inner()
-        .into_iter()
-        .enumerate()
-    {
-        tracing::info!("{idx}: {p}");
-    }
 
     tracing::info!("init crypto device..");
     let crypto_device = Arc::new(
@@ -221,11 +203,13 @@ pub async fn start(
         // we cancel the token in case axum encountered an error to shutdown the service
         axum_cancel_token.cancel();
     });
+
     tracing::info!("everything started successfully - now waiting for shutdown...");
     cancellation_token.cancelled().await;
+
     tracing::info!(
-        "waiting for shutdown of services (max wait time {} as secs)..",
-        humantime::format_duration(config.max_wait_time_shutdown)
+        "waiting for shutdown of services (max wait time {:?})..",
+        config.max_wait_time_shutdown
     );
     match tokio::time::timeout(config.max_wait_time_shutdown, async move {
         tokio::join!(server, event_handler.wait())
@@ -235,6 +219,7 @@ pub async fn start(
         Ok(_) => tracing::info!("successfully finished shutdown in time"),
         Err(_) => tracing::warn!("could not finish shutdown in time"),
     }
+
     Ok(())
 }
 
