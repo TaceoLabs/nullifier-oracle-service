@@ -118,6 +118,13 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
+    /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
+    /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
+    /// @param _nullifierVerifierAddress The address of the Groth16 verifier contract for nullifier verification.
+    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
+    /// @param _threshold The minimum number of OPRF peers required to participate.
+    /// @param _numPeers The total number of OPRF peers participating.
     function initialize(
         address _keygenAdmin,
         address _keyGenVerifierAddress,
@@ -140,9 +147,12 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     }
 
     // ==================================
-    //          TACEO FUNCTIONS
+    //         ADMIN FUNCTIONS
     // ==================================
 
+    /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
+    /// @param _peerAddresses An array of addresses of the OPRF peers.
+    /// @param _peerPublicKeys An array of BabyJubJub public keys corresponding to the OPRF peers.
     function registerOprfPeers(address[] calldata _peerAddresses, Types.BabyJubJubElement[] calldata _peerPublicKeys)
         external
         virtual
@@ -160,6 +170,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         isContractReady = true;
     }
 
+    /// @notice Initializes the key generation process for a new RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @param ecdsaPubKey The compressed ECDSA public key for the RP.
     function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
         external
         virtual
@@ -191,6 +204,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // ==================================
     //        Public FUNCTIONS
     // ==================================
+
+    /// @notice Verifies a nullifier proof. Retrieves the RP-specific information and uses is in the verification process.
+    /// @param nullifier The nullifier to be verified.
+    /// @param nullifierAction The action associated with the nullifier.
+    /// @param rpId The unique identifier for the RP.
+    /// @param identityCommitment The identity commitment of the user.
+    /// @param nonce A nonce value for the proof.
+    /// @param signalHash The signalHash associated with the proof.
+    /// @param authenticatorMerkleRoot The Merkle root of the authenticator tree, already validated by the caller.
+    /// @param proofTimestamp The timestamp when the proof was generated.
+    /// @param credentialPublicKey The public key of the credential schema issuer, already validated by the caller.
+    /// @param proof The Groth16 proof to be verified.
+    /// @return A boolean indicating whether the proof is valid.
     function verifyNullifierProof(
         uint256 nullifier,
         uint256 nullifierAction,
@@ -253,6 +279,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     //        OPRF Peer FUNCTIONS
     // ==================================
 
+    /// @notice Adds a Round 1 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
     function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
         external
         virtual
@@ -279,6 +308,10 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         _tryEmitRound2Event(rpId, st);
     }
 
+    /// @notice Adds a Round 2 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
+    /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
     function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data)
         external
         virtual
@@ -340,6 +373,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         }
     }
 
+    /// @notice Adds a Round 3 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
     function addRound3Contribution(uint128 rpId) external virtual onlyProxy isReady {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
@@ -372,7 +408,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     //           HELPER FUNCTIONS
     // ==================================
 
-    // must be accessible for Rust land - therefore we call the internal function that is called elsewhere as well.
+    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID.
+    /// @return The party ID of the caller if they are a registered participant.
     function checkIsParticipantAndReturnPartyId() external view virtual isReady onlyProxy returns (uint256) {
         return _internParticipantCheck();
     }
@@ -383,6 +420,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return peer.partyId;
     }
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
@@ -400,10 +440,15 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return st.round2[peer.partyId];
     }
 
+    /// @notice Retrieves the public keys of all registered OPRF peers.
+    /// @return An array of BabyJubJub public keys of the OPRF peers.
     function getPeerPublicKeys() external view virtual onlyProxy isReady returns (Types.BabyJubJubElement[] memory) {
         return peerPublicKeys;
     }
 
+    /// @notice Retrieves the nullifier public key for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The BabyJubJub element representing the nullifier public key for the specified RP.
     function getRpNullifierKey(uint128 rpId)
         public
         view
@@ -417,6 +462,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return rpRegistry[rpId].nullifierKey;
     }
 
+    /// @notice Retrieves the RP material (ECDSA public key and nullifier key) for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The RpMaterial struct containing the ECDSA public key and nullifier key for the specified RP.
     function getRpMaterial(uint128 rpId) external view virtual onlyProxy isReady returns (Types.RpMaterial memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);

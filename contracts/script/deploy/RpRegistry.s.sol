@@ -23,7 +23,6 @@ contract DeployRpRegistryScript is Script {
         address accumulatorAddress = vm.envAddress("ACCUMULATOR_ADDRESS");
         address keyGenVerifierAddress = vm.envAddress("KEY_GEN_VERIFIER_ADDRESS");
         address nullifierVerifierAddress = vm.envAddress("NULLIFIER_VERIFIER_ADDRESS");
-        address owner = msg.sender;
 
         console.log("using TACEO address:", taceoAdminAddress);
         console.log("using accumulator address:", accumulatorAddress);
