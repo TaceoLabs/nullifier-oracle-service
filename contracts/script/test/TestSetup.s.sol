@@ -7,11 +7,16 @@ import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16Verif
 import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
 import {Types} from "../../src/Types.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract TestSetupScript is Script {
     using Types for Types.BabyJubJubElement;
 
+    uint256 public constant THRESHOLD = 2;
+    uint256 public constant MAX_PEERS = 3;
+
     RpRegistry public rpRegistry;
+    ERC1967Proxy public proxy;
 
     function setUp() public {}
 
@@ -59,9 +64,21 @@ contract TestSetupScript is Script {
 
         Types.BabyJubJubElement memory publicKeyCarol = Types.BabyJubJubElement({x: carolX, y: carolY});
 
-        rpRegistry = new RpRegistry(
-            taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 2, 3
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector,
+            taceoAdminAddress,
+            keyGenVerifierAddress,
+            nullifierVerifierAddress,
+            accumulatorAddress,
+            THRESHOLD,
+            MAX_PEERS
         );
+        // Deploy proxy
+        proxy = new ERC1967Proxy(address(implementation), initData);
+        rpRegistry = RpRegistry(address(proxy));
 
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = aliceAddress;

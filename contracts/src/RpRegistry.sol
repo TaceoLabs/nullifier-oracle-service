@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Types.sol";
-import {console} from "forge-std/Script.sol";
-import {CredentialSchemaIssuerRegistry} from "world-id-protocol/src/CredentialSchemaIssuerRegistry.sol";
+import {Types} from "./Types.sol";
+import {CredentialSchemaIssuerRegistry} from "@world-id-protocol/contracts/CredentialSchemaIssuerRegistry.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
@@ -33,7 +35,7 @@ interface IBabyJubJub {
     function isOnCurve(uint256 x, uint256 y) external view returns (bool);
 }
 
-contract RpRegistry {
+contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     using Types for Types.BabyJubJubElement;
     using Types for Types.EcDsaPubkeyCompressed;
     using Types for Types.OprfPeer;
@@ -48,12 +50,12 @@ contract RpRegistry {
     // Admin to start KeyGens
     //**IMPORTANT** If this key gets lost or the entity controlling this key
     // goes offline then effectively the system halts...
-    address public immutable taceoAdmin;
-    IGroth16VerifierKeyGen13 public immutable keyGenVerifier;
-    IGroth16VerifierNullifier public immutable nullifierVerifier;
-    IBabyJubJub public immutable accumulator;
-    uint256 public immutable threshold;
-    uint256 public immutable numPeers;
+    address public keygenAdmin;
+    IGroth16VerifierKeyGen13 public keyGenVerifier;
+    IGroth16VerifierNullifier public nullifierVerifier;
+    IBabyJubJub public accumulator;
+    uint256 public threshold;
+    uint256 public numPeers;
 
     Types.BabyJubJubElement[] public peerPublicKeys;
     mapping(address => Types.OprfPeer) addressToPeer;
@@ -64,17 +66,43 @@ contract RpRegistry {
     // Mapping between each rpId and the corresponding nullifier
     mapping(uint128 => Types.RpMaterial) internal rpRegistry;
 
+    // =============================================
+    //                MODIFIERS
+    // =============================================
     modifier isReady() {
+        _isReady();
+        _;
+    }
+
+    function _isReady() internal view {
         if (!isContractReady) revert NotReady();
+    }
+
+    modifier onlyAdmin() {
+        _onlyAdmin();
         _;
     }
 
-    modifier onlyTACEO() {
-        if (taceoAdmin != msg.sender) revert OnlyTACEO();
+    function _onlyAdmin() internal view {
+        if (keygenAdmin != msg.sender) revert OnlyAdmin();
+    }
+
+    modifier onlyInitialized() {
+        _onlyInitialized();
         _;
     }
 
-    error OnlyTACEO();
+    function _onlyInitialized() internal view {
+        if (_getInitializedVersion() == 0) {
+            revert ImplementationNotInitialized();
+        }
+    }
+
+    // =============================================
+    //                Errors
+    // =============================================
+    error ImplementationNotInitialized();
+    error OnlyAdmin();
     error NotAParticipant();
     error NotReady();
     error WrongRound();
@@ -85,17 +113,31 @@ contract RpRegistry {
     error OutdatedNullifier();
     error UnknownId(uint128 id);
 
-    constructor(
-        address _taceoAdmin,
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
+    /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
+    /// @param _nullifierVerifierAddress The address of the Groth16 verifier contract for nullifier verification.
+    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
+    /// @param _threshold The minimum number of OPRF peers required to participate.
+    /// @param _numPeers The total number of OPRF peers participating.
+    function initialize(
+        address _keygenAdmin,
         address _keyGenVerifierAddress,
         address _nullifierVerifierAddress,
         address _accumulatorAddress,
         uint256 _threshold,
         uint256 _numPeers
-    ) {
+    ) public virtual initializer {
+        __Ownable_init(msg.sender);
+        __Ownable2Step_init();
         require(_numPeers >= 3);
         require(_threshold <= _numPeers);
-        taceoAdmin = _taceoAdmin;
+        keygenAdmin = _keygenAdmin;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
@@ -105,12 +147,18 @@ contract RpRegistry {
     }
 
     // ==================================
-    //          TACEO FUNCTIONS
+    //         ADMIN FUNCTIONS
     // ==================================
 
+    /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
+    /// @param _peerAddresses An array of addresses of the OPRF peers.
+    /// @param _peerPublicKeys An array of BabyJubJub public keys corresponding to the OPRF peers.
     function registerOprfPeers(address[] calldata _peerAddresses, Types.BabyJubJubElement[] calldata _peerPublicKeys)
         external
-        onlyTACEO
+        virtual
+        onlyProxy
+        onlyInitialized
+        onlyOwner
     {
         if (isContractReady) revert AlreadySubmitted();
         if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
@@ -122,7 +170,16 @@ contract RpRegistry {
         isContractReady = true;
     }
 
-    function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey) external onlyTACEO isReady {
+    /// @notice Initializes the key generation process for a new RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @param ecdsaPubKey The compressed ECDSA public key for the RP.
+    function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
+        external
+        virtual
+        onlyProxy
+        isReady
+        onlyAdmin
+    {
         // Check that this rpId was not used already
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (st.exists) revert AlreadySubmitted();
@@ -147,6 +204,19 @@ contract RpRegistry {
     // ==================================
     //        Public FUNCTIONS
     // ==================================
+
+    /// @notice Verifies a nullifier proof. Retrieves the RP-specific information and uses is in the verification process.
+    /// @param nullifier The nullifier to be verified.
+    /// @param nullifierAction The action associated with the nullifier.
+    /// @param rpId The unique identifier for the RP.
+    /// @param identityCommitment The identity commitment of the user.
+    /// @param nonce A nonce value for the proof.
+    /// @param signalHash The signalHash associated with the proof.
+    /// @param authenticatorMerkleRoot The Merkle root of the authenticator tree, already validated by the caller.
+    /// @param proofTimestamp The timestamp when the proof was generated.
+    /// @param credentialPublicKey The public key of the credential schema issuer, already validated by the caller.
+    /// @param proof The Groth16 proof to be verified.
+    /// @return A boolean indicating whether the proof is valid.
     function verifyNullifierProof(
         uint256 nullifier,
         uint256 nullifierAction,
@@ -158,7 +228,7 @@ contract RpRegistry {
         uint256 proofTimestamp,
         CredentialSchemaIssuerRegistry.Pubkey calldata credentialPublicKey,
         Types.Groth16Proof calldata proof
-    ) external view isReady returns (bool) {
+    ) external view virtual onlyProxy isReady returns (bool) {
         // do not allow proofs from the future
         if (proofTimestamp > block.timestamp) {
             revert OutdatedNullifier();
@@ -209,7 +279,15 @@ contract RpRegistry {
     //        OPRF Peer FUNCTIONS
     // ==================================
 
-    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data) external isReady {
+    /// @notice Adds a Round 1 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
+    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
+        external
+        virtual
+        onlyProxy
+        isReady
+    {
         // check that commitments are not zero
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
@@ -230,7 +308,16 @@ contract RpRegistry {
         _tryEmitRound2Event(rpId, st);
     }
 
-    function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data) external isReady {
+    /// @notice Adds a Round 2 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
+    /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
+    function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data)
+        external
+        virtual
+        onlyProxy
+        isReady
+    {
         // check that the contribution is complete
         if (data.ciphers.length != numPeers) revert BadContribution();
         // check that we started the key-gen for this rp-id
@@ -286,7 +373,10 @@ contract RpRegistry {
         }
     }
 
-    function addRound3Contribution(uint128 rpId) external isReady {
+    /// @notice Adds a Round 3 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
+    function addRound3Contribution(uint128 rpId) external virtual onlyProxy isReady {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
@@ -318,20 +408,26 @@ contract RpRegistry {
     //           HELPER FUNCTIONS
     // ==================================
 
-    // must be accessible for Rust land - therefore we call the internal function that is called elsewhere as well.
-    function checkIsParticipantAndReturnPartyId() external view isReady returns (uint256) {
+    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID.
+    /// @return The party ID of the caller if they are a registered participant.
+    function checkIsParticipantAndReturnPartyId() external view virtual isReady onlyProxy returns (uint256) {
         return _internParticipantCheck();
     }
 
-    function _internParticipantCheck() internal view returns (uint256) {
+    function _internParticipantCheck() internal view virtual returns (uint256) {
         Types.OprfPeer memory peer = addressToPeer[msg.sender];
         if (!peer.isParticipant) revert NotAParticipant();
         return peer.partyId;
     }
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
+        virtual
+        onlyProxy
         isReady
         returns (Types.SecretGenCiphertext[] memory)
     {
@@ -344,23 +440,38 @@ contract RpRegistry {
         return st.round2[peer.partyId];
     }
 
-    function getPeerPublicKeys() external view isReady returns (Types.BabyJubJubElement[] memory) {
+    /// @notice Retrieves the public keys of all registered OPRF peers.
+    /// @return An array of BabyJubJub public keys of the OPRF peers.
+    function getPeerPublicKeys() external view virtual onlyProxy isReady returns (Types.BabyJubJubElement[] memory) {
         return peerPublicKeys;
     }
 
-    function getRpNullifierKey(uint128 rpId) public view isReady returns (Types.BabyJubJubElement memory) {
+    /// @notice Retrieves the nullifier public key for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The BabyJubJub element representing the nullifier public key for the specified RP.
+    function getRpNullifierKey(uint128 rpId)
+        public
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.BabyJubJubElement memory)
+    {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId].nullifierKey;
     }
 
-    function getRpMaterial(uint128 rpId) external view isReady returns (Types.RpMaterial memory) {
+    /// @notice Retrieves the RP material (ECDSA public key and nullifier key) for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The RpMaterial struct containing the ECDSA public key and nullifier key for the specified RP.
+    function getRpMaterial(uint128 rpId) external view virtual onlyProxy isReady returns (Types.RpMaterial memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId];
     }
 
-    function allRound1Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             // we don't allow commitments to be zero, therefore if one
             // commitments is still 0, not all contributed.
@@ -369,21 +480,21 @@ contract RpRegistry {
         return true;
     }
 
-    function allRound2Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound2Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             if (!st.round2Done[i]) return false;
         }
         return true;
     }
 
-    function allRound3Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound3Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             if (!st.round3Done[i]) return false;
         }
         return true;
     }
 
-    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) private {
+    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
 
@@ -391,7 +502,7 @@ contract RpRegistry {
         emit Types.SecretGenRound2(rpId);
     }
 
-    function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) private {
+    function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round3EventEmitted) return;
         if (!allRound2Submitted(st)) return;
 
@@ -399,7 +510,10 @@ contract RpRegistry {
         emit Types.SecretGenRound3(rpId);
     }
 
-    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY) private {
+    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY)
+        internal
+        virtual
+    {
         if (_isEmpty(st.keyAggregate)) {
             st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
             return;
@@ -410,11 +524,45 @@ contract RpRegistry {
         st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
     }
 
-    function _isInfinity(Types.BabyJubJubElement memory element) private pure returns (bool) {
+    function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
         return element.x == 0 && element.y == 1;
     }
 
-    function _isEmpty(Types.BabyJubJubElement memory element) private pure returns (bool) {
+    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
         return element.x == 0 && element.y == 0;
     }
+    ////////////////////////////////////////////////////////////
+    //                    Upgrade Authorization               //
+    ////////////////////////////////////////////////////////////
+
+    /**
+     *
+     *
+     * @dev Authorize upgrade to a new implementation
+     *
+     *
+     * @param newImplementation Address of the new implementation contract
+     *
+     *
+     * @notice Only the contract owner can authorize upgrades
+     *
+     *
+     */
+    function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
+
+    ////////////////////////////////////////////////////////////
+    //                    Storage Gap                         //
+    ////////////////////////////////////////////////////////////
+
+    /**
+     *
+     *
+     * @dev Storage gap to allow for future upgrades without storage collisions
+     *
+     *
+     * This is set to take a total of 50 storage slots for future state variables
+     *
+     *
+     */
+    uint256[40] private __gap;
 }

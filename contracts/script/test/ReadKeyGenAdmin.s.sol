@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Types} from "../../src/Types.sol";
 
-contract ReadTaceoAdminScript is Script {
+contract ReadKeyGenAdminScript is Script {
     using Types for Types.EcDsaPubkeyCompressed;
 
     RpRegistry public rpRegistry;
@@ -16,9 +16,9 @@ contract ReadTaceoAdminScript is Script {
 
     function run() external {
         vm.startBroadcast();
-        address taceoAdmin = rpRegistry.taceoAdmin();
+        address keygenAdmin = rpRegistry.keygenAdmin();
         vm.stopBroadcast();
 
-        console.log("TACEO admin is", taceoAdmin);
+        console.log("KeyGen admin is", keygenAdmin);
     }
 }
