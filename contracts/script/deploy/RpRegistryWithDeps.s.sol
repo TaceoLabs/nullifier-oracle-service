@@ -43,10 +43,12 @@ contract DeployRpRegistryWithDepsScript is Script {
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
         address nullifierVerifierAddress = deployGroth16VerifierNullifier();
+        address owner = msg.sender;
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
+            msg.sender,
             RpRegistry.initialize.selector,
             taceoAdminAddress,
             keyGenVerifierAddress,
@@ -56,7 +58,7 @@ contract DeployRpRegistryWithDepsScript is Script {
             3
         );
         // Deploy proxy
-        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));
 
         console.log("RpRegistry implementation deployed to:", address(implementation));

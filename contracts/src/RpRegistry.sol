@@ -50,7 +50,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // Admin to start KeyGens
     //**IMPORTANT** If this key gets lost or the entity controlling this key
     // goes offline then effectively the system halts...
-    address public taceoAdmin;
+    address public keygenAdmin;
     IGroth16VerifierKeyGen13 public keyGenVerifier;
     IGroth16VerifierNullifier public nullifierVerifier;
     IBabyJubJub public accumulator;
@@ -66,17 +66,43 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // Mapping between each rpId and the corresponding nullifier
     mapping(uint128 => Types.RpMaterial) internal rpRegistry;
 
+    // =============================================
+    //                MODIFIERS
+    // =============================================
     modifier isReady() {
+        _isReady();
+        _;
+    }
+
+    function _isReady() internal view {
         if (!isContractReady) revert NotReady();
+    }
+
+    modifier onlyAdmin() {
+        _onlyAdmin();
         _;
     }
 
-    modifier onlyTACEO() {
-        if (taceoAdmin != msg.sender) revert OnlyTACEO();
+    function _onlyAdmin() internal view {
+        if (keygenAdmin != msg.sender) revert OnlyAdmin();
+    }
+
+    modifier onlyInitialized() {
+        _onlyInitialized();
         _;
     }
 
-    error OnlyTACEO();
+    function _onlyInitialized() internal view {
+        if (_getInitializedVersion() == 0) {
+            revert ImplementationNotInitialized();
+        }
+    }
+
+    // =============================================
+    //                Errors
+    // =============================================
+    error ImplementationNotInitialized();
+    error OnlyAdmin();
     error NotAParticipant();
     error NotReady();
     error WrongRound();
@@ -93,18 +119,18 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     }
 
     function initialize(
-        address _taceoAdmin,
+        address _keygenAdmin,
         address _keyGenVerifierAddress,
         address _nullifierVerifierAddress,
         address _accumulatorAddress,
         uint256 _threshold,
         uint256 _numPeers
-    ) public initializer {
+    ) public virtual initializer {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
         require(_numPeers >= 3);
         require(_threshold <= _numPeers);
-        taceoAdmin = _taceoAdmin;
+        keygenAdmin = _keygenAdmin;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
@@ -119,7 +145,10 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
     function registerOprfPeers(address[] calldata _peerAddresses, Types.BabyJubJubElement[] calldata _peerPublicKeys)
         external
-        onlyTACEO
+        virtual
+        onlyProxy
+        onlyInitialized
+        onlyOwner
     {
         if (isContractReady) revert AlreadySubmitted();
         if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
@@ -131,7 +160,13 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         isContractReady = true;
     }
 
-    function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey) external onlyTACEO isReady {
+    function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
+        external
+        virtual
+        onlyProxy
+        isReady
+        onlyAdmin
+    {
         // Check that this rpId was not used already
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (st.exists) revert AlreadySubmitted();
@@ -167,7 +202,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         uint256 proofTimestamp,
         CredentialSchemaIssuerRegistry.Pubkey calldata credentialPublicKey,
         Types.Groth16Proof calldata proof
-    ) external view isReady returns (bool) {
+    ) external view virtual onlyProxy isReady returns (bool) {
         // do not allow proofs from the future
         if (proofTimestamp > block.timestamp) {
             revert OutdatedNullifier();
@@ -218,7 +253,12 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     //        OPRF Peer FUNCTIONS
     // ==================================
 
-    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data) external isReady {
+    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
+        external
+        virtual
+        onlyProxy
+        isReady
+    {
         // check that commitments are not zero
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
@@ -239,7 +279,12 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         _tryEmitRound2Event(rpId, st);
     }
 
-    function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data) external isReady {
+    function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data)
+        external
+        virtual
+        onlyProxy
+        isReady
+    {
         // check that the contribution is complete
         if (data.ciphers.length != numPeers) revert BadContribution();
         // check that we started the key-gen for this rp-id
@@ -295,7 +340,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function addRound3Contribution(uint128 rpId) external isReady {
+    function addRound3Contribution(uint128 rpId) external virtual onlyProxy isReady {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
@@ -328,11 +373,11 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // ==================================
 
     // must be accessible for Rust land - therefore we call the internal function that is called elsewhere as well.
-    function checkIsParticipantAndReturnPartyId() external view isReady returns (uint256) {
+    function checkIsParticipantAndReturnPartyId() external view virtual isReady onlyProxy returns (uint256) {
         return _internParticipantCheck();
     }
 
-    function _internParticipantCheck() internal view returns (uint256) {
+    function _internParticipantCheck() internal view virtual returns (uint256) {
         Types.OprfPeer memory peer = addressToPeer[msg.sender];
         if (!peer.isParticipant) revert NotAParticipant();
         return peer.partyId;
@@ -341,6 +386,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
+        virtual
+        onlyProxy
         isReady
         returns (Types.SecretGenCiphertext[] memory)
     {
@@ -353,23 +400,30 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return st.round2[peer.partyId];
     }
 
-    function getPeerPublicKeys() external view isReady returns (Types.BabyJubJubElement[] memory) {
+    function getPeerPublicKeys() external view virtual onlyProxy isReady returns (Types.BabyJubJubElement[] memory) {
         return peerPublicKeys;
     }
 
-    function getRpNullifierKey(uint128 rpId) public view isReady returns (Types.BabyJubJubElement memory) {
+    function getRpNullifierKey(uint128 rpId)
+        public
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.BabyJubJubElement memory)
+    {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId].nullifierKey;
     }
 
-    function getRpMaterial(uint128 rpId) external view isReady returns (Types.RpMaterial memory) {
+    function getRpMaterial(uint128 rpId) external view virtual onlyProxy isReady returns (Types.RpMaterial memory) {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId];
     }
 
-    function allRound1Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             // we don't allow commitments to be zero, therefore if one
             // commitments is still 0, not all contributed.
@@ -378,21 +432,21 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return true;
     }
 
-    function allRound2Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound2Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             if (!st.round2Done[i]) return false;
         }
         return true;
     }
 
-    function allRound3Submitted(Types.RpNullifierGenState storage st) private view returns (bool) {
+    function allRound3Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
             if (!st.round3Done[i]) return false;
         }
         return true;
     }
 
-    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) private {
+    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
 
@@ -400,7 +454,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         emit Types.SecretGenRound2(rpId);
     }
 
-    function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) private {
+    function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round3EventEmitted) return;
         if (!allRound2Submitted(st)) return;
 
@@ -408,7 +462,10 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         emit Types.SecretGenRound3(rpId);
     }
 
-    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY) private {
+    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY)
+        internal
+        virtual
+    {
         if (_isEmpty(st.keyAggregate)) {
             st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
             return;
@@ -419,11 +476,11 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
     }
 
-    function _isInfinity(Types.BabyJubJubElement memory element) private pure returns (bool) {
+    function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
         return element.x == 0 && element.y == 1;
     }
 
-    function _isEmpty(Types.BabyJubJubElement memory element) private pure returns (bool) {
+    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
         return element.x == 0 && element.y == 0;
     }
     ////////////////////////////////////////////////////////////
@@ -443,7 +500,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
      *
      *
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
 
     ////////////////////////////////////////////////////////////
     //                    Storage Gap                         //
@@ -455,9 +512,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
      * @dev Storage gap to allow for future upgrades without storage collisions
      *
      *
-     * This reserves 50 storage slots for future state variables
+     * This is set to take a total of 50 storage slots for future state variables
      *
      *
      */
-    uint256[50] private __gap;
+    uint256[40] private __gap;
 }

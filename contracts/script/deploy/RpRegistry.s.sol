@@ -7,6 +7,8 @@ import {Types} from "../../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployRpRegistryScript is Script {
+    uint256 constant THRESHOLD = 2;
+    uint256 constant MAX_PEERS = 3;
     using Types for Types.BabyJubJubElement;
     RpRegistry public rpRegistry;
     ERC1967Proxy public proxy;
@@ -21,6 +23,7 @@ contract DeployRpRegistryScript is Script {
         address accumulatorAddress = vm.envAddress("ACCUMULATOR_ADDRESS");
         address keyGenVerifierAddress = vm.envAddress("KEY_GEN_VERIFIER_ADDRESS");
         address nullifierVerifierAddress = vm.envAddress("NULLIFIER_VERIFIER_ADDRESS");
+        address owner = msg.sender;
 
         console.log("using TACEO address:", taceoAdminAddress);
         console.log("using accumulator address:", accumulatorAddress);
@@ -28,7 +31,7 @@ contract DeployRpRegistryScript is Script {
         console.log("using nullifier verifier address:", nullifierVerifierAddress);
 
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
             RpRegistry.initialize.selector,
@@ -36,11 +39,11 @@ contract DeployRpRegistryScript is Script {
             keyGenVerifierAddress,
             nullifierVerifierAddress,
             accumulatorAddress,
-            2,
-            3
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
-        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));
 
         vm.stopBroadcast();

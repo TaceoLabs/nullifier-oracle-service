@@ -65,7 +65,7 @@ contract TestSetupScript is Script {
         Types.BabyJubJubElement memory publicKeyCarol = Types.BabyJubJubElement({x: carolX, y: carolY});
 
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
             RpRegistry.initialize.selector,
@@ -77,7 +77,7 @@ contract TestSetupScript is Script {
             MAX_PEERS
         );
         // Deploy proxy
-        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));
 
         address[] memory peerAddresses = new address[](3);

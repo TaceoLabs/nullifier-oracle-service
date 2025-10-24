@@ -98,7 +98,7 @@ contract RpRegistryUpgradeTest is Test {
         verifierKeyGen = new Groth16VerifierKeyGen13();
         verifierNullifier = new Groth16VerifierNullifier();
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
             RpRegistry.initialize.selector,
@@ -110,7 +110,7 @@ contract RpRegistryUpgradeTest is Test {
             MAX_PEERS
         );
         // Deploy proxy
-        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));
 
         // register participants for runs later
@@ -122,9 +122,7 @@ contract RpRegistryUpgradeTest is Test {
         peerPublicKeys[0] = publicKeyAlice;
         peerPublicKeys[1] = publicKeyBob;
         peerPublicKeys[2] = publicKeyCarol;
-        vm.prank(taceoAdmin);
         rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
-        vm.stopPrank();
     }
 
     function testUpgrade() public {

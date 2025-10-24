@@ -8,6 +8,7 @@ import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16Verifier
 import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {Types} from "../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RpRegistryTest is Test {
     using Types for Types.BabyJubJubElement;
@@ -73,13 +74,19 @@ contract RpRegistryTest is Test {
         verifierKeyGen = new Groth16VerifierKeyGen13();
         verifierNullifier = new Groth16VerifierNullifier();
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry{salt: bytes32(uint256(0))}();
+        RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+            RpRegistry.initialize.selector,
+            taceoAdmin,
+            verifierKeyGen,
+            verifierNullifier,
+            accumulator,
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
-        proxy = new ERC1967Proxy{salt: bytes32(uint256(0))}(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));
 
         // register participants for runs later
@@ -91,9 +98,7 @@ contract RpRegistryTest is Test {
         peerPublicKeys[0] = publicKeyAlice;
         peerPublicKeys[1] = publicKeyBob;
         peerPublicKeys[2] = publicKeyCarol;
-        vm.prank(taceoAdmin);
         rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
-        vm.stopPrank();
     }
 
     function testConstructedCorrectly() public {
@@ -101,13 +106,19 @@ contract RpRegistryTest is Test {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+            RpRegistry.initialize.selector,
+            taceoAdmin,
+            verifierKeyGen,
+            verifierNullifier,
+            accumulator,
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
 
-        assertEq(rpRegistryTest.taceoAdmin(), taceoAdmin);
+        assertEq(rpRegistryTest.keygenAdmin(), taceoAdmin);
         assertEq(address(rpRegistryTest.keyGenVerifier()), address(verifierKeyGen));
         assertEq(address(rpRegistryTest.nullifierVerifier()), address(verifierNullifier));
         assertEq(address(rpRegistryTest.accumulator()), address(accumulator));
@@ -123,7 +134,13 @@ contract RpRegistryTest is Test {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator, 2, 3
+            RpRegistry.initialize.selector,
+            taceoAdmin,
+            verifierKeyGen,
+            verifierNullifier,
+            accumulator,
+            THRESHOLD,
+            MAX_PEERS
         );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
@@ -140,9 +157,7 @@ contract RpRegistryTest is Test {
 
         // check that not ready
         assert(!rpRegistryTest.isContractReady());
-        vm.prank(taceoAdmin);
         rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
-        vm.stopPrank();
 
         // check that ready after call
         assert(rpRegistryTest.isContractReady());
@@ -206,7 +221,7 @@ contract RpRegistryTest is Test {
         peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyTACEO.selector));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
         rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
     }
 
@@ -220,7 +235,6 @@ contract RpRegistryTest is Test {
         peerPublicKeys[1] = publicKeyBob;
         peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
-        vm.prank(taceoAdmin);
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.AlreadySubmitted.selector));
         rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
     }
@@ -259,15 +273,12 @@ contract RpRegistryTest is Test {
         peerPublicKeysCorrect[1] = publicKeyBob;
 
         // check that not ready
-        vm.prank(taceoAdmin);
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
         rpRegistryTest.registerOprfPeers(peerAddressesCorrect, peerPublicKeysWrong);
 
-        vm.prank(taceoAdmin);
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
         rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysCorrect);
 
-        vm.prank(taceoAdmin);
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
         rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysWrong);
     }
