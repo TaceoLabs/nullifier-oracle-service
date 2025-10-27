@@ -29,7 +29,8 @@ pub fn deploy_test_setup(
     let output = cmd.output().expect("failed to run forge script");
     assert!(
         output.status.success(),
-        "forge script failed: {}",
+        "forge script failed: {} {}",
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
-import "../src/BabyJubJub.sol";
+import {Test} from "forge-std/Test.sol";
+import {BabyJubJub} from "../src/BabyJubJub.sol";
 
 contract BabyJubJubTest is Test {
     BabyJubJub public babyJubJub;
@@ -20,28 +20,28 @@ contract BabyJubJubTest is Test {
         babyJubJub = new BabyJubJub();
     }
 
-    function testIdentityPoint() public {
+    function testIdentityPoint() public view {
         assertTrue(babyJubJub.isOnCurve(0, 1));
     }
 
-    function testGeneratorOnCurve() public {
+    function testGeneratorOnCurve() public view {
         assertTrue(babyJubJub.isOnCurve(GEN_X, GEN_Y));
     }
 
-    function testAddIdentity() public {
+    function testAddIdentity() public view {
         (uint256 x, uint256 y) = babyJubJub.add(0, 1, GEN_X, GEN_Y);
         assertEq(x, GEN_X);
         assertEq(y, GEN_Y);
     }
 
-    function testAddGeneratorToItself() public {
+    function testAddGeneratorToItself() public view {
         (uint256 x, uint256 y) = babyJubJub.add(GEN_X, GEN_Y, GEN_X, GEN_Y);
         assertTrue(babyJubJub.isOnCurve(x, y));
         assertEq(x, TWO_G_X);
         assertEq(y, TWO_G_Y);
     }
 
-    function testThreeTimes() public {
+    function testThreeTimes() public view {
         // 2*Generator by adding generator to itself
         (uint256 twoGx, uint256 twoGy) = babyJubJub.add(GEN_X, GEN_Y, GEN_X, GEN_Y);
         assertTrue(babyJubJub.isOnCurve(twoGx, twoGy));
