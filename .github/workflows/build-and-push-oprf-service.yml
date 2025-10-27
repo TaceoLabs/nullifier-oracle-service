@@ -10,11 +10,20 @@ on:
       - 'oprf-service-v*'
 
 jobs:
-  workflow:
-    uses: ./.github/workflows/build-and-push.yml
-    with:
-      image-name: oprf-service
-      dockerfile: build/Dockerfile.oprf-service
+
+  test_arm:
+    runs-on: ubuntu-24.04-arml
+    steps:
+      - name: Test
+        run: |
+          lscpu
+
+    
+  # workflow:
+  #   uses: ./.github/workflows/build-and-push.yml
+  #   with:
+  #     image-name: oprf-service
+  #     dockerfile: build/Dockerfile.oprf-service
 
         
 
