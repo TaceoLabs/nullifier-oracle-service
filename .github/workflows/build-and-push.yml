@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: {{ matrix.os }}
+    runs-on: "${{ matrix.platform }}"
     strategy:
       fail-fast: false
       matrix:
