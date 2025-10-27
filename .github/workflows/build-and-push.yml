@@ -22,13 +22,16 @@ permissions:
   packages: write
 
 jobs:
-  runs-on: {{ matrix.os }}
   build:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm]
-
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Prepare
         run: |
