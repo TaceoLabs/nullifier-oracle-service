@@ -1,7 +1,6 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use git_version::git_version;
 use oprf_service::config::OprfPeerConfig;
 
 #[tokio::main]
@@ -9,12 +8,7 @@ async fn main() -> eyre::Result<ExitCode> {
     let tracing_config = nodes_telemetry::TracingConfig::try_from_env()?;
     let _tracing_handle = nodes_telemetry::initialize_tracing(&tracing_config)?;
     oprf_service::metrics::describe_metrics();
-    tracing::info!(
-        "{} {} ({})",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        option_env!("GIT_HASH").unwrap_or(git_version!(fallback = "UNKNOWN"))
-    );
+    tracing::info!("{}", oprf_service::version_info());
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .expect("can install");
