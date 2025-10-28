@@ -48,6 +48,16 @@ pub mod metrics;
 pub mod rp_registry;
 pub(crate) mod services;
 
+/// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
+pub fn version_info() -> String {
+    format!(
+        "{} {} ({})",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        option_env!("GIT_HASH").unwrap_or(git_version::git_version!(fallback = "UNKNOWN"))
+    )
+}
+
 /// Main application state for the OPRF-Peer used for Axum.
 ///
 /// If Axum should be able to extract services, it should be added to

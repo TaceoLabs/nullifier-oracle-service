@@ -4,6 +4,7 @@
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health endpoints (`/health`).
+//! - [`info`] – Info about the software and version (`/info`).
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
 use axum::Router;
@@ -17,6 +18,7 @@ use axum_test::TestServer;
 
 pub(crate) mod errors;
 pub(crate) mod health;
+pub(crate) mod info;
 pub(crate) mod v1;
 
 /// Builds the main API router for the OPRF peer service.
@@ -25,6 +27,7 @@ pub(crate) mod v1;
 ///
 /// - The `/api/v1` endpoints from [`v1`].
 /// - The health and readiness endpoints from [`health`].
+/// - General info about the deployment from [`info`].
 /// - An HTTP trace layer via [`TraceLayer`].
 ///
 /// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
@@ -37,6 +40,7 @@ pub(crate) fn new_app(party_id: PartyId, oprf_service: OprfService) -> Router {
     Router::new()
         .nest("/api/v1", v1::build())
         .merge(health::routes())
+        .merge(info::routes())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state)
 }
