@@ -83,7 +83,7 @@ jobs:
           file: ${{ inputs.dockerfile }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,push-by-digest=true
+          outputs: type=image,name-canonical=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
