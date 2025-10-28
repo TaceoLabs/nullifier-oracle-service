@@ -34,5 +34,5 @@ pub(crate) fn routes() -> Router<AppState> {
 ///
 /// Returns `200 OK` with a string response.
 async fn info(State(_app_state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    Ok((StatusCode::OK, super::super::version_info()))
+    Ok((StatusCode::OK, crate::version_info()))
 }

@@ -50,15 +50,13 @@ pub(crate) mod services;
 
 /// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
 pub fn version_info() -> String {
-    format!("{} ({})", VERSION_CARGO, VERSION_GIT_HASH)
+    format!(
+        "{} {} ({})",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        option_env!("GIT_HASH").unwrap_or(git_version::git_version!(fallback = "UNKNOWN"))
+    )
 }
-
-const VERSION_GIT_HASH: &str = match option_env!("GIT_HASH") {
-    Some(version) => version,
-    None => git_version::git_version!(fallback = "UNKNOWN"),
-};
-
-const VERSION_CARGO: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 
 /// Main application state for the OPRF-Peer used for Axum.
 ///
