@@ -10,15 +10,6 @@ on:
       - 'oprf-service-v*'
 
 jobs:
-
-  # test_arm:
-  #   runs-on: ubuntu-24.04-arm
-  #   steps:
-  #     - name: Test
-  #       run: |
-  #         lscpu
-
-    
   workflow:
     uses: ./.github/workflows/build-and-push.yml
     with:
