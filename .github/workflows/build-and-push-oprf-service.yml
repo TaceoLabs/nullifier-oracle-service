@@ -11,19 +11,19 @@ on:
 
 jobs:
 
-  test_arm:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Test
-        run: |
-          lscpu
+  # test_arm:
+  #   runs-on: ubuntu-24.04-arm
+  #   steps:
+  #     - name: Test
+  #       run: |
+  #         lscpu
 
     
-  # workflow:
-  #   uses: ./.github/workflows/build-and-push.yml
-  #   with:
-  #     image-name: oprf-service
-  #     dockerfile: build/Dockerfile.test
+  workflow:
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      image-name: oprf-service
+      dockerfile: build/Dockerfile.test
 
         
 
