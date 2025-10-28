@@ -32,10 +32,14 @@ jobs:
             runner: ubuntu-24.04-arm64
     runs-on: ${{ matrix.runner }}
     steps:
-    #   - name: Prepare
-    #     run: |
-    #       platform=${{ matrix.platform }}
-    #       echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+      - name: Test
+        run: |
+          lscpu
+
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - name: Checkout code
         uses: actions/checkout@v5
