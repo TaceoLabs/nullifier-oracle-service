@@ -23,7 +23,7 @@ jobs:
     uses: ./.github/workflows/build-and-push.yml
     with:
       image-name: oprf-service
-      dockerfile: build/Dockerfile.oprf-service
+      dockerfile: build/Dockerfile.test
 
         
 
