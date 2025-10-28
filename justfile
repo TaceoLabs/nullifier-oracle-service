@@ -98,12 +98,14 @@ run-setup:
     echo "starting AccountRegistry contract..."
     just run-account-registry
     echo "starting RpRegistry contract.."
-    just run-rp-registry
+    just run-rp-registry | tee logs/rp_registry.log
+    address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
+    echo $address
     echo "starting AuthTreeIndexer service..."
     just run-auth-tree-indexer &
     sleep 2
     echo "starting OPRF services..."
-    just run-services &
+    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services &
     sleep 2
     echo "ready to run dev-client"
     trap "kill $anvil_pid" SIGINT SIGTERM
