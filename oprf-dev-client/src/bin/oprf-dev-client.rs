@@ -73,7 +73,7 @@ pub struct OprfDevClientConfig {
     #[clap(
         long,
         env = "OPRF_DEV_CLIENT_RP_REGISTRY_CONTRACT",
-        default_value = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+        default_value = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"
     )]
     pub rp_registry_contract: Address,
 
