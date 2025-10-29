@@ -35,12 +35,12 @@ pub struct OprfRequest {
     /// The Merkle root associated with this request.
     pub merkle_root: MerkleRoot,
     /// The action
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     pub action: ark_babyjubjub::Fq,
     /// The nonce
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     pub nonce: ark_babyjubjub::Fq,
     /// The signature of the nonce
     pub signature: k256::ecdsa::Signature,

@@ -47,8 +47,8 @@ pub struct RpId(u128);
 #[serde(transparent)]
 pub struct MerkleRoot(
     #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_base",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base"
+        serialize_with = "ark_serde_compat::serialize_babyjubjub_fq",
+        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq"
     )]
     ark_babyjubjub::Fq,
 );
