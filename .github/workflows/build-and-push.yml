@@ -137,6 +137,10 @@ jobs:
             type=sha,format=long
             type=match,pattern=(.*)-(v\d+\.\d+\.\d+.*),group=2
 
+
+      - name: Version of Buildx
+        run: docker buildx version
+
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |

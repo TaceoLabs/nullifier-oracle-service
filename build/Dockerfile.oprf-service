@@ -24,7 +24,7 @@ ARG GIT_HASH
 LABEL org.opencontainers.image.revision=$GIT_HASH
 LABEL org.opencontainers.image.vendor=TACEO
 LABEL org.opencontainers.image.source=https://github.com/TaceoLabs/nullifier-oracle-service
-LABEL org.opencontainers.image.descritpion="REST API service that answers OPRF requests"
+LABEL org.opencontainers.image.description="REST API service that answers OPRF requests"
 RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/oprf-service /app/oprf-service
