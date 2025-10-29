@@ -1301,9 +1301,7 @@ dependencies = [
  "ark-babyjubjub",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
- "ark-groth16 0.5.0",
  "serde",
- "serde_json",
  "thiserror 2.0.17",
 ]
 
@@ -4621,28 +4619,23 @@ name = "oprf-client"
 version = "0.1.0"
 dependencies = [
  "ark-babyjubjub",
- "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serde-compat",
  "circom-types",
  "eddsa-babyjubjub",
  "eyre",
  "futures",
  "groth16",
- "hex",
  "k256",
  "oprf-core",
  "oprf-types",
+ "oprf-zk",
  "rand 0.8.5",
  "reqwest",
  "serde_json",
- "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
  "uuid",
- "witness",
 ]
 
 [[package]]
@@ -4661,7 +4654,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
- "serde_json",
  "subtle",
  "thiserror 2.0.17",
  "uuid",
@@ -4684,10 +4676,12 @@ dependencies = [
  "oprf-service",
  "oprf-test",
  "oprf-types",
+ "oprf-zk",
  "parking_lot",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
+ "rustls 0.23.33",
  "secrecy",
  "tokio",
  "tracing",
@@ -4710,7 +4704,6 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
- "circom-types",
  "clap",
  "eddsa-babyjubjub",
  "eyre",
@@ -4727,7 +4720,9 @@ dependencies = [
  "oprf-core",
  "oprf-test",
  "oprf-types",
+ "oprf-zk",
  "parking_lot",
+ "poseidon2",
  "rand 0.8.5",
  "rustls 0.23.33",
  "secrecy",
@@ -4769,6 +4764,7 @@ dependencies = [
  "oprf-core",
  "oprf-service",
  "oprf-types",
+ "oprf-zk",
  "poseidon2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4794,8 +4790,35 @@ dependencies = [
  "eddsa-babyjubjub",
  "k256",
  "oprf-core",
+ "oprf-zk",
  "serde",
  "uuid",
+]
+
+[[package]]
+name = "oprf-zk"
+version = "0.1.0"
+dependencies = [
+ "ark-babyjubjub",
+ "ark-bn254 0.5.0",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-groth16 0.5.0",
+ "ark-serde-compat",
+ "circom-types",
+ "eyre",
+ "groth16",
+ "hex",
+ "k256",
+ "oprf-core",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tracing",
+ "uuid",
+ "witness",
 ]
 
 [[package]]

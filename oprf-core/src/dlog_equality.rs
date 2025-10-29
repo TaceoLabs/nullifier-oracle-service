@@ -6,8 +6,8 @@ use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DLogEqualityProof {
-    pub(crate) e: BaseField,
-    pub(crate) s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
+    pub e: BaseField,
+    pub s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
 }
 
 type ScalarField = ark_babyjubjub::Fr;

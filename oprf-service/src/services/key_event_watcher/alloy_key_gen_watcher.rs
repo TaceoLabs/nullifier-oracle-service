@@ -1,5 +1,4 @@
 use alloy::{
-    eips::BlockNumberOrTag,
     primitives::{Address, TxHash},
     providers::{DynProvider, PendingTransaction, Provider as _},
     rpc::types::{Filter, TransactionReceipt},
@@ -20,18 +19,20 @@ use oprf_types::{
 };
 use tokio::sync::mpsc;
 
-use crate::{rp_registry::KeyGen, services::key_event_watcher::KeyGenEventListener};
+use crate::{rp_registry::RpRegistry, services::key_event_watcher::KeyGenEventListener};
 
 pub(crate) struct AlloyKeyGenWatcher {
     contract_address: Address,
     provider: DynProvider,
+    from_block: u64,
 }
 
 impl AlloyKeyGenWatcher {
-    pub(crate) fn new(contract_address: Address, provider: DynProvider) -> Self {
+    pub(crate) fn new(contract_address: Address, provider: DynProvider, from_block: u64) -> Self {
         Self {
             contract_address,
             provider,
+            from_block,
         }
     }
 }
@@ -43,8 +44,9 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         let (tx, rx) = mpsc::channel(8);
         let provider = self.provider.clone();
         let address = self.contract_address;
+        let from_block = self.from_block;
         tokio::spawn(async move {
-            match subscribe_task(provider, address, tx).await {
+            match subscribe_task(provider, address, from_block, tx).await {
                 Ok(_) => tracing::info!("subscribe task shutdown"),
                 Err(err) => tracing::error!("subscribe task encountered an error: {err}"),
             }
@@ -52,7 +54,7 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         Ok(rx)
     }
     async fn report_result(&self, result: ChainEventResult) -> eyre::Result<()> {
-        let contract = KeyGen::new(self.contract_address, self.provider.clone());
+        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
         match result {
             ChainEventResult::SecretGenRound1(SecretGenRound1Contribution {
                 rp_id,
@@ -126,22 +128,30 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
 async fn subscribe_task(
     provider: DynProvider,
     contract_address: Address,
+    from_block: u64,
     tx: mpsc::Sender<ChainEvent>,
 ) -> eyre::Result<()> {
+    tracing::info!("start reading key gen events starting from block {from_block}");
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(BlockNumberOrTag::Latest);
-    let contract = KeyGen::new(contract_address, provider.clone());
+        .from_block(from_block)
+        .event_signature(vec![
+            RpRegistry::SecretGenRound1::SIGNATURE_HASH,
+            RpRegistry::SecretGenRound2::SIGNATURE_HASH,
+            RpRegistry::SecretGenRound3::SIGNATURE_HASH,
+            RpRegistry::SecretGenFinalize::SIGNATURE_HASH,
+        ]);
+    let contract = RpRegistry::new(contract_address, provider.clone());
     // Subscribe to event logs
     let sub = provider.subscribe_logs(&filter).await?;
     let mut stream = sub.into_stream();
     while let Some(log) = stream.next().await {
         match log.topic0() {
-            Some(&KeyGen::SecretGenRound1::SIGNATURE_HASH) => {
+            Some(&RpRegistry::SecretGenRound1::SIGNATURE_HASH) => {
                 let round1 = log
                     .log_decode()
                     .context("while decoding secret-gen round1 event")?;
-                let KeyGen::SecretGenRound1 { rpId, threshold } = round1.inner.data;
+                let RpRegistry::SecretGenRound1 { rpId, threshold } = round1.inner.data;
                 let event = ChainEvent::SecretGenRound1(SecretGenRound1Event {
                     rp_id: RpId::from(rpId),
                     threshold: u16::try_from(threshold)?,
@@ -151,12 +161,12 @@ async fn subscribe_task(
                     break;
                 }
             }
-            Some(&KeyGen::SecretGenRound2::SIGNATURE_HASH) => {
+            Some(&RpRegistry::SecretGenRound2::SIGNATURE_HASH) => {
                 tracing::debug!("got round 2 event!");
                 let round2 = log
                     .log_decode()
                     .context("while decoding secret-gen round2 event")?;
-                let KeyGen::SecretGenRound2 { rpId } = round2.inner.data;
+                let RpRegistry::SecretGenRound2 { rpId } = round2.inner.data;
                 let event = ChainEvent::SecretGenRound2(SecretGenRound2Event {
                     rp_id: RpId::from(rpId),
                 });
@@ -165,12 +175,12 @@ async fn subscribe_task(
                     break;
                 }
             }
-            Some(&KeyGen::SecretGenRound3::SIGNATURE_HASH) => {
+            Some(&RpRegistry::SecretGenRound3::SIGNATURE_HASH) => {
                 tracing::debug!("got round 3 event!");
                 let round3 = log
                     .log_decode()
                     .context("while decoding secret-gen round3 event")?;
-                let KeyGen::SecretGenRound3 { rpId } = round3.inner.data;
+                let RpRegistry::SecretGenRound3 { rpId } = round3.inner.data;
                 let ciphers = contract
                     .checkIsParticipantAndReturnRound2Ciphers(rpId)
                     .call()
@@ -187,11 +197,11 @@ async fn subscribe_task(
                     break;
                 }
             }
-            Some(&KeyGen::SecretGenFinalize::SIGNATURE_HASH) => {
+            Some(&RpRegistry::SecretGenFinalize::SIGNATURE_HASH) => {
                 let finalize = log
                     .log_decode()
                     .context("while decoding secret-gen finalize event")?;
-                let KeyGen::SecretGenFinalize { rpId } = finalize.inner.data;
+                let RpRegistry::SecretGenFinalize { rpId } = finalize.inner.data;
                 let rp_material = contract.getRpMaterial(rpId).call().await?;
                 let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
                     rp_id: RpId::from(rpId),

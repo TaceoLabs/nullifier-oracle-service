@@ -112,12 +112,13 @@ impl BlindedOPrfRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindingFactor {
     /// the blinding factor used to blind the query
-    pub(crate) factor: ScalarField,
+    pub factor: ScalarField,
     /// original query
-    pub(crate) query: BaseField,
+    pub query: BaseField,
     // request id, to track the response to the request
-    pub(crate) request_id: Uuid,
+    pub request_id: Uuid,
 }
+
 impl BlindingFactor {
     pub fn prepare(self) -> PreparedBlindingFactor {
         PreparedBlindingFactor {
@@ -138,10 +139,11 @@ impl BlindingFactor {
         self.query
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
     /// the inverse of the blinding factor used to blind the query
-    pub(crate) factor: ScalarField,
+    pub factor: ScalarField,
     /// original query
     query: BaseField,
     // request id, to track the response to the request

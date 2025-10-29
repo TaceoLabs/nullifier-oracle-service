@@ -111,13 +111,13 @@ pub struct OprfPeerConfig {
     #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
     pub user_verification_key_path: PathBuf,
 
-    /// The Address of the KeyGen contract.
+    /// The Address of the RpRegistry contract.
     #[clap(
         long,
-        env = "OPRF_SERVICE_KEY_GEN_CONTRACT",
-        default_value = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+        env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT",
+        default_value = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"
     )]
-    pub key_gen_contract: Address,
+    pub rp_registry_contract: Address,
 
     /// The address of the AccountRegistry smart contract
     #[clap(
@@ -146,15 +146,6 @@ pub struct OprfPeerConfig {
         default_value = "oprf/sk"
     )]
     pub private_key_secret_id: String,
-
-    /// Suffix for secret name to store rp secrets in secret-manager.
-    /// The implementation will call `format!("{rp_secret_id_suffix}/{rp_id}")`
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_RP_SECRET_ID_SUFFIX",
-        default_value = "oprf/rp"
-    )]
-    pub rp_secret_id_suffix: String,
 
     /// The maximum size of the merkle store.
     ///
@@ -189,4 +180,8 @@ pub struct OprfPeerConfig {
     /// The location of the graph binary for the key-gen witness extension
     #[clap(long, env = "OPRF_SERVICE_KEY_GEN_GRAPH")]
     pub key_gen_witness_graph_path: PathBuf,
+
+    /// The starting block when reconstructing rp nullifier materials
+    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_FROM_BLOCK", default_value = "0")]
+    pub key_gen_from_block: u64,
 }

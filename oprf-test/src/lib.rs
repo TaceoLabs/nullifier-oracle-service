@@ -34,7 +34,7 @@ async fn start_service(
     id: usize,
     chain_ws_rpc_url: &str,
     wallet_private_key: &str,
-    key_gen_contract: Address,
+    rp_registry_contract: Address,
     account_registry_contract: Address,
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -48,18 +48,18 @@ async fn start_service(
         max_concurrent_jobs: 100000,
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
-        user_verification_key_path: dir.join("../circom/main/OPRFQueryProof.vk.json"),
+        user_verification_key_path: dir.join("../circom/query.vk.json"),
         private_key_secret_id: format!("oprf/sk/n{id}"),
-        rp_secret_id_suffix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
-        key_gen_contract,
+        rp_registry_contract,
         account_registry_contract,
         wallet_private_key: wallet_private_key.into(),
         chain_ws_rpc_url: chain_ws_rpc_url.to_string(),
-        key_gen_witness_graph_path: dir.join("../keygen_graph.bin"),
-        key_gen_zkey_path: dir.join("../keygen_13.zkey"),
+        key_gen_witness_graph_path: dir.join("../circom/keygen_graph.bin"),
+        key_gen_zkey_path: dir.join("../circom/keygen_13.zkey"),
+        key_gen_from_block: 0,
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {

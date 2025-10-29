@@ -2,14 +2,16 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {KeyGen} from "../../src/KeyGen.sol";
-import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
-import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
-import {BabyJubJub} from "../../src/BabyJubJub.sol";
+import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Types} from "../../src/Types.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployRpRegistryScript is Script {
+    uint256 constant THRESHOLD = 2;
+    uint256 constant MAX_PEERS = 3;
     using Types for Types.BabyJubJubElement;
+    RpRegistry public rpRegistry;
+    ERC1967Proxy public proxy;
 
     function setUp() public {}
 
@@ -23,14 +25,28 @@ contract DeployRpRegistryScript is Script {
         address nullifierVerifierAddress = vm.envAddress("NULLIFIER_VERIFIER_ADDRESS");
 
         console.log("using TACEO address:", taceoAdminAddress);
-        console.log("using accumulator address:", taceoAdminAddress);
-        console.log("using key-gen verifier address:", taceoAdminAddress);
-        console.log("using nullifier verifier address:", taceoAdminAddress);
+        console.log("using accumulator address:", accumulatorAddress);
+        console.log("using key-gen verifier address:", keyGenVerifierAddress);
+        console.log("using nullifier verifier address:", nullifierVerifierAddress);
 
-        KeyGen gen =
-            new KeyGen(taceoAdminAddress, keyGenVerifierAddress, nullifierVerifierAddress, accumulatorAddress, 3, 2);
+        // Deploy implementation
+        RpRegistry implementation = new RpRegistry();
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSelector(
+            RpRegistry.initialize.selector,
+            taceoAdminAddress,
+            keyGenVerifierAddress,
+            nullifierVerifierAddress,
+            accumulatorAddress,
+            THRESHOLD,
+            MAX_PEERS
+        );
+        // Deploy proxy
+        proxy = new ERC1967Proxy(address(implementation), initData);
+        rpRegistry = RpRegistry(address(proxy));
 
         vm.stopBroadcast();
-        console.log("RpRegistry deployed to:", address(gen));
+        console.log("RpRegistry implementation deployed to:", address(implementation));
+        console.log("RpRegistry deployed to:", address(rpRegistry));
     }
 }

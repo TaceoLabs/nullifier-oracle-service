@@ -219,31 +219,6 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
         println!("q: [{}n, {}n],", self.q[0], self.q[1]);
     }
 
-    pub fn json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "pk": self.pk.iter().map(|pk| [pk[0].to_string(), pk[1].to_string()]).collect::<Vec<_>>(),
-            "pk_index": self.pk_index.to_string(),
-            "s": self.s.to_string(),
-            "r": [self.r[0].to_string(), self.r[1].to_string()],
-            "cred_type_id": self.cred_type_id.to_string(),
-            "cred_pk": [self.cred_pk[0].to_string(), self.cred_pk[1].to_string()],
-            "cred_hashes": [self.cred_hashes[0].to_string(), self.cred_hashes[1].to_string()],
-            "cred_genesis_issued_at": self.cred_genesis_issued_at.to_string(),
-            "cred_expires_at": self.cred_expires_at.to_string(),
-            "cred_s": self.cred_s.to_string(),
-            "cred_r": [self.cred_r[0].to_string(), self.cred_r[1].to_string()],
-            "current_time_stamp": self.current_time_stamp.to_string(),
-            "merkle_root": self.merkle_root.to_string(),
-            "depth": self.depth.to_string(),
-            "mt_index": self.mt_index.to_string(),
-            "siblings": self.siblings.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-            "beta": self.beta.to_string(),
-            "rp_id": self.rp_id.to_string(),
-            "action": self.action.to_string(),
-            "nonce": self.nonce.to_string()
-        })
-    }
-
     pub fn merkle_root_from_pks(
         pks: &[[BaseField; 2]; MAX_PUBLIC_KEYS],
         siblings: &[BaseField; MAX_DEPTH],

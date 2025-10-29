@@ -7,11 +7,11 @@ include "verify_dlog/verify_dlog.circom";
 
 template OprfNullifier(MAX_DEPTH) {
     // Signature verification of the OPRF nonce (There such that sk corresponding to pk is never used in a proof directly)
-    signal input user_pk[7][2];
+    signal input pk[7][2];
     signal input pk_index; // 0..6
-    signal input query_s;
-    signal input query_r[2];
-   // Credential Signature
+    signal input s;
+    signal input r[2];
+    // Credential Signature
     signal input cred_type_id;
     signal input cred_pk[2]; // Public
     signal input cred_hashes[2]; // [claims_hash, associated_data_hash]
@@ -52,10 +52,10 @@ template OprfNullifier(MAX_DEPTH) {
 
     // 1-3. Show that the original query was computed correctly
     component oprf_query = OprfQueryInner(MAX_DEPTH);
-    oprf_query.pk <== user_pk;
+    oprf_query.pk <== pk;
     oprf_query.pk_index <== pk_index;
-    oprf_query.s <== query_s;
-    oprf_query.r <== query_r;
+    oprf_query.s <== s;
+    oprf_query.r <== r;
     oprf_query.cred_type_id <== cred_type_id;
     oprf_query.cred_pk <== cred_pk;
     oprf_query.cred_hashes <== cred_hashes;

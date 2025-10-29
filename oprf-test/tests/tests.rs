@@ -12,9 +12,9 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eyre::Context as _;
 use groth16::Groth16;
-use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery, zk::Groth16Material};
+use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
-use oprf_service::rp_registry::{KeyGen, Types};
+use oprf_service::rp_registry::{RpRegistry, Types};
 use oprf_test::world_id_protocol_mock::Authenticator;
 use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
 use oprf_test::{
@@ -29,6 +29,10 @@ pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
+use oprf_zk::{
+    Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
+    QUERY_GRAPH_BYTES,
+};
 use rand::Rng;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
@@ -43,10 +47,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let account_registry_contract =
         world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
-    println!("Deploying KeyGen contract...");
-    let key_gen_contract =
+    println!("Deploying RpRegistry contract...");
+    let rp_registry_contract =
         test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
-    println!("deployed at address: {key_gen_contract}");
 
     println!("Starting AuthTreeIndexer...");
     let auth_tree_indexer =
@@ -55,7 +58,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
         &anvil.ws_endpoint(),
-        key_gen_contract,
+        rp_registry_contract,
         account_registry_contract,
     )
     .await;
@@ -63,7 +66,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
     let rp_id = rp_registry_scripts::init_key_gen(
         &anvil.ws_endpoint(),
-        key_gen_contract,
+        rp_registry_contract,
         rp_pk,
         TACEO_ADMIN_PRIVATE_KEY,
     )?;
@@ -108,11 +111,16 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!();
     println!("Loading zkeys and matrices...");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let groth16_material = Groth16Material::new(
-        dir.join("../circom/main/OPRFQueryProof.zkey"),
-        dir.join("../circom/main/OPRFNullifierProof.zkey"),
+    let query_material = Groth16Material::from_bytes(
+        &std::fs::read(dir.join("../circom/query.zkey"))?,
+        QUERY_FINGERPRINT.into(),
+        QUERY_GRAPH_BYTES,
     )?;
-    let nullifier_vk = groth16_material.nullifier_vk();
+    let nullifier_material = Groth16Material::from_bytes(
+        &std::fs::read(dir.join("../circom/nullifier.zkey"))?,
+        NULLIFIER_FINGERPRINT.into(),
+        NULLIFIER_GRAPH_BYTES,
+    )?;
 
     println!("Generating a random query...");
     let action = ark_babyjubjub::Fq::rand(&mut rng);
@@ -133,16 +141,15 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     );
 
     let signal_hash = ark_babyjubjub::Fq::rand(&mut rng);
+    let id_commitment_r = ark_babyjubjub::Fq::rand(&mut rng);
 
-    println!("Running KeyGen flow...");
-    let time = Instant::now();
-
+    println!("Fetching RpNullifierKey...");
     let ws = WsConnect::new(anvil.ws_endpoint()); // rpc-url of anvil
     let provider = ProviderBuilder::new()
         .connect_ws(ws)
         .await
         .context("while connecting to RPC")?;
-    let contract = KeyGen::new(key_gen_contract, provider.clone());
+    let contract = RpRegistry::new(rp_registry_contract, provider.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(500));
     let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -163,15 +170,23 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         credential_signature: credential_signature.clone(),
         merkle_membership: merkle_membership.clone(),
         query,
-        groth16_material,
         key_material,
-        signal_hash,
         rp_nullifier_key,
+        signal_hash,
+        id_commitment_r,
     };
+    let nullifier_vk = nullifier_material.pk.vk.clone();
 
-    let (proof, public, nullifier, id_commitment) =
-        oprf_client::nullifier(oprf_services.as_slice(), 2, args, &mut rng).await?;
-    let elapsed = time.elapsed();
+    let time = Instant::now();
+    let (proof, public, nullifier, id_commitment) = oprf_client::nullifier(
+        oprf_services.as_slice(),
+        2,
+        &query_material,
+        &nullifier_material,
+        args,
+        &mut rng,
+    )
+    .await?;
 
     println!("Verifying proof...");
     Groth16::verify(&nullifier_vk, &proof.clone().into(), &public).expect("verifies");
@@ -200,6 +215,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         .await?;
     assert!(result, "on-chain verification failed");
 
+    let elapsed = time.elapsed();
     println!("Success! Completed in {:?}", elapsed);
     println!("Produced nullifier: {nullifier}");
     Ok(())

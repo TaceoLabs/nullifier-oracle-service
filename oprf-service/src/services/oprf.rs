@@ -22,13 +22,11 @@ use std::{
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
-use ark_serde_compat::groth16::Groth16Proof;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
-use oprf_types::{
-    TREE_DEPTH,
-    api::v1::{ChallengeRequest, OprfRequest},
-};
+use oprf_types::TREE_DEPTH;
+use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
+use oprf_zk::groth16_serde::Groth16Proof;
 use tracing::instrument;
 use uuid::Uuid;
 
