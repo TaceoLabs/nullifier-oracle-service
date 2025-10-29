@@ -1,8 +1,5 @@
 [workspace]
 members = [
-    "ark-babyjubjub",
-    "ark-serde-compat",
-    "eddsa-babyjubjub",
     "oprf-client",
     "oprf-core",
     "oprf-dev-client",
@@ -10,7 +7,6 @@ members = [
     "oprf-test",
     "oprf-types",
     "oprf-zk",
-    "poseidon2"
 ]
 resolver = "3"
 
@@ -27,7 +23,7 @@ readme = "./README.md"
 [workspace.dependencies]
 alloy = { version = "1", default-features = false }
 ark-algebra-test-templates = "0.5"
-ark-babyjubjub = { path = "ark-babyjubjub" }
+ark-babyjubjub = { package = "taceo-ark-babyjubjub", version = "0.5" }
 ark-bn254 = { version = "0.5" }
 ark-curve-constraint-tests = "0.5"
 ark-ec = "0.5"
@@ -35,7 +31,7 @@ ark-ff = "0.5"
 ark-groth16 = "0.5"
 ark-r1cs-std = { version = "0.5" }
 ark-relations = "0.5"
-ark-serde-compat = { path = "ark-serde-compat" }
+ark-serde-compat = { package = "taceo-ark-serde-compat", version = "0.1" }
 ark-serialize = "0.5"
 ark-std = "0.5"
 async-trait = "0.1"
@@ -47,7 +43,7 @@ blake3 = "1"
 circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
 clap = "4"
 criterion = "0.7"
-eddsa-babyjubjub = { path = "eddsa-babyjubjub" }
+eddsa-babyjubjub = { package = "taceo-eddsa-babyjubjub", version = "0.5" }
 eyre = { version = "0.6" }
 futures = "0.3"
 git-version = "0.3"
@@ -58,7 +54,7 @@ humantime = "2"
 itertools = "0.14"
 k256 = "0.13"
 metrics = "0.24"
-nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd"}
+nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd" }
 num-bigint = "0.4"
 num-traits = "0.2"
 oprf-client = { path = "oprf-client" }
@@ -68,11 +64,14 @@ oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }
 oprf-zk = { path = "oprf-zk" }
 parking_lot = "0.12"
-poseidon2 = { path = "poseidon2" }
+poseidon2 = { package = "taceo-poseidon2", version = "0.1" }
 rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
 regex = "1.12.2"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
 rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }

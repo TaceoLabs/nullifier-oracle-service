@@ -899,41 +899,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
-name = "ark-algebra-test-templates"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd4c6293624cb11978fe9940af61faa16e85431fa9993ed2e11ea422099a564c"
-dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
- "hex",
- "num-bigint",
- "num-integer",
- "num-traits",
- "serde",
- "serde_derive",
- "serde_json",
- "sha2",
-]
-
-[[package]]
-name = "ark-babyjubjub"
-version = "0.5.0"
-dependencies = [
- "ark-algebra-test-templates",
- "ark-bn254 0.5.0",
- "ark-curve-constraint-tests",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-r1cs-std",
- "ark-relations 0.5.1",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
-]
-
-[[package]]
 name = "ark-bn254"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1007,20 +972,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "ark-curve-constraint-tests"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f3fcb68ba620b7dc3bee5f04204994d1ca8b7bb7f216d9e96b4e09d326bc5a8"
-dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-r1cs-std",
- "ark-relations 0.5.1",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
 ]
 
 [[package]]
@@ -1292,17 +1243,6 @@ dependencies = [
  "ark-std 0.5.0",
  "tracing",
  "tracing-subscriber 0.2.25",
-]
-
-[[package]]
-name = "ark-serde-compat"
-version = "0.1.0"
-dependencies = [
- "ark-babyjubjub",
- "ark-bn254 0.5.0",
- "ark-ec 0.5.0",
- "serde",
- "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2906,24 +2846,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eddsa-babyjubjub"
-version = "0.1.0"
-dependencies = [
- "ark-babyjubjub",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serde-compat",
- "ark-serialize 0.5.0",
- "blake3",
- "eyre",
- "num-bigint",
- "poseidon2",
- "rand 0.8.5",
- "serde",
- "zeroize",
-]
-
-[[package]]
 name = "educe"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3681,7 +3603,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.1",
  "tokio",
  "tower-service",
  "tracing",
@@ -4618,10 +4540,8 @@ dependencies = [
 name = "oprf-client"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
  "ark-ec 0.5.0",
  "circom-types",
- "eddsa-babyjubjub",
  "eyre",
  "futures",
  "groth16",
@@ -4632,6 +4552,8 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "serde_json",
+ "taceo-ark-babyjubjub",
+ "taceo-eddsa-babyjubjub",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -4642,19 +4564,19 @@ dependencies = [
 name = "oprf-core"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
- "ark-serde-compat",
  "criterion",
- "eddsa-babyjubjub",
  "itertools 0.14.0",
  "num-bigint",
- "poseidon2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
  "subtle",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
+ "taceo-eddsa-babyjubjub",
+ "taceo-poseidon2",
  "thiserror 2.0.17",
  "uuid",
  "zeroize",
@@ -4665,7 +4587,6 @@ name = "oprf-dev-client"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
  "ark-ff 0.5.0",
  "clap",
  "eyre",
@@ -4683,6 +4604,7 @@ dependencies = [
  "reqwest",
  "rustls 0.23.33",
  "secrecy",
+ "taceo-ark-babyjubjub",
  "tokio",
  "tracing",
  "uuid",
@@ -4693,19 +4615,16 @@ name = "oprf-service"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
- "ark-serde-compat",
  "async-trait",
  "aws-config",
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
  "clap",
- "eddsa-babyjubjub",
  "eyre",
  "futures",
  "git-version",
@@ -4722,12 +4641,15 @@ dependencies = [
  "oprf-types",
  "oprf-zk",
  "parking_lot",
- "poseidon2",
  "rand 0.8.5",
  "rustls 0.23.33",
  "secrecy",
  "serde",
  "serde_json",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
+ "taceo-eddsa-babyjubjub",
+ "taceo-poseidon2",
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
@@ -4743,7 +4665,6 @@ name = "oprf-test"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
@@ -4753,7 +4674,6 @@ dependencies = [
  "axum",
  "circom-types",
  "clap",
- "eddsa-babyjubjub",
  "eyre",
  "futures",
  "groth16",
@@ -4765,7 +4685,6 @@ dependencies = [
  "oprf-service",
  "oprf-types",
  "oprf-zk",
- "poseidon2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
@@ -4774,6 +4693,9 @@ dependencies = [
  "semaphore-rs-trees",
  "serde",
  "serde_json",
+ "taceo-ark-babyjubjub",
+ "taceo-eddsa-babyjubjub",
+ "taceo-poseidon2",
  "take_mut",
  "tokio",
  "tracing",
@@ -4784,14 +4706,14 @@ name = "oprf-types"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-babyjubjub",
  "ark-ff 0.5.0",
- "ark-serde-compat",
- "eddsa-babyjubjub",
  "k256",
  "oprf-core",
  "oprf-zk",
  "serde",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
+ "taceo-eddsa-babyjubjub",
  "uuid",
 ]
 
@@ -4799,12 +4721,10 @@ dependencies = [
 name = "oprf-zk"
 version = "0.1.0"
 dependencies = [
- "ark-babyjubjub",
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
- "ark-serde-compat",
  "circom-types",
  "eyre",
  "groth16",
@@ -4815,6 +4735,8 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
  "thiserror 2.0.17",
  "tracing",
  "uuid",
@@ -5008,18 +4930,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
-name = "poseidon2"
-version = "0.1.0"
-dependencies = [
- "ark-bn254 0.5.0",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
- "criterion",
- "num-bigint",
- "num-traits",
-]
-
-[[package]]
 name = "postcard"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5180,7 +5090,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.33",
- "socket2 0.5.10",
+ "socket2 0.6.1",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -5217,7 +5127,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.1",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -6349,6 +6259,64 @@ dependencies = [
 ]
 
 [[package]]
+name = "taceo-ark-babyjubjub"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f404332979db17b044cb8eb92bd471d993ed8713ffb08dc9b3f459414123a499"
+dependencies = [
+ "ark-bn254 0.5.0",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+]
+
+[[package]]
+name = "taceo-ark-serde-compat"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "070074111809a0c9344738814302f6271bd79bb38cc1427e889c2b063e66e5e0"
+dependencies = [
+ "ark-bn254 0.5.0",
+ "ark-ec 0.5.0",
+ "serde",
+ "taceo-ark-babyjubjub",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "taceo-eddsa-babyjubjub"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "791e41273cc025e07fbca9fcd1d143a3d8cbe3515de8aa6dab91549c9a0af245"
+dependencies = [
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "blake3",
+ "eyre",
+ "num-bigint",
+ "rand 0.8.5",
+ "serde",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
+ "taceo-poseidon2",
+ "zeroize",
+]
+
+[[package]]
+name = "taceo-poseidon2"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce5f09fc2f1c68aafd3f544313fe7e34d33b35aa666bc9e6b7a22e94b9833140"
+dependencies = [
+ "ark-bn254 0.5.0",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+ "num-bigint",
+ "num-traits",
+]
+
+[[package]]
 name = "take_mut"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7212,7 +7180,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -76,8 +76,8 @@ pub struct RpSecretGenCommitment {
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     /// The commitment to the random value sampled by the peer.
     pub comm_share: ark_babyjubjub::EdwardsAffine,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     /// The commitment to the polynomial used to hide the sampled secret.
     pub comm_coeffs: ark_babyjubjub::Fq,
 }
@@ -100,12 +100,12 @@ pub struct RpSecretGenCiphertexts {
 /// Contains the [`PeerPublicKey`] of the sender, the ciphertext itself, and a nonce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCiphertext {
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     /// The nonce used during encryption.
     pub nonce: ark_babyjubjub::Fq,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_base")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_base")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     /// The ciphertext.
     pub cipher: ark_babyjubjub::Fq,
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]

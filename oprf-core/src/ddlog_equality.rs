@@ -34,8 +34,8 @@ pub struct DLogEqualityCommitments {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DLogEqualityProofShare {
     // The share of the response s
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_scalar")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_scalar")]
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fr")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr")]
     pub(crate) s: ScalarField,
 }
 

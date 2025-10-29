@@ -68,8 +68,8 @@ pub(crate) struct PeerPrivateKey(ark_babyjubjub::Fr);
 #[serde(transparent)]
 pub(crate) struct DLogShare(
     #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_scalar",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_scalar"
+        serialize_with = "ark_serde_compat::serialize_babyjubjub_fr",
+        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr"
     )]
     ark_babyjubjub::Fr,
 );
