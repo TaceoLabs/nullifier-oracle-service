@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - sg/ghcr
     tags:
       - 'oprf-service-v*'
 
