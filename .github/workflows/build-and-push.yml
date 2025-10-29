@@ -15,6 +15,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 permissions:
   contents: read # Required for the checkout action
