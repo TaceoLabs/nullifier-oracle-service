@@ -112,19 +112,11 @@ pub struct OprfPeerConfig {
     pub user_verification_key_path: PathBuf,
 
     /// The Address of the RpRegistry contract.
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT",
-        default_value = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"
-    )]
+    #[clap(long, env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT")]
     pub rp_registry_contract: Address,
 
     /// The address of the AccountRegistry smart contract
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT",
-        default_value = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-    )]
+    #[clap(long, env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT")]
     pub account_registry_contract: Address,
 
     /// Wallet private key
@@ -137,7 +129,7 @@ pub struct OprfPeerConfig {
         env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
         default_value = "ws://127.0.0.1:8545"
     )]
-    pub chain_ws_rpc_url: String,
+    pub chain_ws_rpc_url: SecretString,
 
     /// Prefix for secret name to store rp secrets in secret-manager.
     /// The implementation will call `format!("{rp_secret_id_prefix}/{rp_id}")`

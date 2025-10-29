@@ -2,6 +2,13 @@ use std::{path::PathBuf, sync::LazyLock, time::Duration};
 
 use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
+use reqwest::StatusCode;
+use testcontainers::{
+    ContainerAsync, GenericImage, ImageExt as _,
+    core::{IntoContainerPort, WaitFor, wait::HttpWaitStrategy},
+    runners::AsyncRunner as _,
+};
+use testcontainers_modules::{localstack::LocalStack, postgres::Postgres};
 
 pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
 
@@ -57,7 +64,7 @@ async fn start_service(
         rp_registry_contract,
         account_registry_contract,
         wallet_private_key: wallet_private_key.into(),
-        chain_ws_rpc_url: chain_ws_rpc_url.to_string(),
+        chain_ws_rpc_url: chain_ws_rpc_url.into(),
         key_gen_witness_graph_path: dir.join("../circom/keygen_graph.bin"),
         key_gen_zkey_path: dir.join("../circom/keygen_13.zkey"),
     };
@@ -110,4 +117,64 @@ pub async fn start_services(
         )
         .await,
     ]
+}
+
+pub async fn postgres_testcontainer() -> eyre::Result<(ContainerAsync<Postgres>, String)> {
+    let container = Postgres::default().with_network("network").start().await?;
+    let ip = container.get_bridge_ip_address().await?;
+    let db_url = format!("postgres://postgres:postgres@{ip}:5432/postgres");
+    Ok((container, db_url))
+}
+
+pub async fn indexer_testcontainer(
+    rpc_url: &str,
+    ws_url: &str,
+    anvil_port: u16,
+    registry_address: &str,
+    db_url: &str,
+) -> eyre::Result<(ContainerAsync<GenericImage>, String)> {
+    let image = GenericImage::new(
+        "ghcr.io/worldcoin/world-id-protocol/world-id-indexer",
+        "latest",
+    )
+    .with_exposed_port(8080.tcp())
+    .with_wait_for(WaitFor::http(
+        HttpWaitStrategy::new("/health")
+            .with_port(8080.tcp())
+            .with_response_matcher(|res| res.status() == StatusCode::OK),
+    ))
+    .with_network("network")
+    .with_env_var(
+        "RPC_URL",
+        rpc_url.replace("localhost", "host.testcontainers.internal"),
+    )
+    .with_env_var(
+        "WS_URL",
+        ws_url.replace("localhost", "host.testcontainers.internal"),
+    )
+    .with_env_var("REGISTRY_ADDRESS", registry_address)
+    .with_env_var("DATABASE_URL", db_url)
+    .with_exposed_host_port(anvil_port);
+
+    let indexer_container = image.start().await.expect("can start indexer image");
+    let indexer_url = format!(
+        "http://localhost:{port}",
+        port = indexer_container
+            .get_host_port_ipv4(8080)
+            .await
+            .expect("can bind ip"),
+    );
+    Ok((indexer_container, indexer_url))
+}
+
+pub async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
+    let request = LocalStack::default().with_env_var("SERVICES", "secretsmanager");
+    let container = request.start().await?;
+    let host_ip = container.get_host().await?;
+    let host_port = container.get_host_port_ipv4(4566).await?;
+    let endpoint_url = format!("http://{host_ip}:{host_port}");
+    unsafe {
+        std::env::set_var("AWS_ENDPOINT_URL", endpoint_url);
+    }
+    Ok(container)
 }
