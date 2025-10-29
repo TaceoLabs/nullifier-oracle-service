@@ -12,15 +12,17 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eyre::Context as _;
 use groth16::Groth16;
-use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery};
+use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::{RpRegistry, Types};
-use oprf_test::world_id_protocol_mock::Authenticator;
-use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
+use oprf_test::{
+    MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, indexer_testcontainer, localstack_testcontainer,
+    postgres_testcontainer, test_setup_utils,
+};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
-    world_id_protocol_mock::{self, AuthTreeIndexer},
+    world_id_protocol_mock::{self},
 };
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::RpNullifierKey;
@@ -33,10 +35,12 @@ use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
     QUERY_GRAPH_BYTES,
 };
-use rand::Rng;
+use world_id_core::Authenticator;
+use world_id_core::config::Config;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
+    let _localstack_container = localstack_testcontainer().await?;
     let mut rng = rand::thread_rng();
     println!("==== OPRF Client Example ====");
 
@@ -51,9 +55,16 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let rp_registry_contract =
         test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
 
-    println!("Starting AuthTreeIndexer...");
-    let auth_tree_indexer =
-        AuthTreeIndexer::init(account_registry_contract, &anvil.ws_endpoint()).await?;
+    println!("Starting indexer...");
+    let (_postgres_container, db_url) = postgres_testcontainer().await?;
+    let (_indexer_container, indexer_url) = indexer_testcontainer(
+        &anvil.endpoint(),
+        &anvil.ws_endpoint(),
+        anvil.port(),
+        &account_registry_contract.to_string(),
+        &db_url,
+    )
+    .await?;
 
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
@@ -76,21 +87,33 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)
         .context("while reading wallet private key")?;
     let wallet = EthereumWallet::from(private_key);
+    let seed = rand::random::<[u8; 32]>();
     let mut authenticator = Authenticator::new(
-        &rng.r#gen::<[u8; 32]>(),
+        &seed,
+        Config::new(
+            anvil.endpoint(),
+            account_registry_contract,
+            indexer_url.clone(),
+            "unused".to_string(),
+            vec!["unused".to_string()],
+        ),
+    )?;
+    let offchain_signer_private_key = EdDSAPrivateKey::from_bytes(seed);
+
+    let key_material = world_id_protocol_mock::create_account(
+        &authenticator,
+        offchain_signer_private_key,
         &anvil.ws_endpoint(),
         account_registry_contract,
         wallet,
     )
     .await?;
-    let key_material = authenticator.create_account().await?;
-    let account_index = authenticator.account_index().await?;
-
-    println!("Get InclusionProof for account...");
-    let merkle_proof = auth_tree_indexer
-        .get_proof(account_index.try_into().unwrap())
-        .await?;
-    let merkle_membership = MerkleMembership::try_from(merkle_proof)?;
+    let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
+        &mut authenticator,
+        &indexer_url,
+        Duration::from_secs(10),
+    )
+    .await?;
 
     println!("Creating nonce and and sign it...");
     println!("In a real-world scenario, the RP would sign the nonce.");

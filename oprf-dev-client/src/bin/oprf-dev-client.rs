@@ -5,21 +5,17 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use alloy::{
-    network::EthereumWallet,
-    primitives::{Address, U256},
-    signers::local::PrivateKeySigner,
-};
+use alloy::{network::EthereumWallet, primitives::Address, signers::local::PrivateKeySigner};
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
 use oprf_client::{
-    MerkleMembership, NullifierArgs, OprfQuery, SignedOprfQuery, UserKeyMaterial, groth16::Groth16,
+    EdDSAPrivateKey, MerkleMembership, NullifierArgs, OprfQuery, SignedOprfQuery, UserKeyMaterial,
+    groth16::Groth16,
 };
 use oprf_service::rp_registry::{RpRegistryProxy, Types};
-use oprf_test::world_id_protocol_mock::InclusionProofResponse;
-use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
+use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
 use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
@@ -29,6 +25,7 @@ use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 use uuid::Uuid;
+use world_id_core::{Authenticator, config::Config};
 
 #[derive(Parser, Debug)]
 pub struct StressTestCommand {
@@ -91,7 +88,15 @@ pub struct OprfDevClientConfig {
         env = "OPRF_DEV_CLIENT_CHAIN_WS_RPC_URL",
         default_value = "ws://localhost:8545"
     )]
-    pub chain_ws_rpc_url: String,
+    pub chain_ws_rpc_url: SecretString,
+
+    /// The RPC for chain communication
+    #[clap(
+        long,
+        env = "OPRF_DEV_CLIENT_CHAIN_RPC_URL",
+        default_value = "http://localhost:8545"
+    )]
+    pub chain_rpc_url: SecretString,
 
     /// The PRIVATE_KEY of the TACEO admin wallet - used to register the OPRF peers
     ///
@@ -103,13 +108,13 @@ pub struct OprfDevClientConfig {
     )]
     pub taceo_private_key: SecretString,
 
-    /// AuthTreeIndexer address
+    /// Indexer address
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_AUTH_TREE_INDEXER_API_URL",
+        env = "OPRF_DEV_CLIENT_INDEXER_URL",
         default_value = "http://localhost:8080"
     )]
-    pub auth_tree_indexer_api_url: String,
+    pub indexer_url: String,
 
     /// Timeout for fetching indexer inclusion proof
     #[clap(
@@ -285,31 +290,31 @@ async fn health_check(health_url: String) {
     tracing::info!("healthy: {health_url}");
 }
 
-async fn fetch_inclusion_proof(
-    indexer_url: &str,
-    indexer_inclusion_proof_timeout: Duration,
-    account_index: U256,
-) -> eyre::Result<InclusionProofResponse> {
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let rp_nullifier_key = tokio::time::timeout(indexer_inclusion_proof_timeout, async move {
-        loop {
-            interval.tick().await;
-            let merkle_proof_res =
-                reqwest::get(format!("{indexer_url}/proof/{account_index}",)).await?;
-            if merkle_proof_res.status().is_success() {
-                return eyre::Ok(merkle_proof_res.json::<InclusionProofResponse>().await?);
-            } else {
-                let error = merkle_proof_res.text().await?;
-                tracing::debug!("indexer returned error: {error}");
-                tracing::debug!("trying again..");
-            }
-        }
-    })
-    .await
-    .context("could not fetch proof in 30 seconds")?
-    .context("while polling proof")?;
-    Ok(rp_nullifier_key)
-}
+// async fn fetch_inclusion_proof(
+//     indexer_url: &str,
+//     indexer_inclusion_proof_timeout: Duration,
+//     account_index: U256,
+// ) -> eyre::Result<InclusionProofResponse> {
+//     let mut interval = tokio::time::interval(Duration::from_millis(500));
+//     let rp_nullifier_key = tokio::time::timeout(indexer_inclusion_proof_timeout, async move {
+//         loop {
+//             interval.tick().await;
+//             let merkle_proof_res =
+//                 reqwest::get(format!("{indexer_url}/proof/{account_index}",)).await?;
+//             if merkle_proof_res.status().is_success() {
+//                 return eyre::Ok(merkle_proof_res.json::<InclusionProofResponse>().await?);
+//             } else {
+//                 let error = merkle_proof_res.text().await?;
+//                 tracing::debug!("indexer returned error: {error}");
+//                 tracing::debug!("trying again..");
+//             }
+//         }
+//     })
+//     .await
+//     .context("could not fetch proof in 30 seconds")?
+//     .context("while polling proof")?;
+//     Ok(rp_nullifier_key)
+// }
 
 #[expect(clippy::too_many_arguments)]
 async fn stress_test(
@@ -494,7 +499,7 @@ async fn main() -> eyre::Result<()> {
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
     let rp_registry = RpRegistryProxy::init(
-        &config.chain_ws_rpc_url,
+        config.chain_ws_rpc_url.expose_secret(),
         config.rp_registry_contract,
         wallet.clone(),
     )
@@ -509,7 +514,7 @@ async fn main() -> eyre::Result<()> {
     } else {
         let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
         let rp_id = rp_registry_scripts::init_key_gen(
-            &config.chain_ws_rpc_url,
+            config.chain_ws_rpc_url.expose_secret(),
             config.rp_registry_contract,
             rp_pk,
             config.taceo_private_key.expose_secret(),
@@ -523,23 +528,33 @@ async fn main() -> eyre::Result<()> {
     };
 
     tracing::info!("creating account..");
+    let seed = rand::random::<[u8; 32]>();
     let mut authenticator = Authenticator::new(
-        &rand::random::<[u8; 32]>(),
-        &config.chain_ws_rpc_url,
+        &seed,
+        Config::new(
+            config.chain_rpc_url.expose_secret().to_string(),
+            config.account_registry_contract,
+            config.indexer_url.clone(),
+            "unused".to_string(),
+            vec!["unused".to_string()],
+        ),
+    )?;
+    let offchain_signer_private_key = EdDSAPrivateKey::from_bytes(seed);
+
+    let key_material = world_id_protocol_mock::create_account(
+        &authenticator,
+        offchain_signer_private_key,
+        config.chain_ws_rpc_url.expose_secret(),
         config.account_registry_contract,
         wallet,
     )
     .await?;
-    let key_material = authenticator.create_account().await?;
-    let account_idx = authenticator.account_index().await?;
-
-    let merkle_membership = fetch_inclusion_proof(
-        &config.auth_tree_indexer_api_url,
+    let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
+        &mut authenticator,
+        &config.indexer_url,
         config.indexer_inclusion_proof_timeout,
-        account_idx,
     )
-    .await?
-    .try_into()?;
+    .await?;
 
     match config.command {
         Command::Test => {
