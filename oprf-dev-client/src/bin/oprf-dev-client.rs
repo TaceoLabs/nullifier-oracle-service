@@ -25,7 +25,6 @@ use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 use uuid::Uuid;
-use world_id_core::{Authenticator, config::Config};
 
 #[derive(Parser, Debug)]
 pub struct StressTestCommand {
@@ -529,30 +528,24 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("creating account..");
     let seed = rand::random::<[u8; 32]>();
-    let mut authenticator = Authenticator::new(
-        &seed,
-        Config::new(
-            config.chain_rpc_url.expose_secret().to_string(),
-            config.account_registry_contract,
-            config.indexer_url.clone(),
-            "unused".to_string(),
-            vec!["unused".to_string()],
-        ),
-    )?;
+    let onchain_signer = PrivateKeySigner::from_bytes(&seed.into())?;
     let offchain_signer_private_key = EdDSAPrivateKey::from_bytes(seed);
 
     let key_material = world_id_protocol_mock::create_account(
-        &authenticator,
         offchain_signer_private_key,
+        &onchain_signer,
         config.chain_ws_rpc_url.expose_secret(),
         config.account_registry_contract,
-        wallet,
+        wallet.clone(),
     )
     .await?;
     let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
-        &mut authenticator,
+        &onchain_signer,
+        config.chain_ws_rpc_url.expose_secret(),
+        config.account_registry_contract,
+        wallet,
         &config.indexer_url,
-        config.indexer_inclusion_proof_timeout,
+        Duration::from_secs(10),
     )
     .await?;
 

@@ -4832,34 +4832,9 @@ dependencies = [
  "futures",
  "groth16",
  "k256",
- "oprf-core 0.1.0",
- "oprf-types 0.1.0",
- "oprf-zk 0.1.0",
- "rand 0.8.5",
- "reqwest",
- "serde_json",
- "taceo-ark-babyjubjub",
- "taceo-eddsa-babyjubjub",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "oprf-client"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f#f4d209f26bfe823f63669776d19732066df8a9e9"
-dependencies = [
- "ark-ec",
- "circom-types",
- "eyre",
- "futures",
- "groth16",
- "k256",
- "oprf-core 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "oprf-types 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "oprf-zk 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
+ "oprf-core",
+ "oprf-types",
+ "oprf-zk",
  "rand 0.8.5",
  "reqwest",
  "serde_json",
@@ -4894,28 +4869,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oprf-core"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f#f4d209f26bfe823f63669776d19732066df8a9e9"
-dependencies = [
- "ark-ec",
- "ark-ff 0.5.0",
- "itertools 0.14.0",
- "num-bigint",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "subtle",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "taceo-eddsa-babyjubjub",
- "taceo-poseidon2",
- "thiserror 2.0.17",
- "uuid",
- "zeroize",
-]
-
-[[package]]
 name = "oprf-dev-client"
 version = "0.1.0"
 dependencies = [
@@ -4926,11 +4879,11 @@ dependencies = [
  "humantime",
  "k256",
  "nodes-telemetry",
- "oprf-client 0.1.0",
+ "oprf-client",
  "oprf-service",
  "oprf-test",
- "oprf-types 0.1.0",
- "oprf-zk 0.1.0",
+ "oprf-types",
+ "oprf-zk",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
@@ -4940,7 +4893,6 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "world-id-core",
 ]
 
 [[package]]
@@ -4968,11 +4920,11 @@ dependencies = [
  "k256",
  "metrics",
  "nodes-telemetry",
- "oprf-client 0.1.0",
- "oprf-core 0.1.0",
+ "oprf-client",
+ "oprf-core",
  "oprf-test",
- "oprf-types 0.1.0",
- "oprf-zk 0.1.0",
+ "oprf-types",
+ "oprf-zk",
  "parking_lot",
  "rand 0.8.5",
  "rustls 0.23.34",
@@ -4989,7 +4941,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "uuid",
- "witness 0.2.0 (git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=c8ce390)",
+ "witness",
  "zeroize",
 ]
 
@@ -5000,6 +4952,7 @@ dependencies = [
  "alloy",
  "ark-ec",
  "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
  "aws-config",
  "aws-sdk-secretsmanager",
  "circom-types",
@@ -5010,24 +4963,26 @@ dependencies = [
  "itertools 0.14.0",
  "k256",
  "nodes-telemetry",
- "oprf-client 0.1.0",
- "oprf-core 0.1.0",
+ "oprf-client",
+ "oprf-core",
  "oprf-service",
- "oprf-types 0.1.0",
- "oprf-zk 0.1.0",
+ "oprf-types",
+ "oprf-zk",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
  "reqwest",
+ "serde",
  "serde_json",
  "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
  "taceo-eddsa-babyjubjub",
  "taceo-poseidon2",
  "testcontainers",
  "testcontainers-modules",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
- "world-id-core",
 ]
 
 [[package]]
@@ -5037,25 +4992,8 @@ dependencies = [
  "alloy",
  "ark-ff 0.5.0",
  "k256",
- "oprf-core 0.1.0",
- "oprf-zk 0.1.0",
- "serde",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "taceo-eddsa-babyjubjub",
- "uuid",
-]
-
-[[package]]
-name = "oprf-types"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f#f4d209f26bfe823f63669776d19732066df8a9e9"
-dependencies = [
- "alloy",
- "ark-ff 0.5.0",
- "k256",
- "oprf-core 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "oprf-zk 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
+ "oprf-core",
+ "oprf-zk",
  "serde",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat",
@@ -5076,7 +5014,7 @@ dependencies = [
  "groth16",
  "hex",
  "k256",
- "oprf-core 0.1.0",
+ "oprf-core",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -5086,34 +5024,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "uuid",
- "witness 0.2.0 (git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=c8ce390)",
-]
-
-[[package]]
-name = "oprf-zk"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f#f4d209f26bfe823f63669776d19732066df8a9e9"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-groth16",
- "circom-types",
- "eyre",
- "groth16",
- "hex",
- "k256",
- "oprf-core 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "rand 0.8.5",
- "reqwest",
- "serde",
- "serde_json",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "thiserror 2.0.17",
- "tracing",
- "uuid",
- "witness 0.2.0 (git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=c8ce390)",
+ "witness",
 ]
 
 [[package]]
@@ -8362,85 +8273,6 @@ dependencies = [
  "ruint",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "witness"
-version = "0.2.0"
-source = "git+https://github.com/TaceoLabs/circom-witness-rs.git#cca9151dcebbda1c7aa28a63209ae8fa0fc44b72"
-dependencies = [
- "ark-bn254",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "byteorder",
- "cxx",
- "cxx-build",
- "eyre",
- "hex",
- "num-bigint",
- "num-traits",
- "postcard",
- "rand 0.8.5",
- "ruint",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "world-id-core"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "chrono",
- "ciborium",
- "circom-types",
- "eyre",
- "groth16",
- "hex",
- "oprf-client 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "oprf-types 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "oprf-zk 0.1.0 (git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=f4d209f)",
- "rand 0.8.5",
- "reqwest",
- "ruint",
- "secrecy",
- "serde",
- "serde_json",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "taceo-eddsa-babyjubjub",
- "taceo-poseidon2",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.20",
- "uuid",
- "witness 0.2.0 (git+https://github.com/TaceoLabs/circom-witness-rs.git)",
- "world-id-primitives",
-]
-
-[[package]]
-name = "world-id-primitives"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ff 0.5.0",
- "ark-groth16",
- "ark-serialize 0.5.0",
- "hex",
- "k256",
- "ruint",
- "serde",
- "serde_json",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "taceo-eddsa-babyjubjub",
- "thiserror 1.0.69",
 ]
 
 [[package]]

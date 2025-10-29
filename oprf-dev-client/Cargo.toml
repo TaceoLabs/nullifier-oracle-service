@@ -32,4 +32,3 @@ secrecy.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
 uuid.workspace = true
-world-id-core.workspace = true

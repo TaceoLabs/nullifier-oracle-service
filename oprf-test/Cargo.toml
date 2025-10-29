@@ -15,6 +15,8 @@ alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bi
 ark-babyjubjub = { workspace = true }
 ark-ec.workspace = true
 ark-ff.workspace = true
+ark-serde-compat.workspace = true
+ark-serialize.workspace = true
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 circom-types.workspace = true
@@ -36,9 +38,10 @@ rand.workspace = true
 rand_chacha.workspace = true
 regex.workspace = true
 reqwest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 testcontainers = { version = "0.25.2", features = ["http_wait_plain", "host-port-exposure"] }
 testcontainers-modules = { version = "0.13", features = ["postgres", "localstack"] }
+thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
-world-id-core.workspace = true

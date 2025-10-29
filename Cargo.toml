@@ -84,7 +84,6 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
 witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", rev = "c8ce390" }
-world-id-core = { path = "../world-id-protocol/crates/core" }
 zeroize = "1"
 
 [profile.profiling]

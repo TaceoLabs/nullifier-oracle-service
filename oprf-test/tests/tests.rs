@@ -35,8 +35,6 @@ use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
     QUERY_GRAPH_BYTES,
 };
-use world_id_core::Authenticator;
-use world_id_core::config::Config;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
@@ -83,33 +81,28 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     )?;
     println!("init key-gen with rp id: {rp_id}");
 
-    println!("Creating account...");
     let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)
         .context("while reading wallet private key")?;
     let wallet = EthereumWallet::from(private_key);
+
+    println!("Creating account...");
     let seed = rand::random::<[u8; 32]>();
-    let mut authenticator = Authenticator::new(
-        &seed,
-        Config::new(
-            anvil.endpoint(),
-            account_registry_contract,
-            indexer_url.clone(),
-            "unused".to_string(),
-            vec!["unused".to_string()],
-        ),
-    )?;
+    let onchain_signer = PrivateKeySigner::from_bytes(&seed.into())?;
     let offchain_signer_private_key = EdDSAPrivateKey::from_bytes(seed);
 
     let key_material = world_id_protocol_mock::create_account(
-        &authenticator,
         offchain_signer_private_key,
+        &onchain_signer,
         &anvil.ws_endpoint(),
         account_registry_contract,
-        wallet,
+        wallet.clone(),
     )
     .await?;
     let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
-        &mut authenticator,
+        &onchain_signer,
+        &anvil.ws_endpoint(),
+        account_registry_contract,
+        wallet,
         &indexer_url,
         Duration::from_secs(10),
     )
