@@ -81,8 +81,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name-canonical=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ github.repository }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ matrix.arch }}
           build-args: |
             GIT_HASH=${{ github.sha }}
 
@@ -141,6 +141,7 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            --annotation "index:org.opencontainers.image.description=REST API service that answers OPRF requests" \
             $(printf '${{ env.REGISTRY }}/${{ steps.meta.outputs.tags }}@sha256:%s ' *)
 
       - name: Inspect image
