@@ -112,7 +112,7 @@ pub(crate) struct CryptoDevice {
     /// Private key. *Do not return outside the device.*
     private_key: PeerPrivateKey,
     /// Secret shares and associated public keys of RPs. *Do not return outside the device.*
-    shares: RpMaterialStore,
+    rp_materials: RpMaterialStore,
     /// All public keys of the OPRF-peers (incl own key).
     public_key_list: PeerPublicKeyList,
     /// Service to persist secret material.
@@ -151,15 +151,15 @@ impl CryptoDevice {
         public_key_list: PeerPublicKeyList,
     ) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
-        let (private_key, shares) = secret_manager
+        let (private_key, rp_materials) = secret_manager
             .load_secrets()
             .await
             .context("while loading secrets from AWS")?;
-        metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);
+        metrics::counter!(METRICS_RP_SECRETS).increment(rp_materials.len() as u64);
 
         Ok(Self {
             private_key,
-            shares: RpMaterialStore::new(shares),
+            rp_materials: RpMaterialStore::new(rp_materials),
             public_key_list,
             secret_manager,
         })
@@ -184,7 +184,7 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<()> {
         tracing::debug!("verifying nonce: {nonce}");
         let vk = self
-            .shares
+            .rp_materials
             .get_rp_public_key(rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(rp_id))?;
         let mut msg = Vec::new();
@@ -209,7 +209,7 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
         tracing::debug!("computing partial commitment");
         let share = self
-            .shares
+            .rp_materials
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
         Ok(DLogEqualitySession::partial_commitments(
@@ -235,11 +235,11 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
-            .shares
+            .rp_materials
             .get_rp_nullifier_key(share_identifier.rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(share_identifier.rp_id))?;
         let share = self
-            .shares
+            .rp_materials
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
         let lagrange_coefficient = shamir::single_lagrange_from_coeff(
@@ -265,7 +265,7 @@ impl CryptoDevice {
         rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
-        self.shares
+        self.rp_materials
             .add(rp_id, rp_public_key, rp_nullifier_key, share.clone());
         let result = self
             .secret_manager

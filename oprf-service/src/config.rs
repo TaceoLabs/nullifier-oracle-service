@@ -147,14 +147,14 @@ pub struct OprfPeerConfig {
     )]
     pub private_key_secret_id: String,
 
-    /// Suffix for secret name to store rp secrets in secret-manager.
-    /// The implementation will call `format!("{rp_secret_id_suffix}/{rp_id}")`
+    /// Prefix for secret name to store rp secrets in secret-manager.
+    /// The implementation will call `format!("{rp_secret_id_prefix}/{rp_id}")`
     #[clap(
         long,
-        env = "OPRF_SERVICE_RP_SECRET_ID_SUFFIX",
+        env = "OPRF_SERVICE_RP_SECRET_ID_PREFIX",
         default_value = "oprf/rp"
     )]
-    pub rp_secret_id_suffix: String,
+    pub rp_secret_id_prefix: String,
 
     /// The maximum size of the merkle store.
     ///
