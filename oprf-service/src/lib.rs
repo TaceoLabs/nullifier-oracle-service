@@ -428,6 +428,9 @@ mod tests {
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+                    vec![1, 2, 3],
                 ),
                 rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
             };

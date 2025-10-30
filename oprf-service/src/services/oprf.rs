@@ -24,8 +24,8 @@ use ark_bn254::Bn254;
 use ark_groth16::Groth16;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
-use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
+use oprf_types::{TREE_DEPTH, crypto::PartyId};
 use oprf_zk::groth16_serde::Groth16Proof;
 use tracing::instrument;
 use uuid::Uuid;
@@ -186,6 +186,7 @@ impl OprfService {
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) fn finalize_oprf_session(
         &self,
+        my_party_id: PartyId,
         request: ChallengeRequest,
     ) -> Result<DLogEqualityProofShare, OprfServiceError> {
         tracing::debug!("handling challenge request: {}", request.request_id);
@@ -195,9 +196,13 @@ impl OprfService {
             .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share =
-            self.crypto_device
-                .challenge(session, request.challenge, &request.rp_identifier)?;
+        let proof_share = self.crypto_device.challenge(
+            request.request_id,
+            my_party_id,
+            session,
+            request.challenge,
+            &request.rp_identifier,
+        )?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");
         Ok(proof_share)

@@ -32,13 +32,15 @@ use oprf_core::{
         PartialDLogEqualityCommitments,
     },
     keys::keygen::KeyGenPoly,
+    shamir,
 };
 use oprf_types::{
     RpId,
     api::v1::NullifierShareIdentifier,
-    crypto::{PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
+    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -298,6 +300,8 @@ impl CryptoDevice {
     /// Returns an error if the RP is unknown or the key epoch is not registered.
     pub(crate) fn challenge(
         &self,
+        session_id: Uuid,
+        my_party_id: PartyId,
         session: DLogEqualitySession,
         challenge: DLogEqualityCommitments,
         share_identifier: &NullifierShareIdentifier,
@@ -311,7 +315,17 @@ impl CryptoDevice {
             .rp_materials
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
-        Ok(session.challenge(share, rp_nullifier_key.inner(), challenge))
+        let lagrange_coefficient = shamir::single_lagrange_from_coeff(
+            my_party_id.into_inner() + 1,
+            challenge.get_contributing_parties(),
+        );
+        Ok(session.challenge_shamir(
+            session_id,
+            share,
+            rp_nullifier_key.inner(),
+            challenge,
+            lagrange_coefficient,
+        ))
     }
 
     /// Registers a new nullifier share for the given relying-party.

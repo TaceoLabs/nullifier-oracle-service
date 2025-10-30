@@ -44,12 +44,13 @@ async fn oprf_request(
 #[instrument(level = "debug", skip_all)]
 async fn oprf_challenge(
     State(oprf_service): State<OprfService>,
+    State(party_id): State<PartyId>,
     Json(request): Json<ChallengeRequest>,
 ) -> ApiResult<Json<ChallengeResponse>> {
     tracing::debug!("received Challenge for request: {request:?}");
     let request_id = request.request_id;
     // Finalize the OPRF session
-    let proof_share = oprf_service.finalize_oprf_session(request)?;
+    let proof_share = oprf_service.finalize_oprf_session(party_id, request)?;
     Ok(Json(ChallengeResponse {
         request_id,
         proof_share,
