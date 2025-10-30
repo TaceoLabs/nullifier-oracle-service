@@ -5,6 +5,11 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: FULL
+  AWS_REGION: us-east-1
+  AWS_ENDPOINT_URL: http://localhost:4566
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  FOUNDRY_PROFILE: ci
 
 permissions:
   contents: read
@@ -17,11 +22,18 @@ jobs:
   # https://twitter.com/mycoliza/status/1571295690063753218
   nightly-test:
     runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:latest
+        ports:
+          - "4566:4566"            
     name: Nightly tests
     steps:
       - uses: actions/checkout@v5
         with:
           submodules: true
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && forge install
       - run: sudo apt-get install git-lfs
       - run: git lfs pull
       - name: Install nightly
@@ -30,10 +42,15 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: cargo test --locked
-        run: cargo test --profile=ci-dev --locked --all-features --all-targets --lib
+        run: cargo test --profile=ci-dev --locked --all-features --all-targets
   # https://twitter.com/alcuadrado/status/1571291687837732873
   update:
     runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:latest
+        ports:
+          - "4566:4566"            
     name: ubuntu / beta / updated
     # There's no point running this if no Cargo.lock was checked in in the
     # first place, since we'd just redo what happened in the regular test job.
@@ -43,6 +60,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: true
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: cd contracts && forge install
       - run: sudo apt-get install git-lfs
       - run: git lfs pull
       - name: Install beta
@@ -53,7 +72,7 @@ jobs:
         run: cargo update
       - name: cargo test
         if: hashFiles('Cargo.lock') != ''
-        run: cargo test --profile=ci-dev --locked --all-features --all-targets --lib
+        run: cargo test --profile=ci-dev --locked --all-features --all-targets
         env:
           RUSTFLAGS: -D deprecated
   nightly-lints:
