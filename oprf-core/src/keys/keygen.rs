@@ -161,7 +161,7 @@ impl KeyGenPoly {
 
     // Returns the first lagrange coefficients for the given degree
     pub fn lagrange_coeffs(degree: usize) -> Vec<ScalarField> {
-        let indices: Vec<usize> = (1..=degree + 1).collect();
+        let indices: Vec<u64> = (1..=degree as u64 + 1).collect();
         shamir::lagrange_from_coeff(&indices)
     }
 

@@ -7,7 +7,7 @@ use criterion::*;
 use oprf_core::{
     ddlog_equality::{DLogEqualityCommitments, DLogEqualitySession},
     oprf::{OPrfKey, OPrfService, OprfClient},
-    shamir::lagrange_from_coeff,
+    shamir,
 };
 use rand::seq::IteratorRandom;
 use uuid::Uuid;
@@ -123,14 +123,43 @@ fn ddlog_bench(c: &mut Criterion) {
         let x = ark_babyjubjub::Fr::rand(rng);
         let point = EdwardsAffine::rand(rng);
         let pk = (EdwardsProjective::generator() * x).into_affine();
+        let session_id = Uuid::new_v4();
+        let participating_parties = vec![1, 2, 3];
 
         b.iter_batched(
             || {
                 let (session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
-                let challenge = DLogEqualityCommitments::combine_commitments(&[comm]);
+                let challenge = DLogEqualityCommitments::combine_commitments(&[(1, comm)]);
                 (session, challenge)
             },
-            |(session, challenge)| session.challenge(x, pk, challenge),
+            |(session, challenge)| {
+                session.challenge(session_id, &participating_parties, x, pk, challenge)
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    c.bench_function("DDLOG/Server/Phase2Shamir", |b| {
+        let rng = &mut rand::thread_rng();
+        let x = ark_babyjubjub::Fr::rand(rng);
+        let point = EdwardsAffine::rand(rng);
+        let pk = (EdwardsProjective::generator() * x).into_affine();
+        let session_id = Uuid::new_v4();
+        let participating_parties = vec![1, 2, 3];
+
+        b.iter_batched(
+            || {
+                let (session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
+                let challenge = DLogEqualityCommitments::combine_commitments(&[
+                    (1, comm.clone()),
+                    (2, comm.clone()),
+                    (3, comm),
+                ]);
+                (session, challenge)
+            },
+            |(session, challenge)| {
+                let lagrange = shamir::single_lagrange_from_coeff(1, &participating_parties);
+                session.challenge_shamir(session_id, x, pk, challenge, lagrange)
+            },
             BatchSize::SmallInput,
         );
     });
@@ -143,7 +172,7 @@ fn ddlog_bench(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let (_session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
-                    vec![comm; set_size]
+                    vec![(1, comm); set_size]
                 },
                 |commitments| DLogEqualityCommitments::combine_commitments(&commitments),
                 BatchSize::SmallInput,
@@ -154,20 +183,42 @@ fn ddlog_bench(c: &mut Criterion) {
             let x = ark_babyjubjub::Fr::rand(rng);
             let point = EdwardsAffine::rand(rng);
             let pk = (EdwardsProjective::generator() * x).into_affine();
+            let session_id = Uuid::new_v4();
+            let participating_parties = (1u16..=set_size as u16).collect::<Vec<_>>();
 
             b.iter_batched(
                 || {
                     let (sessions, commitments) = (0..set_size)
-                        .map(|_| DLogEqualitySession::partial_commitments(point, x, rng))
+                        .map(|i| {
+                            let (session, comm) =
+                                DLogEqualitySession::partial_commitments(point, x, rng);
+                            (session, (i as u16 + 1, comm))
+                        })
                         .collect::<(Vec<_>, Vec<_>)>();
                     let challenge = DLogEqualityCommitments::combine_commitments(&commitments);
                     let responses = sessions
                         .into_iter()
-                        .map(|s| s.challenge(x, pk, challenge.clone()))
+                        .map(|s| {
+                            s.challenge(
+                                session_id,
+                                &participating_parties,
+                                x,
+                                pk,
+                                challenge.clone(),
+                            )
+                        })
                         .collect::<Vec<_>>();
                     (challenge, responses)
                 },
-                |(challenge, responses)| challenge.combine_proofs(&responses, pk, point),
+                |(challenge, responses)| {
+                    challenge.combine_proofs(
+                        session_id,
+                        &participating_parties,
+                        &responses,
+                        pk,
+                        point,
+                    )
+                },
                 BatchSize::SmallInput,
             );
         });
@@ -179,41 +230,11 @@ fn ddlog_bench(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     let (_session, comm) = DLogEqualitySession::partial_commitments(point, x, rng);
-                    let used_parties = (1..=set_size * 2).choose_multiple(rng, set_size);
-                    let lagrange = lagrange_from_coeff(&used_parties);
-                    (vec![comm; set_size], lagrange)
+                    let used_parties = (1..=set_size as u16 * 2).choose_multiple(rng, set_size);
+                    (vec![comm; set_size], used_parties)
                 },
-                |(commitments, lagrange)| {
-                    DLogEqualityCommitments::combine_commitments_shamir(&commitments, &lagrange)
-                },
-                BatchSize::SmallInput,
-            );
-        });
-        c.bench_function(&format!("DDLOG/Client/Phase2Shamir (t={set_size})"), |b| {
-            let rng = &mut rand::thread_rng();
-            let x = ark_babyjubjub::Fr::rand(rng);
-            let point = EdwardsAffine::rand(rng);
-            let pk = (EdwardsProjective::generator() * x).into_affine();
-
-            b.iter_batched(
-                || {
-                    let (sessions, commitments) = (0..set_size)
-                        .map(|_| DLogEqualitySession::partial_commitments(point, x, rng))
-                        .collect::<(Vec<_>, Vec<_>)>();
-                    let used_parties = (1..=set_size * 2).choose_multiple(rng, set_size);
-                    let lagrange = lagrange_from_coeff(&used_parties);
-                    let challenge = DLogEqualityCommitments::combine_commitments_shamir(
-                        &commitments,
-                        &lagrange,
-                    );
-                    let responses = sessions
-                        .into_iter()
-                        .map(|s| s.challenge(x, pk, challenge.clone()))
-                        .collect::<Vec<_>>();
-                    (challenge, responses, lagrange)
-                },
-                |(challenge, responses, lagrange)| {
-                    challenge.combine_proofs_shamir(&responses, &lagrange, pk, point)
+                |(commitments, used_parties)| {
+                    DLogEqualityCommitments::combine_commitments_shamir(&commitments, used_parties)
                 },
                 BatchSize::SmallInput,
             );

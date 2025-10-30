@@ -15,6 +15,8 @@ ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
+ark-serialize = { workspace = true }
+blake3 = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 itertools = { workspace = true }
 num-bigint.workspace = true

@@ -24,24 +24,31 @@ pub(crate) fn share<F: PrimeField, R: Rng>(
 }
 
 /// Compute the lagrange coeffs from given party indices
-pub fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
+pub fn lagrange_from_coeff<F: PrimeField + From<T>, T: Copy + Eq>(coeffs: &[T]) -> Vec<F> {
     let num = coeffs.len();
     let mut res = Vec::with_capacity(num);
     for i in coeffs.iter() {
-        let mut num = F::one();
-        let mut den = F::one();
-        let i_ = F::from(*i as u64);
-        for j in coeffs.iter() {
-            if i != j {
-                let j_ = F::from(*j as u64);
-                num *= j_;
-                den *= j_ - i_;
-            }
-        }
-        let res_ = num * den.inverse().unwrap();
-        res.push(res_);
+        res.push(single_lagrange_from_coeff(*i, coeffs));
     }
     res
+}
+
+/// Compute my lagrange coeff from given party indices
+pub fn single_lagrange_from_coeff<F: PrimeField + From<T>, T: Copy + Eq>(
+    my_id: T,
+    coeffs: &[T],
+) -> F {
+    let mut num = F::one();
+    let mut den = F::one();
+    let i_ = F::from(my_id);
+    for j in coeffs.iter() {
+        if my_id != *j {
+            let j_ = F::from(*j);
+            num *= j_;
+            den *= j_ - i_;
+        }
+    }
+    num * den.inverse().unwrap()
 }
 
 /// Evaluate the poly at the given x
@@ -83,8 +90,11 @@ pub(crate) fn reconstruct_random_shares<F: PrimeField, R: Rng>(
     rng: &mut R,
 ) -> F {
     let num_parties = shares.len();
-    let parties = (1..=num_parties).choose_multiple(rng, degree + 1);
-    let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
+    let parties = (1..=num_parties as u64).choose_multiple(rng, degree + 1);
+    let shares = parties
+        .iter()
+        .map(|&i| shares[i as usize - 1])
+        .collect::<Vec<_>>();
     let lagrange = lagrange_from_coeff(&parties);
     reconstruct(&shares, &lagrange)
 }
@@ -96,9 +106,12 @@ pub(crate) fn reconstruct_random_pointshares<C: CurveGroup, R: Rng>(
     rng: &mut R,
 ) -> C {
     let num_parties = shares.len();
-    let parties = (1..=num_parties).choose_multiple(rng, degree + 1);
+    let parties = (1..=num_parties as u64).choose_multiple(rng, degree + 1);
     // maybe sufficient to into_affine in the following map
-    let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
+    let shares = parties
+        .iter()
+        .map(|&i| shares[i as usize - 1])
+        .collect::<Vec<_>>();
     let shares = C::batch_convert_to_mul_base(&shares);
     let lagrange = lagrange_from_coeff(&parties);
     reconstruct_point(&shares, &lagrange)
