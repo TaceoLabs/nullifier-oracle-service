@@ -12,14 +12,6 @@
 //! the device ensures type-safe and consistent handling of cryptographic
 //! values.
 
-use std::time::Instant;
-
-use alloy::{
-    primitives::Address,
-    providers::{DynProvider, Provider as _},
-    rpc::types::Filter,
-    sol_types::SolEvent as _,
-};
 use ark_ec::{AffineRepr, CurveGroup as _};
 use ark_ff::{BigInteger as _, PrimeField as _};
 use k256::ecdsa::signature::Verifier;
@@ -45,7 +37,6 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     metrics::METRICS_RP_SECRETS,
-    rp_registry::RpRegistry,
     services::{
         crypto_device::dlog_storage::RpMaterialStore, secret_manager::SecretManagerService,
     },
@@ -121,9 +112,11 @@ pub(crate) struct CryptoDevice {
     /// Private key. *Do not return outside the device.*
     private_key: PeerPrivateKey,
     /// Secret shares and associated public keys of RPs. *Do not return outside the device.*
-    rp_materials: RpMaterialStore,
+    shares: RpMaterialStore,
     /// All public keys of the OPRF-peers (incl own key).
     public_key_list: PeerPublicKeyList,
+    /// Service to persist secret material.
+    secret_manager: SecretManagerService,
 }
 
 type CryptoDeviceResult<T> = std::result::Result<T, CryptoDeviceError>;
@@ -158,84 +151,18 @@ impl CryptoDevice {
         public_key_list: PeerPublicKeyList,
     ) -> eyre::Result<Self> {
         tracing::info!("invoking secret manager to load secrets..");
-        let private_key = secret_manager
+        let (private_key, shares) = secret_manager
             .load_secrets()
             .await
             .context("while loading secrets from AWS")?;
+        metrics::counter!(METRICS_RP_SECRETS).increment(shares.len() as u64);
 
         Ok(Self {
             private_key,
-            rp_materials: RpMaterialStore::default(),
+            shares: RpMaterialStore::new(shares),
             public_key_list,
+            secret_manager,
         })
-    }
-
-    /// Load the RP materials from the contract.
-    ///
-    /// This function retrieves the cryptographic materials associated with RPs
-    /// by reading events from the blockchain contract.
-    /// It fetches the [`SecretGenFinalize`](RpRegistry::SecretGenFinalize) events
-    /// within the specified block range and processes them to load the RP materials.
-    #[instrument(level = "info", skip_all)]
-    pub(crate) async fn load_rp_materials(
-        &self,
-        rp_registry_address: Address,
-        rp_registry_provider: DynProvider,
-        from_block: u64,
-        to_block: u64,
-    ) -> eyre::Result<()> {
-        tracing::info!(
-            "start reading key-gen finalize events starting from block {from_block} to {to_block}"
-        );
-        let contract = RpRegistry::new(rp_registry_address, rp_registry_provider.clone());
-        let filter = Filter::new()
-            .address(rp_registry_address)
-            .from_block(from_block)
-            .to_block(to_block)
-            .event_signature(RpRegistry::SecretGenFinalize::SIGNATURE_HASH);
-
-        let start = Instant::now();
-        // could load in chunks, but should not be needed unless we have many tens of thousands RPs
-        let logs = rp_registry_provider.get_logs(&filter).await?;
-        for log in logs {
-            match RpRegistry::SecretGenFinalize::decode_log(log.as_ref()) {
-                Ok(event) => {
-                    let RpRegistry::SecretGenFinalize { rpId } = event.data;
-                    tracing::debug!("got finalize event for rp_id {rpId}");
-                    let rp_material = contract.getRpMaterial(rpId).call().await?;
-                    let ciphers = contract
-                        .checkIsParticipantAndReturnRound2Ciphers(rpId)
-                        .call()
-                        .await?;
-                    let ciphers = ciphers
-                        .into_iter()
-                        .map(|c| c.try_into())
-                        .collect::<eyre::Result<Vec<_>>>()?;
-                    let share = self
-                        .decrypt_key_gen_ciphertexts(ciphers)
-                        .context("while computing DLogShare")?;
-                    self.rp_materials.add(
-                        rpId.into(),
-                        k256::PublicKey::try_from(rp_material.ecdsaKey)?.into(),
-                        RpNullifierKey::new(rp_material.nullifierKey.try_into()?),
-                        share,
-                    );
-                    tracing::debug!("added rp_material for rp_id {rpId}");
-                }
-                Err(err) => {
-                    tracing::warn!("failed to decode contract event: {err:?}");
-                }
-            }
-        }
-
-        let num_rp_materials = self.rp_materials.len();
-        metrics::counter!(METRICS_RP_SECRETS).absolute(num_rp_materials as u64);
-        tracing::debug!(
-            "loaded {num_rp_materials} rp materials in {:?}",
-            start.elapsed()
-        );
-
-        Ok(())
     }
 
     /// Verifies an ECDSA signature over a nonce and current_time_stamp for the given relying party.
@@ -257,7 +184,7 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<()> {
         tracing::debug!("verifying nonce: {nonce}");
         let vk = self
-            .rp_materials
+            .shares
             .get_rp_public_key(rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(rp_id))?;
         let mut msg = Vec::new();
@@ -282,7 +209,7 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
         tracing::debug!("computing partial commitment");
         let share = self
-            .rp_materials
+            .shares
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
         Ok(DLogEqualitySession::partial_commitments(
@@ -308,11 +235,11 @@ impl CryptoDevice {
     ) -> CryptoDeviceResult<DLogEqualityProofShare> {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
-            .rp_materials
+            .shares
             .get_rp_nullifier_key(share_identifier.rp_id)
             .ok_or_else(|| CryptoDeviceError::NoSuchRp(share_identifier.rp_id))?;
         let share = self
-            .rp_materials
+            .shares
             .get(share_identifier)
             .ok_or_else(|| CryptoDeviceError::UnknownRpShareEpoch(share_identifier.to_owned()))?;
         let lagrange_coefficient = shamir::single_lagrange_from_coeff(
@@ -331,16 +258,21 @@ impl CryptoDevice {
     /// Registers a new nullifier share for the given relying-party.
     ///
     /// Persists the share using the [`SecretManagerService`].
-    pub(crate) fn register_nullifier_share(
+    pub(crate) async fn register_nullifier_share(
         &self,
         rp_id: RpId,
         rp_public_key: k256::ecdsa::VerifyingKey,
         rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
-    ) {
-        self.rp_materials
+    ) -> eyre::Result<()> {
+        self.shares
             .add(rp_id, rp_public_key, rp_nullifier_key, share.clone());
+        let result = self
+            .secret_manager
+            .store_dlog_share(rp_id, rp_public_key.into(), rp_nullifier_key, share)
+            .await;
         metrics::counter!(METRICS_RP_SECRETS).increment(1);
+        result
     }
 
     /// Decrypts a key-generation ciphertext using the private key.
@@ -388,29 +320,5 @@ impl CryptoDevice {
 
     pub(crate) fn peer_public_key(&self) -> PeerPublicKey {
         self.private_key.get_public_key()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    use oprf_types::{RpId, ShareEpoch, api::v1::NullifierShareIdentifier};
-
-    use crate::services::crypto_device::{CryptoDevice, RpMaterialStore, dlog_storage::RpMaterial};
-
-    impl CryptoDevice {
-        pub fn rp_dlog_share(
-            &self,
-            rp_id: RpId,
-            share_epoch: ShareEpoch,
-        ) -> Option<ark_babyjubjub::Fr> {
-            self.rp_materials
-                .get(&NullifierShareIdentifier { rp_id, share_epoch })
-        }
-
-        pub fn set_rp_materials(&mut self, rp_materials: HashMap<RpId, RpMaterial>) {
-            self.rp_materials = RpMaterialStore::new(rp_materials);
-        }
     }
 }
