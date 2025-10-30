@@ -39,7 +39,6 @@ use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 
 use ark_ec::AffineRepr;
 use oprf_core::ddlog_equality::DLogEqualityCommitments;
-use oprf_core::shamir;
 use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
@@ -163,7 +162,6 @@ impl OprfSessions {
 /// DLogEquality challenge for a query:
 /// - `request_id`: Unique identifier for this query/request.
 /// - `challenge_request`: The challenge request that will be sent to OPRF peers.
-/// - `lagrange`: Lagrange coefficients used to combine shares.
 /// - `blinded_request`: The original blinded OPRF request from the user.
 ///   generating the OPRFNullifier proof.
 /// - `blinded_response`: The combined blinded response after aggregating
@@ -174,7 +172,6 @@ impl OprfSessions {
 pub struct Challenge {
     request_id: Uuid,
     challenge_request: ChallengeRequest,
-    lagrange: Vec<ark_babyjubjub::Fr>,
     blinded_request: BlindedOPrfRequest,
     blinded_response: ark_babyjubjub::EdwardsAffine,
     query_input: QueryProofInput<TREE_DEPTH>,
@@ -440,22 +437,21 @@ pub fn compute_challenges(
     sessions: &OprfSessions,
     rp_nullifier_key: RpNullifierKey,
 ) -> Result<Challenge> {
-    let coeffs = sessions
+    let contributing_parties = sessions
         .party_ids
         .iter()
-        .map(|id| usize::from(id.into_inner() + 1))
+        .map(|id| id.into_inner() + 1)
         .collect::<Vec<_>>();
-    // Compute Lagrange coefficients for Shamir reconstruction
-    let lagrange = shamir::lagrange_from_coeff(&coeffs);
     // Combine commitments from all sessions and create a single challenge
-    let challenge =
-        DLogEqualityCommitments::combine_commitments_shamir(&sessions.commitments, &lagrange);
+    let challenge = DLogEqualityCommitments::combine_commitments_shamir(
+        &sessions.commitments,
+        contributing_parties,
+    );
     let blinded_response = challenge.blinded_response();
     Ok(Challenge {
         query_input: query.query_input,
         query_hash: query.query_hash,
         request_id: query.request_id,
-        lagrange,
         blinded_request: query.blinded_request,
         blinded_response,
         rp_nullifier_key,
@@ -519,15 +515,18 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         .into_iter()
         .map(|res| res.proof_share)
         .collect::<Vec<_>>();
-    let dlog_proof = challenges
+    let party_ids = challenges
         .challenge_request
         .challenge
-        .combine_proofs_shamir(
-            &proofs,
-            &challenges.lagrange,
-            challenges.rp_nullifier_key.inner(),
-            challenges.blinded_request.blinded_query(),
-        );
+        .get_contributing_parties()
+        .to_vec();
+    let dlog_proof = challenges.challenge_request.challenge.combine_proofs(
+        challenges.request_id,
+        &party_ids,
+        &proofs,
+        challenges.rp_nullifier_key.inner(),
+        challenges.blinded_request.blinded_query(),
+    );
     if !dlog_proof.verify(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),
