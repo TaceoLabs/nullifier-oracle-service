@@ -17,21 +17,15 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin oprf-service
 
-
-
-FROM debian:bookworm-slim AS runtime
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 ARG GIT_HASH
 LABEL org.opencontainers.image.revision=$GIT_HASH
 LABEL org.opencontainers.image.vendor=TACEO
 LABEL org.opencontainers.image.source=https://github.com/TaceoLabs/nullifier-oracle-service
 LABEL org.opencontainers.image.description="REST API service that answers OPRF requests"
-RUN apt-get update && apt-get install -y ca-certificates curl libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 COPY --from=builder /app/circom/query.vk.json /app/query.vk.json
 COPY ./circom/keygen_13.zkey /app/keygen_13.zkey
 COPY ./circom/keygen_graph.bin /app/keygen_graph.bin
-RUN chown -R 12345:12345 /app
-RUN chmod -R 700 /app
-USER 12345
 ENTRYPOINT [ "/app/oprf-service" ]
