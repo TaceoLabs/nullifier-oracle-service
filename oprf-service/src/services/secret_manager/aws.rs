@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
 use eyre::Context;
 use oprf_types::crypto::RpNullifierKey;
 use oprf_types::{RpId, ShareEpoch};
@@ -16,7 +17,7 @@ use crate::services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager};
 pub(crate) struct AwsSecretManager {
     client: aws_sdk_secretsmanager::Client,
     private_key_secret_id: String,
-    rp_secret_id_suffix: String,
+    rp_secret_id_prefix: String,
 }
 
 impl AwsSecretManager {
@@ -24,7 +25,7 @@ impl AwsSecretManager {
     ///
     /// Loads AWS configuration from the environment and wraps the client
     /// in a `SecretManagerService`.
-    pub(crate) async fn init(private_key_secret_id: String, rp_secret_id_suffix: String) -> Self {
+    pub(crate) async fn init(private_key_secret_id: String, rp_secret_id_prefix: String) -> Self {
         // loads the latest defaults for aws
         tracing::info!("initializing AWS secret manager from env...");
         let aws_config = aws_config::load_from_env().await;
@@ -32,7 +33,7 @@ impl AwsSecretManager {
         AwsSecretManager {
             client,
             private_key_secret_id,
-            rp_secret_id_suffix,
+            rp_secret_id_prefix,
         }
     }
 }
@@ -115,29 +116,52 @@ impl SecretManager for AwsSecretManager {
         let private_key = PeerPrivateKey::from(private_key);
 
         tracing::debug!(
-            "loading rp secrets with suffix: {}",
-            self.rp_secret_id_suffix
+            "loading rp secrets with prefix: {}",
+            self.rp_secret_id_prefix
         );
         let mut rp_materials = HashMap::new();
-        let secrets = self.client.list_secrets().send().await?;
-        for secret in secrets.secret_list() {
-            if let Some(name) = secret.name() {
-                if name.starts_with(&self.rp_secret_id_suffix) {
-                    let secret_value = self
-                        .client
-                        .get_secret_value()
-                        .secret_id(name)
-                        .send()
-                        .await
-                        .context("while retrieving secret key")?
-                        .secret_string()
-                        .expect("is string and not binary")
-                        .to_owned();
-                    let rp_secret: AwsRpSecret = serde_json::from_str(&secret_value)
-                        .context("Cannot deserialize AWS Secret")?;
-                    tracing::debug!("loaded secret for rp_id: {}", rp_secret.rp_id);
-                    rp_materials.insert(rp_secret.rp_id, rp_secret.into());
+        let mut next_token = None;
+        loop {
+            let secrets = self
+                .client
+                .list_secrets()
+                .set_next_token(next_token)
+                .filters(
+                    Filter::builder()
+                        .key(FilterNameStringType::Name)
+                        .values(&self.rp_secret_id_prefix)
+                        .build(),
+                )
+                .send()
+                .await?;
+            tracing::debug!("got {} secrets", secrets.secret_list().len());
+            for secret in secrets.secret_list() {
+                if let Some(name) = secret.name() {
+                    // The filter is a substring match, so double-check the prefix
+                    if name.starts_with(&self.rp_secret_id_prefix) {
+                        let secret_value = self
+                            .client
+                            .get_secret_value()
+                            .secret_id(name)
+                            .send()
+                            .await
+                            .context("while retrieving secret key")?
+                            .secret_string()
+                            .expect("is string and not binary")
+                            .to_owned();
+                        let rp_secret: AwsRpSecret = serde_json::from_str(&secret_value)
+                            .context("Cannot deserialize AWS Secret")?;
+                        tracing::debug!("loaded secret for rp_id: {}", rp_secret.rp_id);
+                        rp_materials.insert(rp_secret.rp_id, rp_secret.into());
+                    }
                 }
+            }
+
+            // if a next_token was returned, there are more secrets to load
+            // in that case we include it in the next request and continue
+            next_token = secrets.next_token;
+            if next_token.is_none() {
+                break;
             }
         }
         Ok((private_key, rp_materials))
@@ -151,7 +175,7 @@ impl SecretManager for AwsSecretManager {
         rp_nullifier_key: RpNullifierKey,
         share: DLogShare,
     ) -> eyre::Result<()> {
-        let secret_id = to_rp_secret_id(&self.rp_secret_id_suffix, rp_id);
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
         let secret = AwsRpSecret::new(rp_id, public_key, rp_nullifier_key, share);
         self.client
             .create_secret()
@@ -172,7 +196,7 @@ impl SecretManager for AwsSecretManager {
         share: DLogShare,
     ) -> eyre::Result<()> {
         // Load old secret to preserve previous epoch
-        let secret_id = to_rp_secret_id(&self.rp_secret_id_suffix, rp_id);
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
         tracing::info!("loading old secret first at {secret_id}");
         let secret_value = self
             .client
@@ -211,6 +235,6 @@ impl SecretManager for AwsSecretManager {
 }
 
 #[inline(always)]
-fn to_rp_secret_id(rp_secret_id_suffix: &str, rp: RpId) -> String {
-    format!("{}/{}", rp_secret_id_suffix, rp.into_inner())
+fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
+    format!("{}/{}", rp_secret_id_prefix, rp.into_inner())
 }

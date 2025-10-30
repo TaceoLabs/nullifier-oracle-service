@@ -50,7 +50,7 @@ async fn start_service(
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/query.vk.json"),
         private_key_secret_id: format!("oprf/sk/n{id}"),
-        rp_secret_id_suffix: format!("oprf/rp/n{id}"),
+        rp_secret_id_prefix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),

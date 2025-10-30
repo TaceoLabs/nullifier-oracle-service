@@ -130,7 +130,13 @@ async fn subscribe_task(
 ) -> eyre::Result<()> {
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(BlockNumberOrTag::Latest);
+        .from_block(BlockNumberOrTag::Latest)
+        .event_signature(vec![
+            RpRegistry::SecretGenRound1::SIGNATURE_HASH,
+            RpRegistry::SecretGenRound2::SIGNATURE_HASH,
+            RpRegistry::SecretGenRound3::SIGNATURE_HASH,
+            RpRegistry::SecretGenFinalize::SIGNATURE_HASH,
+        ]);
     let contract = RpRegistry::new(contract_address, provider.clone());
     // Subscribe to event logs
     let sub = provider.subscribe_logs(&filter).await?;

@@ -10,7 +10,7 @@ use crate::services::crypto_device::PeerPrivateKey;
 use crate::services::crypto_device::dlog_storage::RpMaterial;
 use crate::services::secret_manager::{DLogShare, SecretManager};
 
-/// Type alias for secret manager client for ergonomics
+/// Test secret manager
 pub(crate) struct TestSecretManager {
     private_key: PeerPrivateKey,
     pub(crate) rp_materials: Mutex<HashMap<RpId, RpMaterial>>,
