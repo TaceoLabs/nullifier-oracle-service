@@ -17,6 +17,11 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin oprf-service
 
+# Build healthcheck
+FROM rust:1.90-bookworm AS healthcheck-builder
+RUN cargo install simple-web-healthcheck
+
+
 FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 ARG GIT_HASH
 LABEL org.opencontainers.image.revision=$GIT_HASH
@@ -28,4 +33,8 @@ COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 COPY --from=builder /app/circom/query.vk.json /app/query.vk.json
 COPY ./circom/keygen_13.zkey /app/keygen_13.zkey
 COPY ./circom/keygen_graph.bin /app/keygen_graph.bin
+
+# copy healthcheck 
+COPY --from=healthcheck-builder /usr/local/cargo/bin/simple-web-healthcheck /healthcheck
+
 ENTRYPOINT [ "/app/oprf-service" ]
