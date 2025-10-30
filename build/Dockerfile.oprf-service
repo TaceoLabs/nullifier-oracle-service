@@ -32,11 +32,10 @@ WORKDIR /app
 # copy healthcheck 
 COPY --from=healthcheck-builder /usr/local/cargo/bin/simple-web-healthcheck /healthcheck
 
+# copy needed files and binary for oprf-service
 COPY --from=builder /app/circom/query.vk.json /app/query.vk.json
 COPY ./circom/keygen_13.zkey /app/keygen_13.zkey
 COPY ./circom/keygen_graph.bin /app/keygen_graph.bin
-
-# copy oprf-service from builde# copy oprf-service from builder
 COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 
 ENTRYPOINT [ "/app/oprf-service" ]
