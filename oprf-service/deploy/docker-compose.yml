@@ -2,13 +2,11 @@ services:
   postgres:
     container_name: "postgres"
     image: postgres
-    restart: always
+    network_mode: host
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
   localstack:
     image: localstack/localstack
     container_name: localstack
@@ -17,5 +15,14 @@ services:
     environment:
       - SERVICES=secretsmanager
       - DEBUG=1
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock" 
+  world-id-indexer:
+    image: ghcr.io/worldcoin/world-id-protocol/world-id-indexer:latest
+    container_name: world-id-indexer
+    network_mode: host
+    depends_on:
+      - "postgres"
+    environment:
+       RPC_URL: http://127.0.0.1:8545
+       WS_URL: ws://127.0.0.1:8545
+       REGISTRY_ADDRESS: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

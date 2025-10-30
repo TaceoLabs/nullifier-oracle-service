@@ -137,7 +137,7 @@ pub struct OprfPeerConfig {
         env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
         default_value = "ws://127.0.0.1:8545"
     )]
-    pub chain_ws_rpc_url: String,
+    pub chain_ws_rpc_url: SecretString,
 
     /// The name/ARN of the service's private-key.
     #[clap(

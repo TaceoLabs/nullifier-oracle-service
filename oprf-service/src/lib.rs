@@ -107,7 +107,7 @@ pub async fn start(
 
     tracing::info!("init RpRegistry..");
     let rp_registry = RpRegistryProxy::init(
-        &config.chain_ws_rpc_url,
+        config.chain_ws_rpc_url.expose_secret(),
         config.rp_registry_contract,
         wallet.clone(),
     )
@@ -158,7 +158,7 @@ pub async fn start(
     let merkle_watcher: MerkleWatcherService = Arc::new(
         AlloyMerkleWatcher::init(
             config.account_registry_contract,
-            &config.chain_ws_rpc_url,
+            config.chain_ws_rpc_url.expose_secret(),
             config.max_merkle_store_size,
         )
         .await

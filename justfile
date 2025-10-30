@@ -4,8 +4,8 @@ default:
 
 
 [group: 'build']
-dev-up:
-    cd oprf-service/deploy && docker-compose up -d
+dev-up *args:
+    cd oprf-service/deploy && docker-compose up -d {{args}}
 
 [group: 'build']
 dev-down:
@@ -53,16 +53,6 @@ run-account-registry:
     cd contracts && forge script script/test/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [private]
-run-auth-tree-indexer *args:
-    #!/usr/bin/env bash
-    cargo build --workspace --release
-    RUST_LOG="debug" ./target/release/auth-tree-indexer {{args}} > logs/auth_tree_indexer.log 2>&1 &
-    auth_tree_indexer=$!
-    echo "started AuthTreeIndexer service with PID $auth_tree_indexer"
-    trap "kill $auth_tree_indexer" SIGINT SIGTERM
-    wait $auth_tree_indexer
-
-[private]
 run-rp-registry:
     cargo build --workspace --release
     ./target/release/test-setup-helper --overwrite-old-keys --chain-ws-rpc-url ws://127.0.0.1:8545
@@ -91,7 +81,10 @@ run-services:
 run-setup:
     #!/usr/bin/env bash
     mkdir -p logs
-    anvil &
+    echo "starting localstack"
+    just dev-up localstack
+    echo "starting anvil..."
+    anvil > logs/anvil.log 2>&1 &
     anvil_pid=$!
     echo "started anvil with PID $anvil_pid"
     sleep 1
@@ -101,15 +94,16 @@ run-setup:
     just run-rp-registry | tee logs/rp_registry.log
     address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
     echo $address
-    echo "starting AuthTreeIndexer service..."
-    just run-auth-tree-indexer &
-    sleep 2
+    echo "starting indexer..."
+    just dev-up postgres world-id-indexer
     echo "starting OPRF services..."
     OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services &
-    sleep 2
+    sleep 1
     echo "ready to run dev-client"
     trap "kill $anvil_pid" SIGINT SIGTERM
     wait $anvil_pid
+    echo "stoping containers..."
+    just dev-down
 
 [group: 'local-setup']
 run-rp-registry-and-services account_registry:
@@ -119,7 +113,7 @@ run-rp-registry-and-services account_registry:
     just run-rp-registry | tee logs/rp_registry.log
     address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
     echo $address
-    sleep 2
+    sleep 1
     echo "starting OPRF services..."
     OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{account_registry}} OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services
 
