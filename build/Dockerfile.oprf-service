@@ -29,12 +29,14 @@ LABEL org.opencontainers.image.vendor=TACEO
 LABEL org.opencontainers.image.source=https://github.com/TaceoLabs/nullifier-oracle-service
 LABEL org.opencontainers.image.description="REST API service that answers OPRF requests"
 WORKDIR /app
-COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 COPY --from=builder /app/circom/query.vk.json /app/query.vk.json
 COPY ./circom/keygen_13.zkey /app/keygen_13.zkey
 COPY ./circom/keygen_graph.bin /app/keygen_graph.bin
 
 # copy healthcheck 
 COPY --from=healthcheck-builder /usr/local/cargo/bin/simple-web-healthcheck /healthcheck
+
+# copy oprf-service from builde# copy oprf-service from builder
+COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 
 ENTRYPOINT [ "/app/oprf-service" ]
