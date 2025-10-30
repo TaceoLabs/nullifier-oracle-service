@@ -14,7 +14,7 @@ use crate::services::crypto_device::DLogShare;
 
 /// Thread-safe storage of all cryptographic material for each relying party:
 /// discrete-log shares **and** the ECDSA public key of the RP.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(super) struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 
 /// Holds all cryptographic material for a single relying party (RP).
@@ -65,14 +65,8 @@ impl RpMaterial {
 
 impl RpMaterialStore {
     /// Creates a new storage instance with the provided initial shares.
-    #[allow(dead_code)]
     pub(super) fn new(inner: HashMap<RpId, RpMaterial>) -> Self {
         Self(Arc::new(RwLock::new(inner)))
-    }
-
-    /// Returns the number of [`RpMaterial`]s stored.
-    pub(super) fn len(&self) -> usize {
-        self.0.read().len()
     }
 
     /// Retrieves the secret share for the given [`NullifierShareIdentifier`].

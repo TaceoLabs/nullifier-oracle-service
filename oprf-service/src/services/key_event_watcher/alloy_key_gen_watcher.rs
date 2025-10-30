@@ -1,4 +1,5 @@
 use alloy::{
+    eips::BlockNumberOrTag,
     primitives::{Address, TxHash},
     providers::{DynProvider, PendingTransaction, Provider as _},
     rpc::types::{Filter, TransactionReceipt},
@@ -24,15 +25,13 @@ use crate::{rp_registry::RpRegistry, services::key_event_watcher::KeyGenEventLis
 pub(crate) struct AlloyKeyGenWatcher {
     contract_address: Address,
     provider: DynProvider,
-    from_block: u64,
 }
 
 impl AlloyKeyGenWatcher {
-    pub(crate) fn new(contract_address: Address, provider: DynProvider, from_block: u64) -> Self {
+    pub(crate) fn new(contract_address: Address, provider: DynProvider) -> Self {
         Self {
             contract_address,
             provider,
-            from_block,
         }
     }
 }
@@ -44,9 +43,8 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         let (tx, rx) = mpsc::channel(8);
         let provider = self.provider.clone();
         let address = self.contract_address;
-        let from_block = self.from_block;
         tokio::spawn(async move {
-            match subscribe_task(provider, address, from_block, tx).await {
+            match subscribe_task(provider, address, tx).await {
                 Ok(_) => tracing::info!("subscribe task shutdown"),
                 Err(err) => tracing::error!("subscribe task encountered an error: {err}"),
             }
@@ -128,19 +126,11 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
 async fn subscribe_task(
     provider: DynProvider,
     contract_address: Address,
-    from_block: u64,
     tx: mpsc::Sender<ChainEvent>,
 ) -> eyre::Result<()> {
-    tracing::info!("start reading key gen events starting from block {from_block}");
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(from_block)
-        .event_signature(vec![
-            RpRegistry::SecretGenRound1::SIGNATURE_HASH,
-            RpRegistry::SecretGenRound2::SIGNATURE_HASH,
-            RpRegistry::SecretGenRound3::SIGNATURE_HASH,
-            RpRegistry::SecretGenFinalize::SIGNATURE_HASH,
-        ]);
+        .from_block(BlockNumberOrTag::Latest);
     let contract = RpRegistry::new(contract_address, provider.clone());
     // Subscribe to event logs
     let sub = provider.subscribe_logs(&filter).await?;
