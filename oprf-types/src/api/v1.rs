@@ -83,8 +83,8 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)
-            .field("A", &self.blinded_query.to_string())
-            .field("proof", &"omitted")
+            .field("blinded_query", &self.blinded_query.to_string())
+            .field("rp_identifier", &self.rp_identifier)
             .finish()
     }
 }
