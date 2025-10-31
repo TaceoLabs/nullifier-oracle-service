@@ -33,10 +33,9 @@ pub enum Environment {
 impl Environment {
     /// Asserts that `Environment` is `dev`. Panics if not the case.
     pub fn assert_is_dev(&self) {
-        assert!(matches!(self, Environment::Dev), "Is not dev environment")
+        assert!(matches!(self, Environment::Dev), "Is not devv environment")
     }
 }
-
 
 /// The configuration for the OPRF peer.
 ///
