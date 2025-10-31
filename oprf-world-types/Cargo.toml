@@ -17,6 +17,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-serde-compat = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

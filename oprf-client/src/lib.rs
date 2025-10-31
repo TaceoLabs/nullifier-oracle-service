@@ -409,18 +409,18 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         oprf_request: OprfRequest {
             request_id,
             proof,
-            point_b: blinded_request.blinded_query(),
+            blinded_query: blinded_request.blinded_query(),
             rp_identifier: NullifierShareIdentifier {
                 rp_id: query.rp_id,
                 share_epoch: query.share_epoch,
             },
             action: query.action,
             nonce: query.nonce,
-            current_time_stamp: query.current_time_stamp,
-            signature: query.nonce_signature,
             auth: OprfRequestAuth {
                 merkle_root: merkle_membership.root,
                 cred_pk: credentials_signature.issuer,
+                current_time_stamp: query.current_time_stamp,
+                signature: query.nonce_signature,
             },
         },
         blinded_request,

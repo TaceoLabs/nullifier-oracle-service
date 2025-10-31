@@ -20,4 +20,8 @@ pub struct OprfRequestAuth {
     pub merkle_root: MerkleRoot,
     /// The credential public key
     pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
+    /// The current time stamp (unix secs)
+    pub current_time_stamp: u64,
+    /// The signature of the nonce || timestamp
+    pub signature: k256::ecdsa::Signature,
 }

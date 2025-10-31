@@ -4724,6 +4724,7 @@ dependencies = [
  "alloy",
  "ark-ec 0.5.0",
  "ark-ff 0.5.0",
+ "k256",
  "oprf-core",
  "serde",
  "taceo-ark-babyjubjub",

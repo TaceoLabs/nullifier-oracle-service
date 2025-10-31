@@ -32,7 +32,7 @@ where
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
-    pub point_b: ark_babyjubjub::EdwardsAffine,
+    pub blinded_query: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
     /// The action
@@ -43,10 +43,6 @@ where
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     pub nonce: ark_babyjubjub::Fq,
-    /// The current time stamp (unix secs)
-    pub current_time_stamp: u64,
-    /// The signature of the nonce || timestamp
-    pub signature: k256::ecdsa::Signature,
     /// The additional authentication info for this request
     pub auth: OprfRequestAuth,
 }
@@ -98,7 +94,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)
-            .field("A", &self.point_b.to_string())
+            .field("A", &self.blinded_query.to_string())
             .field("proof", &"omitted")
             .finish()
     }

@@ -123,7 +123,7 @@ impl OprfService {
         let rp_id = request.rp_identifier.rp_id;
 
         // check the time stamp against system time +/- difference
-        let req_time_stamp = Duration::from_secs(request.current_time_stamp);
+        let req_time_stamp = Duration::from_secs(request.auth.current_time_stamp);
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("system time is after unix epoch");
@@ -136,13 +136,13 @@ impl OprfService {
         self.crypto_device.verify_nonce_signature(
             rp_id,
             request.nonce,
-            request.current_time_stamp,
-            &request.signature,
+            request.auth.current_time_stamp,
+            &request.auth.signature,
         )?;
 
         // add signature to history to check if the nonces where only used once
         self.signature_history
-            .add_signature(request.signature.to_vec(), req_time_stamp)?;
+            .add_signature(request.auth.signature.to_vec(), req_time_stamp)?;
 
         // check if the merkle root is valid
         let valid = self
@@ -155,11 +155,11 @@ impl OprfService {
 
         // verify the user proof
         let public = [
-            request.point_b.x,
-            request.point_b.y,
+            request.blinded_query.x,
+            request.blinded_query.y,
             request.auth.cred_pk.pk.x,
             request.auth.cred_pk.pk.y,
-            request.current_time_stamp.into(),
+            request.auth.current_time_stamp.into(),
             request.auth.merkle_root.into_inner(),
             ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
             request.rp_identifier.rp_id.into(),
@@ -171,7 +171,7 @@ impl OprfService {
         // Partial commit through the crypto device
         let (session, comm) = self
             .crypto_device
-            .partial_commit(request.point_b, &request.rp_identifier)?;
+            .partial_commit(request.blinded_query, &request.rp_identifier)?;
 
         // Store the randomness for finalize request
         self.session_store.insert(request.request_id, session);

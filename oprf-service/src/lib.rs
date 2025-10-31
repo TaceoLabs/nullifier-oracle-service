@@ -526,7 +526,7 @@ mod tests {
     async fn test_init_bad_signature() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.signature = k256::ecdsa::Signature::from_slice(&[42u8; 64])?;
+        req.auth.signature = k256::ecdsa::Signature::from_slice(&[42u8; 64])?;
         let res = setup
             .server
             .post("/api/v1/init")
@@ -600,7 +600,7 @@ mod tests {
     async fn test_init_bad_time_stamp() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.current_time_stamp = 42;
+        req.auth.current_time_stamp = 42;
         let res = setup
             .server
             .post("/api/v1/init")
