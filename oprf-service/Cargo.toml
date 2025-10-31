@@ -40,6 +40,7 @@ metrics = { workspace = true }
 nodes-telemetry = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
+oprf-world-types = { workspace = true }
 oprf-zk = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true

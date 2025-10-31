@@ -14,13 +14,12 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
-use oprf_client::{
-    MerkleMembership, NullifierArgs, OprfQuery, SignedOprfQuery, UserKeyMaterial, groth16::Groth16,
-};
+use oprf_client::{NullifierArgs, OprfQuery, SignedOprfQuery, groth16::Groth16};
 use oprf_service::rp_registry::{RpRegistryProxy, Types};
 use oprf_test::world_id_protocol_mock::InclusionProofResponse;
 use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
+use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
     QUERY_GRAPH_BYTES,
@@ -221,7 +220,7 @@ fn prepare_nullifier_stress_test_oprf_request(
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
     query_material: &Groth16Material,
-) -> eyre::Result<(SignedOprfQuery, OprfRequest)> {
+) -> eyre::Result<(SignedOprfQuery, OprfRequest<OprfRequestAuth>)> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
     let nonce = ark_babyjubjub::Fq::rand(&mut rand::thread_rng());

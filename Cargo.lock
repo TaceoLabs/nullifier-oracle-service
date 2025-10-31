@@ -4541,19 +4541,18 @@ name = "oprf-client"
 version = "0.1.0"
 dependencies = [
  "ark-ec 0.5.0",
- "circom-types",
  "eyre",
  "futures",
  "groth16",
  "k256",
  "oprf-core",
  "oprf-types",
+ "oprf-world-types",
  "oprf-zk",
  "rand 0.8.5",
  "reqwest",
  "serde_json",
  "taceo-ark-babyjubjub",
- "taceo-eddsa-babyjubjub",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -4599,8 +4598,8 @@ dependencies = [
  "oprf-service",
  "oprf-test",
  "oprf-types",
+ "oprf-world-types",
  "oprf-zk",
- "parking_lot",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
@@ -4641,6 +4640,7 @@ dependencies = [
  "oprf-core",
  "oprf-test",
  "oprf-types",
+ "oprf-world-types",
  "oprf-zk",
  "parking_lot",
  "rand 0.8.5",
@@ -4686,6 +4686,7 @@ dependencies = [
  "oprf-core",
  "oprf-service",
  "oprf-types",
+ "oprf-world-types",
  "oprf-zk",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4707,11 +4708,23 @@ dependencies = [
 name = "oprf-types"
 version = "0.1.0"
 dependencies = [
- "alloy",
- "ark-ff 0.5.0",
  "k256",
  "oprf-core",
  "oprf-zk",
+ "serde",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat",
+ "uuid",
+]
+
+[[package]]
+name = "oprf-world-types"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "ark-ec 0.5.0",
+ "ark-ff 0.5.0",
+ "oprf-core",
  "serde",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat",
@@ -4724,7 +4737,6 @@ name = "oprf-zk"
 version = "0.1.0"
 dependencies = [
  "ark-bn254 0.5.0",
- "ark-ec 0.5.0",
  "ark-ff 0.5.0",
  "ark-groth16 0.5.0",
  "circom-types",
@@ -4732,7 +4744,6 @@ dependencies = [
  "groth16",
  "hex",
  "k256",
- "oprf-core",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -4741,7 +4752,6 @@ dependencies = [
  "taceo-ark-serde-compat",
  "thiserror 2.0.17",
  "tracing",
- "uuid",
  "witness",
 ]
 

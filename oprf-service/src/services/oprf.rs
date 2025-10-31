@@ -25,7 +25,8 @@ use ark_groth16::Groth16;
 use eyre::Context;
 use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
 use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
-use oprf_types::{TREE_DEPTH, crypto::PartyId};
+use oprf_types::crypto::PartyId;
+use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
 use oprf_zk::groth16_serde::Groth16Proof;
 use tracing::instrument;
 use uuid::Uuid;
@@ -116,7 +117,7 @@ impl OprfService {
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) async fn init_oprf_session(
         &self,
-        request: OprfRequest,
+        request: OprfRequest<OprfRequestAuth>,
     ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
         let rp_id = request.rp_identifier.rp_id;
@@ -146,7 +147,7 @@ impl OprfService {
         // check if the merkle root is valid
         let valid = self
             .merkle_watcher
-            .is_root_valid(request.merkle_root)
+            .is_root_valid(request.auth.merkle_root)
             .await?;
         if !valid {
             return Err(OprfServiceError::InvalidMerkleRoot)?;
@@ -156,10 +157,10 @@ impl OprfService {
         let public = [
             request.point_b.x,
             request.point_b.y,
-            request.cred_pk.pk.x,
-            request.cred_pk.pk.y,
+            request.auth.cred_pk.pk.x,
+            request.auth.cred_pk.pk.y,
             request.current_time_stamp.into(),
-            request.merkle_root.into_inner(),
+            request.auth.merkle_root.into_inner(),
             ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
             request.rp_identifier.rp_id.into(),
             request.action,

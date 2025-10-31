@@ -14,9 +14,9 @@ use alloy::{
 };
 use ark_ff::{AdditiveGroup as _, BigInt, PrimeField as _};
 use ark_serialize::CanonicalSerialize as _;
+use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey};
 use futures::StreamExt as _;
-use oprf_client::{EdDSAPrivateKey, EdDSAPublicKey, MerkleMembership, UserKeyMaterial};
-use oprf_types::{TREE_DEPTH, crypto::UserPublicKeyBatch};
+use oprf_world_types::{MerkleMembership, TREE_DEPTH, UserKeyMaterial, UserPublicKeyBatch};
 use poseidon2::{POSEIDON2_BN254_T2_PARAMS, Poseidon2};
 use regex::Regex;
 use semaphore_rs_hasher::Hasher;

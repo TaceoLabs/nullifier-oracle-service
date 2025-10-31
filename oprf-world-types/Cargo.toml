@@ -1,5 +1,5 @@
 [package]
-name = "oprf-types"
+name = "oprf-world-types"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,12 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+alloy = { workspace = true }
 ark-babyjubjub = { workspace = true }
+ark-ec.workspace = true
+ark-ff.workspace = true
 ark-serde-compat = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa", "serde"] }
+eddsa-babyjubjub = { workspace = true }
 oprf-core = { workspace = true }
-oprf-zk = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

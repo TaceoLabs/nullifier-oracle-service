@@ -12,7 +12,7 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eyre::Context as _;
 use groth16::Groth16;
-use oprf_client::{MerkleMembership, NullifierArgs, OprfQuery};
+use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::{RpRegistry, Types};
 use oprf_test::world_id_protocol_mock::Authenticator;
@@ -29,6 +29,7 @@ pub use circom_types;
 pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
 pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
+use oprf_world_types::MerkleMembership;
 use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
     QUERY_GRAPH_BYTES,

@@ -1,7 +1,8 @@
 use ark_ff::{PrimeField as _, UniformRand, Zero};
 use eddsa_babyjubjub::EdDSAPrivateKey;
-use oprf_client::{CredentialsSignature, MAX_PUBLIC_KEYS, UserKeyMaterial};
-use oprf_types::crypto::UserPublicKeyBatch;
+use oprf_world_types::{
+    CredentialsSignature, UserKeyMaterial, UserPublicKeyBatch, proof_inputs::query::MAX_PUBLIC_KEYS,
+};
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use oprf_types::MerkleRoot;
+use oprf_world_types::MerkleRoot;
 use parking_lot::Mutex;
 use tracing::instrument;
 

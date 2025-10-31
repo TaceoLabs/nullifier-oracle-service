@@ -6,6 +6,7 @@ members = [
     "oprf-service",
     "oprf-test",
     "oprf-types",
+    "oprf-world-types",
     "oprf-zk",
 ]
 resolver = "3"
@@ -62,6 +63,7 @@ oprf-core = { path = "oprf-core" }
 oprf-service = { path = "oprf-service" }
 oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }
+oprf-world-types = { path = "oprf-world-types" }
 oprf-zk = { path = "oprf-zk" }
 parking_lot = "0.12"
 poseidon2 = { package = "taceo-poseidon2", version = "0.1" }
