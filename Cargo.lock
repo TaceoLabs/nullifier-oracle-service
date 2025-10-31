@@ -4726,6 +4726,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "k256",
  "oprf-core",
+ "oprf-zk",
  "serde",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat",

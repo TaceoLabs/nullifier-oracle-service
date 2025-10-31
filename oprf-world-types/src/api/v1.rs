@@ -9,6 +9,7 @@
 //! they can be sent over the wire.
 
 use eddsa_babyjubjub::EdDSAPublicKey;
+use oprf_zk::groth16_serde::Groth16Proof;
 use serde::{Deserialize, Serialize};
 
 use crate::MerkleRoot;
@@ -16,6 +17,16 @@ use crate::MerkleRoot;
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OprfRequestAuth {
+    /// Zero-knowledge proof provided by the user.
+    pub proof: Groth16Proof,
+    /// The action
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
+    pub action: ark_babyjubjub::Fq,
+    /// The nonce
+    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
+    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
+    pub nonce: ark_babyjubjub::Fq,
     /// The Merkle root associated with this request.
     pub merkle_root: MerkleRoot,
     /// The credential public key

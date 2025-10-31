@@ -135,7 +135,7 @@ impl OprfService {
         // of DoS attack that force the service to always check the merkle roots from chain
         self.crypto_device.verify_nonce_signature(
             rp_id,
-            request.nonce,
+            request.auth.nonce,
             request.auth.current_time_stamp,
             &request.auth.signature,
         )?;
@@ -163,10 +163,10 @@ impl OprfService {
             request.auth.merkle_root.into_inner(),
             ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
             request.rp_identifier.rp_id.into(),
-            request.action,
-            request.nonce,
+            request.auth.action,
+            request.auth.nonce,
         ];
-        self.verify_user_proof(request.proof, &public)?;
+        self.verify_user_proof(request.auth.proof, &public)?;
 
         // Partial commit through the crypto device
         let (session, comm) = self

@@ -12,7 +12,6 @@ use std::fmt;
 use oprf_core::ddlog_equality::{
     DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
-use oprf_zk::groth16_serde::Groth16Proof;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
@@ -27,22 +26,12 @@ where
 {
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
-    /// Zero-knowledge proof provided by the user.
-    pub proof: Groth16Proof,
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
     pub blinded_query: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
-    /// The action
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
-    pub action: ark_babyjubjub::Fq,
-    /// The nonce
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
-    pub nonce: ark_babyjubjub::Fq,
     /// The additional authentication info for this request
     pub auth: OprfRequestAuth,
 }

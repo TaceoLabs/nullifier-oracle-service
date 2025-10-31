@@ -510,7 +510,7 @@ mod tests {
     async fn test_init_bad_proof() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.proof.a = req.proof.c;
+        req.auth.proof.a = req.auth.proof.c;
         let res = setup
             .server
             .post("/api/v1/init")
