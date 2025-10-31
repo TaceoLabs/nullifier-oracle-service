@@ -271,7 +271,7 @@ mod tests {
         let commitments1 = dlog_secret_gen1_round1.contribution.clone();
         let commitments2 = dlog_secret_gen2_round1.contribution.clone();
 
-        let round1_contributions = vec![
+        let round1_contributions = [
             dlog_secret_gen0_round1.contribution,
             dlog_secret_gen1_round1.contribution,
             dlog_secret_gen2_round1.contribution,
