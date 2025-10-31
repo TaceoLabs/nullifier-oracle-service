@@ -37,6 +37,7 @@ impl Environment {
     }
 }
 
+
 /// The configuration for the OPRF peer.
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
