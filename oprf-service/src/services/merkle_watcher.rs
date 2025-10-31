@@ -10,7 +10,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use oprf_types::MerkleRoot;
+use oprf_world_types::MerkleRoot;
 use tracing::instrument;
 
 use crate::metrics::METRICS_MERKLE_COUNT;

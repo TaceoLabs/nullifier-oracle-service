@@ -39,31 +39,24 @@ use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
 
 use ark_ec::AffineRepr;
 use oprf_core::ddlog_equality::DLogEqualityCommitments;
-use oprf_types::TREE_DEPTH;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
 use oprf_types::crypto::{PartyId, RpNullifierKey};
+use oprf_types::{RpId, ShareEpoch};
+use oprf_world_types::api::v1::OprfRequestAuth;
+use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
+use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
+use oprf_world_types::{CredentialsSignature, MerkleMembership, TREE_DEPTH, UserKeyMaterial};
 use oprf_zk::groth16_serde::Groth16Proof;
-use oprf_zk::proof_inputs::nullifier::NullifierProofInput;
-use oprf_zk::proof_inputs::query::QueryProofInput;
 use oprf_zk::{Groth16Error, Groth16Material};
 use rand::{CryptoRng, Rng};
 use reqwest::StatusCode;
 use uuid::Uuid;
 
-pub use circom_types;
-pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 pub use groth16;
-pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
 
 pub mod nonblocking;
-mod types;
-
-pub use types::CredentialsSignature;
-pub use types::MerkleMembership;
-pub use types::OprfQuery;
-pub use types::UserKeyMaterial;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -103,6 +96,28 @@ pub enum Error {
     InternalError(#[from] eyre::Report),
 }
 
+/// The basic request a client sends to the OPRF service.
+///
+/// It contains the relying party’s ID, the share epoch, the action
+/// the user wants to compute a nullifier for, and a fresh nonce.
+/// The RP signs `(nonce || timestamp)` (both in little-endian byte encoding)
+/// to prevent replay. That signature is included here.
+#[derive(Clone)]
+pub struct OprfQuery {
+    /// The ID of the RP that issued the nonce.
+    pub rp_id: RpId,
+    /// The epoch of the DLog share (currently always `0`).
+    pub share_epoch: ShareEpoch,
+    /// The action the user wants to compute a nullifier for.
+    pub action: ark_babyjubjub::Fq,
+    /// The nonce obtained from the RP.
+    pub nonce: ark_babyjubjub::Fq,
+    /// The timestamp obtained from the RP.
+    pub current_time_stamp: u64,
+    /// The RP's signature over `(nonce || timestamp)`.
+    pub nonce_signature: k256::ecdsa::Signature,
+}
+
 /// A signed OPRF query ready.
 ///
 /// This struct holds all information needed to initiate OPRF sessions:
@@ -115,7 +130,7 @@ pub enum Error {
 /// - `query_hash`: The generated query hash.
 pub struct SignedOprfQuery {
     request_id: Uuid,
-    oprf_request: OprfRequest,
+    oprf_request: OprfRequest<OprfRequestAuth>,
     query: OprfQuery,
     blinded_request: BlindedOPrfRequest,
     query_input: QueryProofInput<TREE_DEPTH>,
@@ -210,7 +225,7 @@ impl Challenge {
 
 impl SignedOprfQuery {
     /// Returns the [`OprfRequest`] for this signed query.
-    pub fn get_request(&self) -> OprfRequest {
+    pub fn get_request(&self) -> OprfRequest<OprfRequestAuth> {
         self.oprf_request.clone()
     }
 }
@@ -393,18 +408,20 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         query_input,
         oprf_request: OprfRequest {
             request_id,
-            proof,
-            point_b: blinded_request.blinded_query(),
+            blinded_query: blinded_request.blinded_query(),
             rp_identifier: NullifierShareIdentifier {
                 rp_id: query.rp_id,
                 share_epoch: query.share_epoch,
             },
-            merkle_root: merkle_membership.root,
-            action: query.action,
-            nonce: query.nonce,
-            signature: query.nonce_signature,
-            cred_pk: credentials_signature.issuer,
-            current_time_stamp: query.current_time_stamp,
+            auth: OprfRequestAuth {
+                proof,
+                action: query.action,
+                nonce: query.nonce,
+                merkle_root: merkle_membership.root,
+                cred_pk: credentials_signature.issuer,
+                current_time_stamp: query.current_time_stamp,
+                signature: query.nonce_signature,
+            },
         },
         blinded_request,
         query,

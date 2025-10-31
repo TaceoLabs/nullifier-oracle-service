@@ -23,8 +23,8 @@ oprf-client = { workspace = true }
 oprf-service = { workspace = true }
 oprf-test = { workspace = true }
 oprf-types = { workspace = true }
+oprf-world-types = { workspace = true }
 oprf-zk = { workspace = true }
-parking_lot = { workspace = true }
 rand.workspace = true
 rand_chacha.workspace = true
 reqwest = { workspace = true }

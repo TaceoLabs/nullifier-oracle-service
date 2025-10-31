@@ -17,6 +17,7 @@
 
 use eyre::Context;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
+use oprf_world_types::api::v1::OprfRequestAuth;
 use tokio::task::JoinSet;
 
 use crate::{Error, OprfSessions};
@@ -27,7 +28,7 @@ use crate::{Error, OprfSessions};
 async fn oprf_request(
     client: reqwest::Client,
     service: String,
-    req: OprfRequest,
+    req: OprfRequest<OprfRequestAuth>,
 ) -> super::Result<(String, OprfResponse)> {
     let response = client
         .post(format!("{service}/api/v1/init"))
@@ -104,7 +105,7 @@ pub async fn init_sessions(
     client: &reqwest::Client,
     oprf_services: &[String],
     threshold: usize,
-    req: OprfRequest,
+    req: OprfRequest<OprfRequestAuth>,
 ) -> super::Result<OprfSessions> {
     let mut requests = oprf_services
         .iter()

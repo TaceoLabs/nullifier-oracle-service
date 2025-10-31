@@ -33,7 +33,6 @@ use witness::{BlackBoxFunction, ruint::aliases::U256};
 use crate::groth16_serde::Groth16Proof;
 
 pub mod groth16_serde;
-pub mod proof_inputs;
 
 pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/query_graph.bin");
 pub const NULLIFIER_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/nullifier_graph.bin");

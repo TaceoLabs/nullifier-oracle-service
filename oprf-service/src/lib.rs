@@ -289,11 +289,14 @@ mod tests {
     use ark_ff::{BigInteger as _, PrimeField as _, UniformRand, Zero};
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
-    use oprf_client::{MAX_PUBLIC_KEYS, MerkleMembership, OprfQuery};
+    use oprf_client::OprfQuery;
     use oprf_core::ddlog_equality::DLogEqualityCommitments;
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::crypto::{PeerPublicKeyList, RpNullifierKey};
-    use oprf_types::{MerkleRoot, RpId, ShareEpoch, TREE_DEPTH};
+    use oprf_types::{RpId, ShareEpoch};
+    use oprf_world_types::api::v1::OprfRequestAuth;
+    use oprf_world_types::proof_inputs::query::MAX_PUBLIC_KEYS;
+    use oprf_world_types::{MerkleMembership, MerkleRoot, TREE_DEPTH};
     use oprf_zk::{Groth16Material, QUERY_FINGERPRINT, QUERY_GRAPH_BYTES};
     use poseidon2::Poseidon2;
     use rand::Rng as _;
@@ -352,7 +355,7 @@ mod tests {
     struct TestSetup {
         server: TestServer,
         oprf_service: OprfService,
-        oprf_req: OprfRequest,
+        oprf_req: OprfRequest<OprfRequestAuth>,
         challenge_req: ChallengeRequest,
     }
 
@@ -507,7 +510,7 @@ mod tests {
     async fn test_init_bad_proof() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.proof.a = req.proof.c;
+        req.auth.proof.a = req.auth.proof.c;
         let res = setup
             .server
             .post("/api/v1/init")
@@ -523,7 +526,7 @@ mod tests {
     async fn test_init_bad_signature() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.signature = k256::ecdsa::Signature::from_slice(&[42u8; 64])?;
+        req.auth.signature = k256::ecdsa::Signature::from_slice(&[42u8; 64])?;
         let res = setup
             .server
             .post("/api/v1/init")
@@ -597,7 +600,7 @@ mod tests {
     async fn test_init_bad_time_stamp() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.current_time_stamp = 42;
+        req.auth.current_time_stamp = 42;
         let res = setup
             .server
             .post("/api/v1/init")

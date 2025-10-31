@@ -9,45 +9,31 @@
 //! they can be sent over the wire.
 use std::fmt;
 
-use eddsa_babyjubjub::EdDSAPublicKey;
 use oprf_core::ddlog_equality::{
     DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
 };
-use oprf_zk::groth16_serde::Groth16Proof;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-use crate::{MerkleRoot, RpId, ShareEpoch, crypto::PartyId};
+use crate::{RpId, ShareEpoch, crypto::PartyId};
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct OprfRequest {
+#[serde(bound = "")]
+pub struct OprfRequest<OprfRequestAuth>
+where
+    OprfRequestAuth: Clone + Serialize + DeserializeOwned,
+{
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
-    /// Zero-knowledge proof provided by the user.
-    pub proof: Groth16Proof,
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
-    pub point_b: ark_babyjubjub::EdwardsAffine,
+    pub blinded_query: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
-    /// The Merkle root associated with this request.
-    pub merkle_root: MerkleRoot,
-    /// The action
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
-    pub action: ark_babyjubjub::Fq,
-    /// The nonce
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
-    pub nonce: ark_babyjubjub::Fq,
-    /// The signature of the nonce
-    pub signature: k256::ecdsa::Signature,
-    /// The credential public key
-    pub cred_pk: EdDSAPublicKey, // TODO maybe remove and get from chain
-    /// The current time stamp (unix secs)
-    pub current_time_stamp: u64,
+    /// The additional authentication info for this request
+    pub auth: OprfRequestAuth,
 }
 
 /// Identifies the nullifier share to use for the OPRF computation by relying party ([`RpId`]) and [`ShareEpoch`].
@@ -90,12 +76,15 @@ pub struct ChallengeResponse {
     pub proof_share: DLogEqualityProofShare,
 }
 
-impl fmt::Debug for OprfRequest {
+impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth>
+where
+    OprfReqestAuth: Clone + Serialize + DeserializeOwned,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)
-            .field("A", &self.point_b.to_string())
-            .field("proof", &"omitted")
+            .field("blinded_query", &self.blinded_query.to_string())
+            .field("rp_identifier", &self.rp_identifier)
             .finish()
     }
 }

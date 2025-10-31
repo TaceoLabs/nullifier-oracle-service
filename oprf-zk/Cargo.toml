@@ -13,7 +13,6 @@ readme.workspace = true
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-bn254 = { workspace = true }
-ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-groth16.workspace = true
 ark-serde-compat = { workspace = true }
@@ -22,14 +21,12 @@ eyre.workspace = true
 groth16 = { workspace = true }
 hex = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
-oprf-core = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-uuid = { workspace = true, features = ["serde", "v4"] }
 witness = { workspace = true }
 
 [features]

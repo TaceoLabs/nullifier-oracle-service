@@ -11,7 +11,7 @@ use alloy::{
 use async_trait::async_trait;
 use eyre::Context as _;
 use futures::StreamExt as _;
-use oprf_types::MerkleRoot;
+use oprf_world_types::MerkleRoot;
 use parking_lot::Mutex;
 use tracing::instrument;
 

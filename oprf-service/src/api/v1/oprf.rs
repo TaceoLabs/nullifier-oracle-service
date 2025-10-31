@@ -13,6 +13,7 @@ use oprf_types::{
     api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse},
     crypto::PartyId,
 };
+use oprf_world_types::api::v1::OprfRequestAuth;
 use tracing::instrument;
 
 use crate::{AppState, api::errors::ApiResult, services::oprf::OprfService};
@@ -25,7 +26,7 @@ use crate::{AppState, api::errors::ApiResult, services::oprf::OprfService};
 async fn oprf_request(
     State(oprf_service): State<OprfService>,
     State(party_id): State<PartyId>,
-    Json(request): Json<OprfRequest>,
+    Json(request): Json<OprfRequest<OprfRequestAuth>>,
 ) -> ApiResult<Json<OprfResponse>> {
     tracing::debug!("received new OPRF request: {request:?}");
     let request_id = request.request_id;
