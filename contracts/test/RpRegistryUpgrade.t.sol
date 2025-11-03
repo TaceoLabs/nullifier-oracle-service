@@ -101,13 +101,7 @@ contract RpRegistryUpgradeTest is Test {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector,
-            taceoAdmin,
-            verifierKeyGen,
-            verifierNullifier,
-            accumulator,
-            THRESHOLD,
-            MAX_PEERS
+            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator
         );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);

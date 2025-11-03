@@ -16,8 +16,6 @@ pub fn deploy_test_setup(
     let cmd = cmd
         .current_dir(dir.join("../contracts"))
         .env("TACEO_ADMIN_ADDRESS", taceo_admin_address)
-        .env("NUM_PEERS", "3")
-        .env("THRESHOLD", "2")
         .envs(env)
         .arg("script")
         .arg("script/test/TestSetup.s.sol")

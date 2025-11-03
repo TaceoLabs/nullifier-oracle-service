@@ -123,26 +123,21 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
     /// @param _nullifierVerifierAddress The address of the Groth16 verifier contract for nullifier verification.
     /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
-    /// @param _threshold The minimum number of OPRF peers required to participate.
-    /// @param _numPeers The total number of OPRF peers participating.
     function initialize(
         address _keygenAdmin,
         address _keyGenVerifierAddress,
         address _nullifierVerifierAddress,
-        address _accumulatorAddress,
-        uint256 _threshold,
-        uint256 _numPeers
+        address _accumulatorAddress
     ) public virtual initializer {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
-        require(_numPeers >= 3);
-        require(_threshold <= _numPeers);
         keygenAdmin = _keygenAdmin;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
-        threshold = _threshold;
-        numPeers = _numPeers;
+        // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
+        threshold = 2;
+        numPeers = 3;
         isContractReady = false;
     }
 

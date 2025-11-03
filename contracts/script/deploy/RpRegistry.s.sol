@@ -7,8 +7,6 @@ import {Types} from "../../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployRpRegistryScript is Script {
-    uint256 constant THRESHOLD = 2;
-    uint256 constant MAX_PEERS = 3;
     using Types for Types.BabyJubJubElement;
     RpRegistry public rpRegistry;
     ERC1967Proxy public proxy;
@@ -37,9 +35,7 @@ contract DeployRpRegistryScript is Script {
             taceoAdminAddress,
             keyGenVerifierAddress,
             nullifierVerifierAddress,
-            accumulatorAddress,
-            THRESHOLD,
-            MAX_PEERS
+            accumulatorAddress
         );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
