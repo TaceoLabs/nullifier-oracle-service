@@ -20,10 +20,12 @@
 use std::{fs::File, str::FromStr, sync::Arc};
 
 use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
+use ark_bn254::Bn254;
 use axum::extract::FromRef;
+use circom_types::groth16::JsonVerificationKey;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
-use oprf_zk::{Groth16Material, groth16_serde::Groth16VerificationKey};
+use oprf_zk::Groth16Material;
 use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -93,7 +95,7 @@ pub async fn start(
     );
     let vk = File::open(&config.user_verification_key_path)
         .context("while opening file to verification key")?;
-    let vk: Groth16VerificationKey = serde_json::from_reader(vk)
+    let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
     // Load the secret manager. For now we only support AWS.
@@ -448,7 +450,7 @@ mod tests {
             )?);
             let user_verification_key_path = dir.join("../circom/query.vk.json");
             let vk = File::open(&user_verification_key_path)?;
-            let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);
             let session_cleanup_interval = Duration::from_secs(30);
             let current_time_stamp_max_difference = Duration::from_secs(60);

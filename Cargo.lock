@@ -4625,6 +4625,7 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
+ "circom-types",
  "clap",
  "eyre",
  "futures",

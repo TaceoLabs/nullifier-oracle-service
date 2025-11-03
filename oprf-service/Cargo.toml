@@ -27,6 +27,7 @@ async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
+circom-types = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
