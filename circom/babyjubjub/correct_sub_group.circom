@@ -41,8 +41,11 @@ template EscalarMulFixScalar(E) {
     signal input p[2];              // Point (Twisted format)
     signal output out[2];           // Point (Twisted format)
 
-    // check if 
+    // check if point is identity (0,1)
     signal x_is_zero <== IsZero()(p[0]);
+    signal y_is_one <== IsZero()(p[1]-1);
+    // since x_is_zero and y_is_one can only be 0/1, this can also only be 0/1 and is the AND of both
+    signal is_identity <== x_is_zero * y_is_one;
 
     // first segment
     var bits1[148];
@@ -51,8 +54,8 @@ template EscalarMulFixScalar(E) {
     }
 
     // if x is zero, we bind to the generator
-    signal in_x <== p[0] + (5299619240641551281634865583518297030282874472190772894086521144482721001553 - p[0])*x_is_zero;
-    signal in_y <== p[1] + (16950150798460657717958625567821834550301663161624707787222815936182638968203 - p[1])*x_is_zero;
+    signal in_x <== p[0] + (5299619240641551281634865583518297030282874472190772894086521144482721001553 - p[0])*is_identity;
+    signal in_y <== p[1] + (16950150798460657717958625567821834550301663161624707787222815936182638968203 - p[1])*is_identity;
 
     signal (s1_out[2], s1_dbl[2]) <== SegmentMulFixScalar(bits1,148)([in_x, in_y]);
 
@@ -68,8 +71,8 @@ template EscalarMulFixScalar(E) {
 
     signal (x_out, y_out) <== BabyAdd()(s1_out[0], s1_out[1], s2_out[0], s2_out[1]);
 
-    out[0] <== x_out * (1 - x_is_zero);
-    out[1] <== y_out + (1 - y_out) * x_is_zero;
+    out[0] <== x_out * (1 - is_identity); // 0 if is_identity == 1, x_out if is_identity == 0
+    out[1] <== y_out + (1 - y_out) * is_identity; // 1 if is_identity == 1, y_out if is_identity == 0
 }
 
 // Small rewrite of BitElementMulAny from the Circom standard library. Takes two points
