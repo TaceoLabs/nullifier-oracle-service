@@ -39,7 +39,6 @@ template EdDSAPoseidon2Verifier() {
     // Ensure S < Subgroup Order
     component s_range = BabyJubJubIsInFr();
     s_range.in <== S;
-    BabyJubJubScalarField() s_f <== s_range.out;
 
     // Calculate the h = H(R,A, msg)
     component hash = Poseidon2(8);
