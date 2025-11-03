@@ -17,7 +17,7 @@ describe("hash to field Poseidon2 t=3", function () {
   it("kat0", async () => {
     const witness = await circuit.calculateWitness({ in: [42] }, true);
     await circuit.assertOut(witness, {
-      out: 0x2e5c8c8ff53da47080c341f261d1a10c1d54f6650b90bbed9dd30198ca1256b3n,
+      out: 7897415424385838084099011472024798078244437790378445018734308668354447223317n,
     });
     await circuit.checkConstraints(witness);
   });

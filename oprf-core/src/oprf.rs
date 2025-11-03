@@ -287,6 +287,13 @@ mod mappings {
     use poseidon2::Poseidon2;
     use subtle::{Choice, ConstantTimeEq};
 
+    const HASH_TO_FIELD_DS: &[u8] = b"OPRF_HashToField_BabyJubJub";
+
+    // Returns the domain separator for the hash_to_field function as a field element
+    fn get_hash_to_field_ds() -> BaseField {
+        BaseField::from_be_bytes_mod_order(HASH_TO_FIELD_DS)
+    }
+
     use crate::oprf::{Affine, BaseField};
 
     fn ct_eq<F: PrimeField>(lhs: F, rhs: F) -> Choice {
@@ -356,7 +363,7 @@ mod mappings {
             3,
             5,
         > = Poseidon2::<_, 3, 5>::default();
-        let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
+        let output = poseidon.permutation(&[get_hash_to_field_ds(), input, BaseField::zero()]);
         output[1] // Return the first element of the state as the field element, element 0 is the capacity of the sponge
     }
 
@@ -365,7 +372,8 @@ mod mappings {
     fn hash_to_field2(input: BaseField) -> [BaseField; 2] {
         // hash the input to a field element using poseidon hash
         let poseidon = Poseidon2::<_, 3, 5>::default();
-        let output = poseidon.permutation(&[BaseField::zero(), input, BaseField::zero()]);
+        // use 1 instead of 0 in input[2] as an additional domain separation from the 1-field hash_to_field
+        let output = poseidon.permutation(&[get_hash_to_field_ds(), input, BaseField::one()]);
 
         [output[1], output[2]] // Return the first two elements of the state as the field elements, element 0 is the capacity of the sponge
     }
@@ -520,11 +528,11 @@ mod mappings {
 
             let expected_point = Affine {
                 x: BaseField::from_str(
-                    "2248614069508207507326262781062587749986544721157984531256611865469864958775",
+                    "1368536874988764403285491466492470225763829673979223271328990939656695174872",
                 )
                 .unwrap(),
                 y: BaseField::from_str(
-                    "11346329236507494865585709204927959305406795872019529850625216399990666158973",
+                    "5918944744409897789209151589310931911112404737084812644826989226820698253694",
                 )
                 .unwrap(),
             };

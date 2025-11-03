@@ -17,7 +17,8 @@ template HashToField() {
     signal output out;
 
     component hasher = Poseidon2(3);
-    hasher.in <== [0,in,0];
+    // element 0 is the DS string "OPRF_HashToField_BabyJubJub"
+    hasher.in <== [32627786498498119128812045057993354633158048678109587794777765218,in,0];
     // We return element 1; element 0 is the capacity of the sponge
     out <== hasher.out[1];
 }

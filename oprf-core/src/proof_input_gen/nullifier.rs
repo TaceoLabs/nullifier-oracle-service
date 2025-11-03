@@ -19,10 +19,10 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 #[derive(Debug, Clone)]
 pub struct NullifierProofInput<const MAX_DEPTH: usize> {
     // Signature
-    pub user_pk: [[BaseField; 2]; super::query::MAX_PUBLIC_KEYS],
+    pub pk: [[BaseField; 2]; super::query::MAX_PUBLIC_KEYS],
     pub pk_index: BaseField, // 0..6
-    pub query_s: ScalarField,
-    pub query_r: [BaseField; 2],
+    pub s: ScalarField,
+    pub r: [BaseField; 2],
     // Credential Signature
     pub cred_type_id: BaseField,
     pub cred_pk: [BaseField; 2],
@@ -112,10 +112,10 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         let id_commitment = OprfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
 
         Self {
-            user_pk: query_proof_input.pk,
+            pk: query_proof_input.pk,
             pk_index: query_proof_input.pk_index,
-            query_s: query_proof_input.s,
-            query_r: query_proof_input.r,
+            s: query_proof_input.s,
+            r: query_proof_input.r,
             cred_type_id: query_proof_input.cred_type_id,
             cred_pk: query_proof_input.cred_pk,
             cred_hashes: query_proof_input.cred_hashes,
@@ -190,10 +190,10 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         let id_commitment = OprfClient::id_commitment(query_proof_input.mt_index, id_commitment_r);
 
         Self {
-            user_pk: query_proof_input.pk,
+            pk: query_proof_input.pk,
             pk_index: query_proof_input.pk_index,
-            query_s: query_proof_input.s,
-            query_r: query_proof_input.r,
+            s: query_proof_input.s,
+            r: query_proof_input.r,
             cred_type_id: query_proof_input.cred_type_id,
             cred_pk: query_proof_input.cred_pk,
             cred_hashes: query_proof_input.cred_hashes,
@@ -226,9 +226,9 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
     }
 
     pub fn print(&self) {
-        println!("user_pk: [");
-        for (i, pk) in self.user_pk.iter().enumerate() {
-            if i < self.user_pk.len() - 1 {
+        println!("pk: [");
+        for (i, pk) in self.pk.iter().enumerate() {
+            if i < self.pk.len() - 1 {
                 println!("  [{:?}n, {:?}n],", pk[0], pk[1]);
             } else {
                 println!("  [{:?}n, {:?}n]", pk[0], pk[1]);
@@ -236,8 +236,8 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         }
         println!("],");
         println!("pk_index: {}n,", self.pk_index);
-        println!("query_s: {}n,", self.query_s);
-        println!("query_r: [{}n, {}n],", self.query_r[0], self.query_r[1]);
+        println!("s: {}n,", self.s);
+        println!("r: [{}n, {}n],", self.r[0], self.r[1]);
         println!("cred_type_id: {}n,", self.cred_type_id);
         println!("cred_pk: [{:?}n, {:?}n],", self.cred_pk[0], self.cred_pk[1]);
         println!(
