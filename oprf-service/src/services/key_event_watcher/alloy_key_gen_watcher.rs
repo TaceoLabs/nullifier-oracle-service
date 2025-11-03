@@ -1,7 +1,8 @@
 use alloy::{
     eips::BlockNumberOrTag,
+    network::EthereumWallet,
     primitives::{Address, TxHash},
-    providers::{DynProvider, PendingTransaction, Provider as _},
+    providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
     rpc::types::{Filter, TransactionReceipt},
     sol_types::SolEvent,
     transports::RpcError,
@@ -16,7 +17,7 @@ use oprf_types::{
         SecretGenRound1Event, SecretGenRound2Contribution, SecretGenRound2Event,
         SecretGenRound3Contribution, SecretGenRound3Event,
     },
-    crypto::{RpNullifierKey, RpSecretGenCiphertext},
+    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
 };
 use tokio::sync::mpsc;
 
@@ -28,11 +29,28 @@ pub(crate) struct AlloyKeyGenWatcher {
 }
 
 impl AlloyKeyGenWatcher {
-    pub(crate) fn new(contract_address: Address, provider: DynProvider) -> Self {
-        Self {
-            contract_address,
-            provider,
+    pub(crate) async fn new(
+        rpc_url: &str,
+        contract_address: Address,
+        wallet: EthereumWallet,
+    ) -> eyre::Result<Self> {
+        // Create the provider.
+        let ws = WsConnect::new(rpc_url); // rpc-url of anvil
+        let provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .connect_ws(ws)
+            .await
+            .context("while connecting to RPC")?;
+        tracing::info!("checking RpRegistry ready state at address {contract_address}..");
+        let contract = RpRegistry::new(contract_address, provider.clone());
+        if !contract.isContractReady().call().await? {
+            eyre::bail!("RpRegistry contract not ready");
         }
+        tracing::info!("ready!");
+        Ok(Self {
+            contract_address,
+            provider: provider.erased(),
+        })
     }
 }
 
@@ -51,6 +69,7 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         });
         Ok(rx)
     }
+
     async fn report_result(&self, result: ChainEventResult) -> eyre::Result<()> {
         let contract = RpRegistry::new(self.contract_address, self.provider.clone());
         match result {
@@ -121,6 +140,12 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         };
         Ok(())
     }
+
+    async fn load_party_id(&self) -> eyre::Result<PartyId> {
+        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
+        let party_id = contract.checkIsParticipantAndReturnPartyId().call().await?;
+        Ok(PartyId(u16::try_from(party_id)?))
+    }
 }
 
 async fn subscribe_task(
@@ -163,8 +188,18 @@ async fn subscribe_task(
                     .log_decode()
                     .context("while decoding secret-gen round2 event")?;
                 let RpRegistry::SecretGenRound2 { rpId } = round2.inner.data;
+                let peers = contract
+                    .checkIsParticipantAndReturnEphemeralPublicKeys(rpId)
+                    .call()
+                    .await?;
+                // TODO handle error case better - we want to know which one send wrong key
+                let list = peers
+                    .into_iter()
+                    .map(PeerPublicKey::try_from)
+                    .collect::<eyre::Result<Vec<_>>>()?;
                 let event = ChainEvent::SecretGenRound2(SecretGenRound2Event {
                     rp_id: RpId::from(rpId),
+                    peers: PeerPublicKeyList::from(list),
                 });
                 if tx.send(event).await.is_err() {
                     tracing::debug!("subscriber dropped channel - will shutdown");

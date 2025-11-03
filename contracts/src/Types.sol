@@ -13,6 +13,8 @@ library Types {
         BabyJubJubElement commShare;
         // Hash of the polynomial created by participant
         uint256 commCoeffs;
+        // ephemeral public key for this round
+        BabyJubJubElement ephPubKey;
     }
 
     struct Round2Contribution {

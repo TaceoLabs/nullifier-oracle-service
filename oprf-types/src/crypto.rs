@@ -19,9 +19,11 @@ use serde::{Deserialize, Serialize};
 
 /// The party id of the OPRF-Peer.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PartyId(u16);
+pub struct PartyId(pub u16);
 
-/// The public key of an OPRF peer.
+/// The ephemeral public key of an OPRF peer.
+///
+/// Can only be constructed if on curve and on correct subgroup.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct PeerPublicKey(
@@ -48,7 +50,10 @@ pub struct RpNullifierKey(
 
 /// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
 ///
-/// Contains the public commitments to the random share and the polynomial.
+/// Contains the public commitments to the random share and the
+/// polynomial. Additionally, contains an ephemeral public key for this
+/// key-generation. Peers should use this public key to encrypt the ciphertexts
+/// for round2.
 ///
 /// See [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf)
 /// for more information about the OPRF-nullifier generation protocol.
@@ -62,6 +67,8 @@ pub struct RpSecretGenCommitment {
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
     /// The commitment to the polynomial used to hide the sampled secret.
     pub comm_coeffs: ark_babyjubjub::Fq,
+    /// The ephemeral public key for this key generation.
+    pub eph_pub_key: PeerPublicKey,
 }
 
 /// The public contribution of one OPRF peer for the second round of the OPRF-nullifier generation protocol.
@@ -110,12 +117,6 @@ impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {
     }
 }
 
-impl From<ark_babyjubjub::EdwardsAffine> for PeerPublicKey {
-    fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
-        Self(value)
-    }
-}
-
 impl RpNullifierKey {
     /// Create a new `RpNullifierKey` by wrapping an BabyJubJub Point.
     pub fn new(value: ark_babyjubjub::EdwardsAffine) -> Self {
@@ -130,13 +131,39 @@ impl RpNullifierKey {
 
 impl PeerPublicKey {
     /// Create a new `PeerPublicKey` by wrapping an BabyJubJub Point.
-    pub fn new(value: ark_babyjubjub::EdwardsAffine) -> Self {
-        Self::from(value)
+    ///
+    /// Checks if the the point is on the curve and in correct subgroup.
+    /// Returns an error iff those checks fail.
+    pub fn new(value: ark_babyjubjub::EdwardsAffine) -> eyre::Result<Self> {
+        Self::try_from(value)
+    }
+
+    /// Create a new `PeerPublicKey` by wrapping an BabyJubJub Point.
+    ///
+    /// Does **not** check if the the point is on the curve and in correct subgroup.
+    /// Only use this function if you know what you are doing.
+    /// Prefer [`Self::new`].
+    pub fn new_unchecked(value: ark_babyjubjub::EdwardsAffine) -> Self {
+        Self(value)
     }
 
     /// Gets the inner value (a BabyJubJub point in Affine representation).
     pub fn inner(self) -> ark_babyjubjub::EdwardsAffine {
         self.0
+    }
+}
+
+impl TryFrom<ark_babyjubjub::EdwardsAffine> for PeerPublicKey {
+    type Error = eyre::Report;
+
+    fn try_from(value: ark_babyjubjub::EdwardsAffine) -> Result<Self, Self::Error> {
+        if !value.is_on_curve() {
+            eyre::bail!("PublicKey is not on curve!");
+        }
+        if !value.is_in_correct_subgroup_assuming_on_curve() {
+            eyre::bail!("PublicKey is not in correct subgroup!");
+        }
+        Ok(Self(value))
     }
 }
 

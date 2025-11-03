@@ -72,6 +72,23 @@
             "name": "commCoeffs",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "ephPubKey",
+            "type": "tuple",
+            "internalType": "struct Types.BabyJubJubElement",
+            "components": [
+              {
+                "name": "x",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
           }
         ]
       }
@@ -170,6 +187,37 @@
   },
   {
     "type": "function",
+    "name": "checkIsParticipantAndReturnEphemeralPublicKeys",
+    "inputs": [
+      {
+        "name": "rpId",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct Types.BabyJubJubElement[]",
+        "components": [
+          {
+            "name": "x",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "y",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "checkIsParticipantAndReturnPartyId",
     "inputs": [],
     "outputs": [
@@ -223,31 +271,6 @@
                 "internalType": "uint256"
               }
             ]
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getPeerPublicKeys",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct Types.BabyJubJubElement[]",
-        "components": [
-          {
-            "name": "x",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "y",
-            "type": "uint256",
-            "internalType": "uint256"
           }
         ]
       }
@@ -488,30 +511,6 @@
   },
   {
     "type": "function",
-    "name": "peerPublicKeys",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "x",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "y",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "pendingOwner",
     "inputs": [],
     "outputs": [
@@ -544,23 +543,6 @@
         "name": "_peerAddresses",
         "type": "address[]",
         "internalType": "address[]"
-      },
-      {
-        "name": "_peerPublicKeys",
-        "type": "tuple[]",
-        "internalType": "struct Types.BabyJubJubElement[]",
-        "components": [
-          {
-            "name": "x",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "y",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
       }
     ],
     "outputs": [],

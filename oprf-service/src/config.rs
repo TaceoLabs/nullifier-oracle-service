@@ -139,14 +139,6 @@ pub struct OprfPeerConfig {
     )]
     pub chain_ws_rpc_url: String,
 
-    /// The name/ARN of the service's private-key.
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_PRIVATE_KEY_SECRET_ID",
-        default_value = "oprf/sk"
-    )]
-    pub private_key_secret_id: String,
-
     /// Prefix for secret name to store rp secrets in secret-manager.
     /// The implementation will call `format!("{rp_secret_id_prefix}/{rp_id}")`
     #[clap(

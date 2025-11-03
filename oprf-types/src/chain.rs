@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     RpId,
     crypto::{
-        RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCiphertexts, RpSecretGenCommitment,
+        PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCiphertexts,
+        RpSecretGenCommitment,
     },
 };
 
@@ -30,7 +31,6 @@ pub enum ChainEvent {
 /// Represents the result of processing a chain event.
 ///
 /// Each variant contains the processed data for a specific type of OPRF secret-generation contribution.
-#[expect(clippy::large_enum_variant)]
 pub enum ChainEventResult {
     /// Output for handling key-generation round 1 event
     SecretGenRound1(SecretGenRound1Contribution),
@@ -57,6 +57,8 @@ pub struct SecretGenRound1Event {
 pub struct SecretGenRound2Event {
     /// Identifier of the relying party this event belongs to.
     pub rp_id: RpId,
+    /// List of ephemeral public keys of the peers for this round (including own key).
+    pub peers: PeerPublicKeyList,
 }
 
 /// Payload of a third-round event for key generation.

@@ -1,10 +1,8 @@
-//! # OPRF Service
-//!
 //! Provides functionality for OPRF session management.
 //!
 //! Responsibilities:
 //! - Verify client Groth16 proofs and signature verification on session init.
-//! - Produce partial discrete-log equality commitments via the [`CryptoDevice`].
+//! - Produce partial discrete-log equality commitments via the [`RpMaterialStore`].
 //! - Persist per-session randomness in the [`SessionStore`] for later challenge completion.
 //!
 //! The service exposes two main flows:
@@ -34,8 +32,8 @@ use uuid::Uuid;
 use crate::{
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{
-        crypto_device::{CryptoDevice, CryptoDeviceError},
         merkle_watcher::{MerkleWatcherError, MerkleWatcherService},
+        rp_material_store::{RpMaterialStore, RpMaterialStoreError},
         session_store::SessionStore,
         signature_history::{DuplicateSignatureError, SignatureHistory},
     },
@@ -50,9 +48,9 @@ pub(crate) enum OprfServiceError {
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
-    /// Error from CryptoDevice
+    /// Error from RpMaterialStore
     #[error(transparent)]
-    CryptoDevice(#[from] CryptoDeviceError),
+    RpMaterialStoreError(#[from] RpMaterialStoreError),
     /// An error returned from the merkle watcher service during merkle look-up.
     #[error(transparent)]
     MerkleWatcherError(#[from] MerkleWatcherError),
@@ -72,7 +70,7 @@ pub(crate) enum OprfServiceError {
 
 #[derive(Clone)]
 pub(crate) struct OprfService {
-    crypto_device: Arc<CryptoDevice>,
+    rp_material_store: RpMaterialStore,
     pub(crate) session_store: SessionStore,
     merkle_watcher: MerkleWatcherService,
     signature_history: SignatureHistory,
@@ -83,7 +81,7 @@ pub(crate) struct OprfService {
 impl OprfService {
     /// Builds an [`OprfService`] from its core services and config values.
     pub(crate) fn init(
-        crypto_device: Arc<CryptoDevice>,
+        rp_material_store: RpMaterialStore,
         merkle_watcher: MerkleWatcherService,
         vk: ark_groth16::VerifyingKey<Bn254>,
         request_lifetime: Duration,
@@ -92,7 +90,7 @@ impl OprfService {
         signature_history_cleanup_interval: Duration,
     ) -> Self {
         Self {
-            crypto_device,
+            rp_material_store,
             signature_history: SignatureHistory::init(
                 current_time_stamp_max_difference * 2,
                 signature_history_cleanup_interval,
@@ -107,10 +105,10 @@ impl OprfService {
     /// Initializes an OPRF session for the given request.
     ///
     /// This method executes the first step of the OPRF protocol:
-    /// 1. Verifies the RP's nonce signature via the [`CryptoDevice`]. **The nonce is converted to le_bytes representation for signature verification**.
+    /// 1. Verifies the RP's nonce signature via the [`RpMaterialStore`]. **The nonce is converted to le_bytes representation for signature verification**.
     /// 2. Check the Merkle root for the epoch specified in the request via the [`MerkleWatcherService`].
     /// 3. Verifies the client's Groth16 proof.
-    /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`CryptoDevice`].
+    /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`RpMaterialStore`].
     /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     ///
     /// Returns the compressed Base64-encoded [`PartialDLogEqualityCommitments`] if successful.
@@ -133,7 +131,7 @@ impl OprfService {
 
         // check the RP nonce signature - this also lightens the threat
         // of DoS attack that force the service to always check the merkle roots from chain
-        self.crypto_device.verify_nonce_signature(
+        self.rp_material_store.verify_nonce_signature(
             rp_id,
             request.auth.nonce,
             request.auth.current_time_stamp,
@@ -170,7 +168,7 @@ impl OprfService {
 
         // Partial commit through the crypto device
         let (session, comm) = self
-            .crypto_device
+            .rp_material_store
             .partial_commit(request.blinded_query, &request.rp_identifier)?;
 
         // Store the randomness for finalize request
@@ -182,7 +180,7 @@ impl OprfService {
     /// Finalizes an OPRF session for a client challenge request.
     ///
     /// - Retrieves the stored randomness from [`SessionStore`].
-    /// - Computes the final discrete-log equality proof share using [`CryptoDevice`].
+    /// - Computes the final discrete-log equality proof share using [`RpMaterialStore`].
     /// - Returns the proof share or an error if the session or share cannot be found.
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) fn finalize_oprf_session(
@@ -197,7 +195,7 @@ impl OprfService {
             .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self.crypto_device.challenge(
+        let proof_share = self.rp_material_store.challenge(
             request.request_id,
             my_party_id,
             session,

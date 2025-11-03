@@ -36,7 +36,7 @@ contract-tests:
     cd contracts && forge test
 
 [group: 'test']
-all-tests: check-pr
+all-tests: all-rust-tests circom-tests contract-tests
 
 [group: 'ci']
 check-pr: lint all-rust-tests circom-tests contract-tests
@@ -62,26 +62,21 @@ run-auth-tree-indexer *args:
     trap "kill $auth_tree_indexer" SIGINT SIGTERM
     wait $auth_tree_indexer
 
-[private]
-run-rp-registry:
-    cargo build --workspace --release
-    ./target/release/test-setup-helper --overwrite-old-keys --chain-ws-rpc-url ws://127.0.0.1:8545
-
 [group: 'local-setup']
 run-services:
     #!/usr/bin/env bash
     mkdir -p logs
     cargo build --workspace --release
     # anvil wallet 7
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10000 --private-key-secret-id oprf/sk/n0 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service0.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
     # anvil wallet 8
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10001 --private-key-secret-id oprf/sk/n1 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service1.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service1.log 2>&1 &
     pid1=$!
     echo "started service1 with PID $pid1"
     # anvil wallet 9
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10002 --private-key-secret-id oprf/sk/n2 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service2.log 2>&1  &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service2.log 2>&1  &
     pid2=$!
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
@@ -98,9 +93,10 @@ run-setup:
     echo "starting AccountRegistry contract..."
     just run-account-registry
     echo "starting RpRegistry contract.."
-    just run-rp-registry | tee logs/rp_registry.log
-    address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
-    echo $address
+    just deploy-rp-registry-with-deps-anvil | tee logs/rp_registry.log
+    address=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/rp_registry.log)
+    echo "register oprf-nodes..."
+    RP_REGISTRY_PROXY=$address just register-participants-anvil
     echo "starting AuthTreeIndexer service..."
     just run-auth-tree-indexer &
     sleep 2
@@ -116,9 +112,8 @@ run-rp-registry-and-services account_registry:
     #!/usr/bin/env bash
     mkdir -p logs
     echo "starting RpRegistry contract.."
-    just run-rp-registry | tee logs/rp_registry.log
-    address=$(grep -oP 'RpRegistry deployed to \K0x[a-fA-F0-9]+' logs/rp_registry.log)
-    echo $address
+    just deploy-rp-registry-with-deps-anvil | tee logs/rp_registry.log
+    address=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/rp_registry.log)
     sleep 2
     echo "starting OPRF services..."
     OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{account_registry}} OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services
@@ -198,7 +193,7 @@ deploy-account-registry-anvil:
 [group: 'anvil']
 [working-directory: 'contracts/script/deploy']
 register-participants-anvil: 
-    RP_REGISTRY_ADDRESS=0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+     ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group: 'anvil']
 [working-directory: 'contracts/script/test']

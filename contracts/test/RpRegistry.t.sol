@@ -88,11 +88,7 @@ contract RpRegistryTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
-        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses);
     }
 
     function testConstructedCorrectly() public {
@@ -132,26 +128,13 @@ contract RpRegistryTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
 
         // check that not ready
         assert(!rpRegistryTest.isContractReady());
-        rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistryTest.registerOprfPeers(peerAddresses);
 
         // check that ready after call
         assert(rpRegistryTest.isContractReady());
-
-        // check that public keys are stored correctly
-        Types.BabyJubJubElement[] memory isKeys = rpRegistryTest.getPeerPublicKeys();
-        assertEq(isKeys[0].x, peerPublicKeys[0].x);
-        assertEq(isKeys[0].y, peerPublicKeys[0].y);
-        assertEq(isKeys[1].x, peerPublicKeys[1].x);
-        assertEq(isKeys[1].y, peerPublicKeys[1].y);
-        assertEq(isKeys[2].x, peerPublicKeys[2].x);
-        assertEq(isKeys[2].y, peerPublicKeys[2].y);
 
         // check that parties can read their partyID
         vm.prank(alice);
@@ -191,14 +174,10 @@ contract RpRegistryTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
-        rpRegistryTest.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistryTest.registerOprfPeers(peerAddresses);
     }
 
     function testRegisterParticipantsTwice() public {
@@ -206,13 +185,9 @@ contract RpRegistryTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
         // check that not ready
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.AlreadySubmitted.selector));
-        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses);
     }
 
     function testRegisterParticipantsWrongNumberKeys() public {
@@ -226,31 +201,12 @@ contract RpRegistryTest is Test {
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
 
-        address[] memory peerAddressesCorrect = new address[](3);
-        peerAddressesCorrect[0] = alice;
-        peerAddressesCorrect[1] = bob;
-        peerAddressesCorrect[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeysCorrect = new Types.BabyJubJubElement[](3);
-        peerPublicKeysCorrect[0] = publicKeyAlice;
-        peerPublicKeysCorrect[1] = publicKeyBob;
-        peerPublicKeysCorrect[2] = publicKeyCarol;
-
         address[] memory peerAddressesWrong = new address[](2);
-        peerAddressesCorrect[0] = alice;
-        peerAddressesCorrect[1] = bob;
-        Types.BabyJubJubElement[] memory peerPublicKeysWrong = new Types.BabyJubJubElement[](2);
-        peerPublicKeysCorrect[0] = publicKeyAlice;
-        peerPublicKeysCorrect[1] = publicKeyBob;
-
-        // check that not ready
-        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
-        rpRegistryTest.registerOprfPeers(peerAddressesCorrect, peerPublicKeysWrong);
+        peerAddressesWrong[0] = alice;
+        peerAddressesWrong[1] = bob;
 
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
-        rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysCorrect);
-
-        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
-        rpRegistryTest.registerOprfPeers(peerAddressesWrong, peerPublicKeysWrong);
+        rpRegistryTest.registerOprfPeers(peerAddressesWrong);
     }
 
     function testInitKeyGenResubmit() public {
@@ -278,16 +234,19 @@ contract RpRegistryTest is Test {
         vm.stopPrank();
 
         // do round 1 contributions
-
         vm.prank(bob);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob})
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareAlice, commCoeffs: commCoeffsAlice})
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
         );
         vm.stopPrank();
 
@@ -295,7 +254,10 @@ contract RpRegistryTest is Test {
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(rpId);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareCarol, commCoeffs: commCoeffsCarol})
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+            })
         );
         vm.stopPrank();
 

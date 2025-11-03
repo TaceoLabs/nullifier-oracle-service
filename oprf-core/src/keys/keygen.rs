@@ -3,6 +3,7 @@ use ark_ff::{PrimeField, UniformRand, Zero};
 use itertools::izip;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
+use zeroize::ZeroizeOnDrop;
 
 use crate::shamir;
 
@@ -11,6 +12,7 @@ type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
+#[derive(ZeroizeOnDrop)]
 pub struct KeyGenPoly {
     poly: Vec<ScalarField>,
     comm_share: Affine,

@@ -1,22 +1,27 @@
-use std::{collections::HashMap, path::PathBuf, process::Command, str::FromStr as _};
+use std::{path::PathBuf, process::Command, str::FromStr as _};
 
 use crate::EcDsaPubkeyCompressed;
 use alloy::primitives::Address;
 use oprf_types::RpId;
 use regex::Regex;
 
+use crate::{OPRF_PEER_ADDRESS_0, OPRF_PEER_ADDRESS_1, OPRF_PEER_ADDRESS_2};
+
 pub fn deploy_test_setup(
     rpc_url: &str,
     taceo_admin_address: &str,
     taceo_admin_private_key: &str,
-    env: HashMap<&str, String>,
 ) -> Address {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let cmd = cmd
         .current_dir(dir.join("../contracts"))
         .env("TACEO_ADMIN_ADDRESS", taceo_admin_address)
-        .envs(env)
+        .env("NUM_PEERS", "3")
+        .env("THRESHOLD", "2")
+        .env("ALICE_ADDRESS", OPRF_PEER_ADDRESS_0.to_string())
+        .env("BOB_ADDRESS", OPRF_PEER_ADDRESS_1.to_string())
+        .env("CAROL_ADDRESS", OPRF_PEER_ADDRESS_2.to_string())
         .arg("script")
         .arg("script/test/TestSetup.s.sol")
         .arg("--rpc-url")
@@ -57,7 +62,7 @@ pub fn init_key_gen(
     tracing::debug!("on contract: {key_gen_contract}");
     let cmd = cmd
         .current_dir(dir.join("../contracts/script/deploy/"))
-        .env("RP_REGISTRY_ADDRESS", key_gen_contract.to_string())
+        .env("RP_REGISTRY_PROXY", key_gen_contract.to_string())
         .env("SESSION_ID", rp_id.to_string())
         .env("ECDSA_X", pk_x)
         .env("ECDSA_Y_PARITY", pk_y_parity)

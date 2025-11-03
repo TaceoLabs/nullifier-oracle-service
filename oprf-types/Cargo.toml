@@ -13,6 +13,7 @@ readme.workspace = true
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-serde-compat = { workspace = true }
+eyre = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 oprf-zk = { workspace = true }

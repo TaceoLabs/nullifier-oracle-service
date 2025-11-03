@@ -8,6 +8,7 @@ use std::{
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, U256},
+    providers::{ProviderBuilder, WsConnect},
     signers::local::PrivateKeySigner,
 };
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
@@ -15,9 +16,9 @@ use clap::{Parser, Subcommand};
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
 use oprf_client::{NullifierArgs, OprfQuery, SignedOprfQuery, groth16::Groth16};
-use oprf_service::rp_registry::{RpRegistryProxy, Types};
-use oprf_test::world_id_protocol_mock::InclusionProofResponse;
+use oprf_service::rp_registry::Types;
 use oprf_test::{MOCK_RP_SECRET_KEY, rp_registry_scripts, world_id_protocol_mock::Authenticator};
+use oprf_test::{RpRegistry, world_id_protocol_mock::InclusionProofResponse};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use oprf_zk::{
@@ -130,6 +131,36 @@ pub struct OprfDevClientConfig {
     /// Command
     #[command(subcommand)]
     pub command: Command,
+}
+
+async fn fetch_rp_nullifier_key(
+    rp_id: RpId,
+    wallet: &EthereumWallet,
+    config: &OprfDevClientConfig,
+) -> eyre::Result<RpNullifierKey> {
+    tracing::info!("fetching rp_nullifier_key..");
+    let ws = WsConnect::new(&config.chain_ws_rpc_url); // rpc-url of anvil
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect_ws(ws)
+        .await
+        .context("while connecting to RPC")?;
+    let contract = RpRegistry::new(config.rp_registry_contract, provider.clone());
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let rp_nullifier_key = tokio::time::timeout(config.max_wait_time_key_gen, async move {
+        loop {
+            interval.tick().await;
+            let maybe_rp_nullifier_key =
+                contract.getRpNullifierKey(rp_id.into_inner()).call().await;
+            if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
+                return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+            }
+        }
+    })
+    .await
+    .context("could not fetch rp nullifier key in time")?
+    .context("while polling RP key")?;
+    Ok(rp_nullifier_key)
 }
 
 fn nullifier_args<R: Rng + CryptoRng>(
@@ -459,7 +490,7 @@ async fn stress_test(
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    nodes_telemetry::install_tracing("oprf_dev_client=trace,info");
+    nodes_telemetry::install_tracing("oprf_dev_client=trace,warn");
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .expect("can install");
@@ -492,18 +523,10 @@ async fn main() -> eyre::Result<()> {
 
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
-    let rp_registry = RpRegistryProxy::init(
-        &config.chain_ws_rpc_url,
-        config.rp_registry_contract,
-        wallet.clone(),
-    )
-    .await?;
 
     let (rp_id, rp_nullifier_key) = if let Some(rp_id) = config.rp_id {
         let rp_id = RpId::new(rp_id);
-        let rp_nullifier_key = rp_registry
-            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
-            .await?;
+        let rp_nullifier_key = fetch_rp_nullifier_key(rp_id, &wallet, &config).await?;
         (rp_id, rp_nullifier_key)
     } else {
         let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
@@ -515,9 +538,7 @@ async fn main() -> eyre::Result<()> {
         )?;
         tracing::info!("registered rp with rp_id: {rp_id}");
 
-        let rp_nullifier_key = rp_registry
-            .fetch_rp_nullifier_key(rp_id, config.max_wait_time_key_gen)
-            .await?;
+        let rp_nullifier_key = fetch_rp_nullifier_key(rp_id, &wallet, &config).await?;
         (rp_id, rp_nullifier_key)
     };
 

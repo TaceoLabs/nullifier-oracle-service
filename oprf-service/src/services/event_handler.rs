@@ -1,6 +1,6 @@
 //! This module provides [`ChainEventHandler`], a service that subscribes
 //! to key generation events via [`KeyGenEventListenerService`].
-//! It processes each event sequentially using [`DLogSecretGenService`] and [`CryptoDevice`], then reports results back.
+//! It processes each event sequentially using [`DLogSecretGenService`] and [`RpMaterialStore`], then reports results back.
 //!
 //! **Event Flow:**
 //! 1. Subscribes to event stream.
@@ -16,8 +16,6 @@
 //! - Any events already received are processed before shutdown.
 //! - On error, triggers cancellation for graceful exit.
 
-use std::sync::Arc;
-
 use eyre::Context as _;
 use oprf_types::chain::ChainEvent;
 use oprf_types::chain::ChainEventResult;
@@ -30,7 +28,15 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::key_event_watcher::KeyGenEventListenerService;
-use crate::services::{crypto_device::CryptoDevice, secret_gen::DLogSecretGenService};
+use crate::services::rp_material_store::RpMaterialStore;
+use crate::services::secret_gen::DLogSecretGenService;
+use crate::services::secret_manager::SecretManagerService;
+use crate::services::secret_manager::StoreDLogShare;
+
+pub enum ReportTarget {
+    Chain(ChainEventResult),
+    SecretManager(StoreDLogShare),
+}
 
 /// Handle for the chain event processing task.
 ///
@@ -44,22 +50,31 @@ impl ChainEventHandler {
     ///
     /// # Arguments
     /// * `watcher` - The [`KeyGenEventListenerService`] used to read and report events from the chain.
-    /// * `crypto_device` - The cryptographic device used to process secret shares.
+    /// * `rp_material_store` - Holds the [`crate::services::rp_material_store::RpMaterial`] for all RPs.
     /// * `cancellation_token` - Token used to signal shutdown of the handler task.
+    /// * `key_gen_material` - The ZK material for computing the proofs for key generation.
     ///
     /// # Returns
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
     pub(crate) fn spawn(
         watcher: KeyGenEventListenerService,
-        crypto_device: Arc<CryptoDevice>,
+        rp_material_store: RpMaterialStore,
+        secret_manager: SecretManagerService,
         cancellation_token: CancellationToken,
         key_gen_material: Groth16Material,
     ) -> ChainEventHandler {
         let dlog_secret_gen_service =
-            DLogSecretGenService::init(Arc::clone(&crypto_device), key_gen_material);
+            DLogSecretGenService::init(rp_material_store, key_gen_material);
 
         Self(tokio::task::spawn(async move {
-            match run(watcher, dlog_secret_gen_service, cancellation_token.clone()).await {
+            match run(
+                watcher,
+                secret_manager,
+                dlog_secret_gen_service,
+                cancellation_token.clone(),
+            )
+            .await
+            {
                 Ok(_) => tracing::info!("shutdown of ChainEventHandler"),
                 Err(err) => tracing::error!("ChainEventHandler encountered an error: {err:?}"),
             }
@@ -92,6 +107,7 @@ impl ChainEventHandler {
 /// - The event handling fails
 async fn run(
     event_listener: KeyGenEventListenerService,
+    secret_manager: SecretManagerService,
     mut secret_gen: DLogSecretGenService,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
@@ -110,13 +126,19 @@ async fn run(
             }
         };
 
-        let result = handle_chain_event(&mut secret_gen, event)
-            .await
-            .context("while handling chain event")?;
-        event_listener
-            .report_result(result)
-            .await
-            .context("while reporting chain result")?;
+        let report_target =
+            tokio::task::block_in_place(|| handle_chain_event(&mut secret_gen, event))
+                .context("while handling chain event")?;
+        match report_target {
+            ReportTarget::Chain(chain_event_result) => event_listener
+                .report_result(chain_event_result)
+                .await
+                .context("while reporting chain result")?,
+            ReportTarget::SecretManager(store_dlog_share) => secret_manager
+                .store_dlog_share(store_dlog_share)
+                .await
+                .context("while storing secret")?,
+        }
     }
 }
 
@@ -128,44 +150,40 @@ async fn run(
 ///
 /// # Errors
 /// Returns an error if processing the event fails.
-pub(crate) async fn handle_chain_event(
+pub(crate) fn handle_chain_event(
     secret_gen: &mut DLogSecretGenService,
     event: ChainEvent,
-) -> eyre::Result<ChainEventResult> {
+) -> eyre::Result<ReportTarget> {
     match event {
         ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound1(
-                    secret_gen.round1(rp_id, threshold),
-                ))
-            })
+            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound1(
+                secret_gen.round1(rp_id, threshold),
+            )))
         }
-        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound2(
-                    secret_gen.round2(rp_id).context("while doing round2")?,
-                ))
-            })
+
+        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, peers }) => {
+            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound2(
+                secret_gen
+                    .round2(rp_id, peers)
+                    .context("while doing round2")?,
+            )))
         }
         ChainEvent::SecretGenRound3(SecretGenRound3Event { rp_id, ciphers }) => {
-            tokio::task::block_in_place(|| {
-                Ok(ChainEventResult::SecretGenRound3(
-                    secret_gen
-                        .round3(rp_id, ciphers)
-                        .context("while doing round3")?,
-                ))
-            })
+            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound3(
+                secret_gen
+                    .round3(rp_id, ciphers)
+                    .context("while doing round3")?,
+            )))
         }
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
             rp_id,
             rp_public_key,
             rp_nullifier_key,
         }) => {
-            secret_gen
+            let store_dlog_share = secret_gen
                 .finalize(rp_id, rp_public_key, rp_nullifier_key)
-                .await
                 .context("while finalizing secret-gen")?;
-            Ok(ChainEventResult::NothingToReport)
+            Ok(ReportTarget::SecretManager(store_dlog_share))
         }
     }
 }

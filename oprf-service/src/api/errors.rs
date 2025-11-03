@@ -20,7 +20,8 @@ use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::services::{
-    crypto_device::CryptoDeviceError, merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
+    merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
+    rp_material_store::RpMaterialStoreError,
 };
 
 /// A structured API error returned to clients.
@@ -75,7 +76,9 @@ impl From<OprfServiceError> for ApiErrors {
         match value {
             OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
-            OprfServiceError::CryptoDevice(crypto_device_error) => Self::from(crypto_device_error),
+            OprfServiceError::RpMaterialStoreError(rp_material_error) => {
+                Self::from(rp_material_error)
+            }
             OprfServiceError::TimeStampDifference => {
                 ApiErrors::BadRequest("the time stamp difference is too large".to_string())
             }
@@ -93,19 +96,21 @@ impl From<OprfServiceError> for ApiErrors {
     }
 }
 
-impl From<CryptoDeviceError> for ApiErrors {
-    fn from(value: CryptoDeviceError) -> Self {
+impl From<RpMaterialStoreError> for ApiErrors {
+    fn from(value: RpMaterialStoreError) -> Self {
         match value {
-            CryptoDeviceError::NoSuchRp(rp_id) => {
+            RpMaterialStoreError::NoSuchRp(rp_id) => {
                 ApiErrors::NotFound(format!("Cannot find RP with id: {rp_id}"))
             }
-            CryptoDeviceError::NonceSignatureError(error) => {
+            RpMaterialStoreError::NonceSignatureError(error) => {
                 ApiErrors::BadRequest(format!("Invalid signature: {error}"))
             }
-            CryptoDeviceError::UnknownRpShareEpoch(key_identifier) => ApiErrors::NotFound(format!(
-                "Cannot find share with epoch {} for RP with id: {}",
-                key_identifier.share_epoch, key_identifier.rp_id
-            )),
+            RpMaterialStoreError::UnknownRpShareEpoch(key_identifier) => {
+                ApiErrors::NotFound(format!(
+                    "Cannot find share with epoch {} for RP with id: {}",
+                    key_identifier.share_epoch, key_identifier.rp_id
+                ))
+            }
         }
     }
 }

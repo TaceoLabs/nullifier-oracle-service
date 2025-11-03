@@ -112,11 +112,7 @@ contract RpRegistryUpgradeTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
-        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses);
     }
 
     function testUpgrade() public {
@@ -132,13 +128,17 @@ contract RpRegistryUpgradeTest is Test {
         // do round 1 contributions
         vm.prank(bob);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob})
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareAlice, commCoeffs: commCoeffsAlice})
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
         );
         vm.stopPrank();
 
@@ -146,7 +146,10 @@ contract RpRegistryUpgradeTest is Test {
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(rpId);
         rpRegistry.addRound1Contribution(
-            rpId, Types.Round1Contribution({commShare: commShareCarol, commCoeffs: commCoeffsCarol})
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+            })
         );
         vm.stopPrank();
 
@@ -221,13 +224,17 @@ contract RpRegistryUpgradeTest is Test {
         // do round 1 contributions
         vm.prank(bob);
         rpRegistry.addRound1Contribution(
-            newRpId, Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob})
+            newRpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
         rpRegistry.addRound1Contribution(
-            newRpId, Types.Round1Contribution({commShare: commShareAlice, commCoeffs: commCoeffsAlice})
+            newRpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
         );
         vm.stopPrank();
 
@@ -235,7 +242,10 @@ contract RpRegistryUpgradeTest is Test {
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(newRpId);
         rpRegistry.addRound1Contribution(
-            newRpId, Types.Round1Contribution({commShare: commShareCarol, commCoeffs: commCoeffsCarol})
+            newRpId,
+            Types.Round1Contribution({
+                commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+            })
         );
         vm.stopPrank();
 

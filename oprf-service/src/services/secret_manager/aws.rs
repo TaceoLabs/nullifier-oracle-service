@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
@@ -9,14 +8,13 @@ use oprf_types::{RpId, ShareEpoch};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::services::crypto_device::dlog_storage::RpMaterial;
-use crate::services::secret_manager::{DLogShare, PeerPrivateKey, SecretManager};
+use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
+use crate::services::secret_manager::{DLogShare, SecretManager, StoreDLogShare};
 
 /// AWS Secret Manager client wrapper.
 #[derive(Debug, Clone)]
 pub(crate) struct AwsSecretManager {
     client: aws_sdk_secretsmanager::Client,
-    private_key_secret_id: String,
     rp_secret_id_prefix: String,
 }
 
@@ -25,14 +23,13 @@ impl AwsSecretManager {
     ///
     /// Loads AWS configuration from the environment and wraps the client
     /// in a `SecretManagerService`.
-    pub(crate) async fn init(private_key_secret_id: String, rp_secret_id_prefix: String) -> Self {
+    pub(crate) async fn init(rp_secret_id_prefix: String) -> Self {
         // loads the latest defaults for aws
         tracing::info!("initializing AWS secret manager from env...");
         let aws_config = aws_config::load_from_env().await;
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
         AwsSecretManager {
             client,
-            private_key_secret_id,
             rp_secret_id_prefix,
         }
     }
@@ -96,25 +93,7 @@ impl From<AwsRpSecret> for RpMaterial {
 #[async_trait]
 impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip_all)]
-    async fn load_secrets(&self) -> eyre::Result<(PeerPrivateKey, HashMap<RpId, RpMaterial>)> {
-        tracing::info!(
-            "loading secret key from AWS with name {}...",
-            self.private_key_secret_id
-        );
-        let private_key = self
-            .client
-            .get_secret_value()
-            .secret_id(&self.private_key_secret_id)
-            .send()
-            .await
-            .context("while retrieving secret key")?
-            .secret_string()
-            .expect("is string and not binary")
-            .to_owned();
-        let private_key = ark_babyjubjub::Fr::from_str(&private_key)
-            .map_err(|_| eyre::eyre!("Cannot parse private key from AWS"))?;
-        let private_key = PeerPrivateKey::from(private_key);
-
+    async fn load_secrets(&self) -> eyre::Result<RpMaterialStore> {
         tracing::debug!(
             "loading rp secrets with prefix: {}",
             self.rp_secret_id_prefix
@@ -164,17 +143,17 @@ impl SecretManager for AwsSecretManager {
                 break;
             }
         }
-        Ok((private_key, rp_materials))
+        Ok(RpMaterialStore::new(rp_materials))
     }
 
-    #[instrument(level = "info", skip(self, public_key, share))]
-    async fn store_dlog_share(
-        &self,
-        rp_id: RpId,
-        public_key: k256::PublicKey,
-        rp_nullifier_key: RpNullifierKey,
-        share: DLogShare,
-    ) -> eyre::Result<()> {
+    #[instrument(level = "info", skip_all)]
+    async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
+        let StoreDLogShare {
+            rp_id,
+            public_key,
+            rp_nullifier_key,
+            share,
+        } = store;
         let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
         let secret = AwsRpSecret::new(rp_id, public_key, rp_nullifier_key, share);
         self.client

@@ -16,8 +16,10 @@ use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::Types;
 use oprf_test::world_id_protocol_mock::Authenticator;
-use oprf_test::{EcDsaPubkeyCompressed, RpRegistry};
-use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
+use oprf_test::{
+    EcDsaPubkeyCompressed, MOCK_RP_SECRET_KEY, RpRegistry, TACEO_ADMIN_ADDRESS,
+    TACEO_ADMIN_PRIVATE_KEY,
+};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
@@ -50,8 +52,11 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
 
     println!("Deploying RpRegistry contract...");
-    let rp_registry_contract =
-        test_setup_utils::deploy_and_keygen(&anvil.ws_endpoint(), "oprf/sk", true).await?;
+    let rp_registry_contract = rp_registry_scripts::deploy_test_setup(
+        &anvil.ws_endpoint(),
+        &TACEO_ADMIN_ADDRESS.to_string(),
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
 
     println!("Starting AuthTreeIndexer...");
     let auth_tree_indexer =

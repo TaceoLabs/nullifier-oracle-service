@@ -1,8 +1,9 @@
-//! Distributed Logarithm (DLog) Secret Generation Service
-//!
 //! This service handles the distributed secret generation protocol for RPs.
-//! It maintains temporary state for the ongoing key generation rounds
-//! and interacts with the [`CryptoDevice`] for cryptographic operations.
+//! It maintains toxic waste for ongoing key generation rounds. The service handles the destruction of this toxic waste during the lifecycle of key generation.
+//!
+//! Currently, there is no timeout for a single key generation. Therefore, the toxic waste will not be cleaned up and will remain in memory.
+//!
+//! On the other hand, the toxic waste is not persisted anywhere other than RAM. This means that if an OPRF peer shuts down during key generation, the key generation cannot be completed, as the data is lost.
 //!
 //! **Important:** This service is **not thread-safe**. It is intended to be used
 //! only in contexts where a single dedicated task owns the struct. No internal
@@ -12,21 +13,37 @@
 //! We refer to [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf) for more information about the OPRF-nullifier
 //! generation protocol.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
+use alloy::primitives::U256;
+use ark_ec::{AffineRepr as _, CurveGroup as _};
+use ark_ff::{BigInt, UniformRand as _};
 use eyre::{Context, ContextCompat};
+use groth16::{CircomReduction, Groth16};
+use itertools::{Itertools as _, izip};
 use oprf_core::keys::keygen::KeyGenPoly;
 use oprf_types::{
     RpId,
     chain::{
         SecretGenRound1Contribution, SecretGenRound2Contribution, SecretGenRound3Contribution,
     },
-    crypto::{RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCommitment},
+    crypto::{
+        PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext,
+        RpSecretGenCiphertexts, RpSecretGenCommitment,
+    },
 };
 use oprf_zk::Groth16Material;
+use rand::{CryptoRng, Rng};
 use tracing::instrument;
+use zeroize::ZeroizeOnDrop;
 
-use crate::services::crypto_device::{CryptoDevice, DLogShare};
+use crate::services::{
+    rp_material_store::{DLogShare, RpMaterialStore},
+    secret_manager::StoreDLogShare,
+};
+
+#[cfg(test)]
+mod tests;
 
 /// Service for managing the distributed secret generation protocol.
 ///
@@ -35,23 +52,105 @@ use crate::services::crypto_device::{CryptoDevice, DLogShare};
 ///
 /// **Note:** Must only be used in a single-owner context. Do not share across tasks.
 pub(crate) struct DLogSecretGenService {
-    round1: HashMap<RpId, KeyGenPoly>,
+    toxic_waste_round1: HashMap<RpId, ToxicWasteRound1>,
+    toxic_waste_round2: HashMap<RpId, ToxicWasteRound2>,
     finished_shares: HashMap<RpId, DLogShare>,
-    crypto_device: Arc<CryptoDevice>,
     key_gen_material: Groth16Material,
+    rp_material_store: RpMaterialStore,
+}
+
+/// The ephemeral private key of an OPRF peer.
+///
+/// Used internally to compute Diffie-Hellman for key-generation operations.
+/// Not `Debug`/`Display` to avoid accidental leaks.
+///
+/// **Note**: Don't reuse a key. One key per keygen.
+#[derive(ZeroizeOnDrop)]
+struct PeerPrivateKey(ark_babyjubjub::Fr);
+
+/// The toxic waste generated in round 1 of the key generation protocol.
+///
+/// Contains the full polynomial and the ephemeral private key for a single key generation.
+struct ToxicWasteRound1 {
+    poly: KeyGenPoly,
+    sk: PeerPrivateKey,
+}
+
+/// The toxic waste generated in round 2 of the key generation protocol.
+///
+/// Contains the ephemeral private key for a single key generation and the associated public keys of all peers.
+/// The public key list is not toxic waste per se, but for simplicity we store it together with the private key.
+struct ToxicWasteRound2 {
+    peers: PeerPublicKeyList,
+    sk: PeerPrivateKey,
+}
+
+impl PeerPrivateKey {
+    /// Generates a fresh private-key to be used in a single DLog generation.
+    /// **Note**: do not reuse this key.
+    fn generate<R: Rng + CryptoRng>(r: &mut R) -> Self {
+        Self(ark_babyjubjub::Fr::rand(r))
+    }
+    /// Computes the associated [`PeerPublicKey`] by multiplying the private key with the generator.
+    pub fn get_public_key(&self) -> PeerPublicKey {
+        PeerPublicKey::new_unchecked(
+            (ark_babyjubjub::EdwardsAffine::generator() * self.0).into_affine(),
+        )
+    }
+
+    /// Returns the inner scalar value of the private key.
+    pub fn inner(&self) -> &ark_babyjubjub::Fr {
+        &self.0
+    }
+}
+
+impl ToxicWasteRound1 {
+    /// Creates a new instance of `ToxicWasteRound1`.
+    ///
+    /// Generates a secret-sharing polynomial and an ephemeral private key for the first round of the key generation protocol.
+    ///
+    /// **Note:** do not reuse the toxic waste.
+    ///
+    /// # Arguments
+    ///
+    /// * `degree` - The degree of the polynomial to be generated (relates to threshold settings).
+    /// * `rng` - A mutable reference to a cryptographically secure random number generator.
+    fn new<R: Rng + CryptoRng>(degree: usize, rng: &mut R) -> Self {
+        let poly = KeyGenPoly::keygen(rng, degree);
+        let sk = PeerPrivateKey::generate(rng);
+        Self { poly, sk }
+    }
+
+    /// Advances to the second round of key generation.
+    ///
+    /// Consumes `self` and combines the secret material from round one with the public keys of all peers.
+    ///
+    /// **Note:** do not reuse the toxic waste.
+    ///
+    /// # Arguments
+    ///
+    /// * `peers` - A list of public keys for all peers involved in the key generation session.
+    ///
+    /// # Returns
+    ///
+    /// A `ToxicWasteRound2` instance containing the ephemeral private key and the peer public key list.
+    fn next(self, peers: PeerPublicKeyList) -> ToxicWasteRound2 {
+        ToxicWasteRound2 { peers, sk: self.sk }
+    }
 }
 
 impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
     pub(crate) fn init(
-        crypto_device: Arc<CryptoDevice>,
+        rp_material_store: RpMaterialStore,
         key_gen_material: Groth16Material,
     ) -> Self {
         Self {
-            crypto_device,
-            round1: HashMap::new(),
+            toxic_waste_round1: HashMap::new(),
+            toxic_waste_round2: HashMap::new(),
             finished_shares: HashMap::new(),
             key_gen_material,
+            rp_material_store,
         }
     }
 
@@ -62,18 +161,19 @@ impl DLogSecretGenService {
     ///
     /// # Arguments
     /// * `rp_id` - Identifier of the RP for which the secret is being generated.
-    /// * `degree` - Degree of the polynomial to generate (threshold).
+    /// * `threshold` - The threshold of the MPC-protocol.
     #[instrument(level = "info", skip(self))]
     pub(crate) fn round1(&mut self, rp_id: RpId, threshold: u16) -> SecretGenRound1Contribution {
         tracing::info!("secret gen round1..");
         let mut rng = rand::thread_rng();
         let degree = usize::from(threshold - 1);
-        let poly = KeyGenPoly::keygen(&mut rng, degree);
+        let toxic_waste = ToxicWasteRound1::new(degree, &mut rng);
         let contribution = RpSecretGenCommitment {
-            comm_share: poly.get_pk_share(),
-            comm_coeffs: poly.get_coeff_commitment(),
+            comm_share: toxic_waste.poly.get_pk_share(),
+            comm_coeffs: toxic_waste.poly.get_coeff_commitment(),
+            eph_pub_key: toxic_waste.sk.get_public_key(),
         };
-        let old_value = self.round1.insert(rp_id, poly);
+        let old_value = self.toxic_waste_round1.insert(rp_id, toxic_waste);
         // TODO handle this more gracefully
         assert!(
             old_value.is_none(),
@@ -94,12 +194,26 @@ impl DLogSecretGenService {
     /// # Arguments
     /// * `rp_id` - Identifier of the RP for which the secret is being generated.
     /// * `peers` - List of public keys for peers participating in the protocol.
-    pub(crate) fn round2(&mut self, rp_id: RpId) -> eyre::Result<SecretGenRound2Contribution> {
-        let my_poly = self.round1.remove(&rp_id).expect("todo how to handle this");
-        let contribution = self
-            .crypto_device
-            .compute_keygen_proof_max_degree1_parties3(&self.key_gen_material, &my_poly)
-            .context("while computing proof for round2")?;
+    pub(crate) fn round2(
+        &mut self,
+        rp_id: RpId,
+        peers: PeerPublicKeyList,
+    ) -> eyre::Result<SecretGenRound2Contribution> {
+        // check that degree is 1 and num_parties is 3
+        if peers.len() != 3 {
+            eyre::bail!("only can do num_parties 3");
+        }
+        let toxic_waste_r1 = self
+            .toxic_waste_round1
+            .remove(&rp_id)
+            .expect("todo how to handle this");
+        let (contribution, toxix_waste_r2) = compute_keygen_proof_max_degree1_parties3(
+            &self.key_gen_material,
+            toxic_waste_r1,
+            peers,
+        )
+        .context("while computing proof for round2")?;
+        self.toxic_waste_round2.insert(rp_id, toxix_waste_r2);
         Ok(SecretGenRound2Contribution {
             rp_id,
             contribution,
@@ -108,8 +222,6 @@ impl DLogSecretGenService {
 
     /// Finalizes secret generation by decrypting received ciphertexts and
     /// computing the final secret share for this party.
-    ///
-    /// The resulting share is registered in the [`CryptoDevice`] for later use.
     ///
     /// # Arguments
     /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
@@ -121,9 +233,11 @@ impl DLogSecretGenService {
         ciphers: Vec<RpSecretGenCiphertext>,
     ) -> eyre::Result<SecretGenRound3Contribution> {
         tracing::info!("calling round3 with {}", ciphers.len());
-        let share = self
-            .crypto_device
-            .decrypt_key_gen_ciphertexts(ciphers)
+        let toxic_waste_r2 = self
+            .toxic_waste_round2
+            .remove(&rp_id)
+            .expect("todo what if not here?");
+        let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2)
             .context("while computing DLogShare")?;
         // We need to store the computed share - as soon as we get ready
         // event, we will store the share inside the crypto-device.
@@ -131,308 +245,187 @@ impl DLogSecretGenService {
         Ok(SecretGenRound3Contribution { rp_id })
     }
 
+    /// Marks the generated secret as finished and stores it to the [`RpMaterialStore`] along with the provided ecdsa public key and nullifier key.
+    ///
+    /// # Arguments
+    /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
+    /// * `rp_public_key` - The ecdsa key to verify nonces of the RP.
+    /// * `rp_nullifier_key` - The public point P of the created secret x, where P=xG and G is the generator of BabyJubJub.
     #[instrument(level = "info", skip(self, rp_public_key, rp_nullifier_key))]
-    pub(crate) async fn finalize(
+    pub(crate) fn finalize(
         &mut self,
         rp_id: RpId,
         rp_public_key: k256::PublicKey,
         rp_nullifier_key: RpNullifierKey,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<StoreDLogShare> {
         tracing::info!("calling finalize");
         let dlog_share = self
             .finished_shares
             .remove(&rp_id)
             .context("cannot find computed DLogShare")?;
-        self.crypto_device
-            .register_nullifier_share(rp_id, rp_public_key.into(), rp_nullifier_key, dlog_share)
-            .await
-            .context("while persisting DLogShare")?;
-        Ok(())
+        self.rp_material_store.add(
+            rp_id,
+            rp_public_key.into(),
+            rp_nullifier_key,
+            dlog_share.clone(),
+        );
+        Ok(StoreDLogShare {
+            rp_id,
+            public_key: rp_public_key,
+            rp_nullifier_key,
+            share: dlog_share,
+        })
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
+/// Decrypts a key-generation ciphertext using the private key.
+///
+/// Returns the share of the peer's polynomial or an error if decryption fails.
+fn decrypt_key_gen_ciphertexts(
+    ciphers: Vec<RpSecretGenCiphertext>,
+    toxic_waste: ToxicWasteRound2,
+) -> eyre::Result<DLogShare> {
+    let ToxicWasteRound2 { peers, sk } = toxic_waste;
+    // In some later version, we maybe need some meaningful way
+    // to tell which party produced a wrong ciphertext. Currently,
+    // we trust the smart-contract to verify the proof, therefore
+    // it should never happen that this here fails. If yes, there is
+    // a bug.
+    //
+    // In some future version, we might have an optimistic approach
+    // where we don't verify the proof and need to pinpoint the
+    // scoundrel.
+    let shares = ciphers
+        .into_iter()
+        .enumerate()
+        .map(|(idx, cipher)| {
+            let RpSecretGenCiphertext {
+                nonce,
+                cipher,
+                commitment,
+            } = cipher;
+            let their_pk = peers[idx].inner();
+            let share = KeyGenPoly::decrypt_share(sk.inner(), their_pk, cipher, nonce)
+                .context("cannot decrypt share ciphertext from peer")?;
+            // check commitment
+            let is_commitment = (ark_babyjubjub::EdwardsAffine::generator() * share).into_affine();
+            // This is actually not possible if Smart Contract verified proof
+            if is_commitment == commitment {
+                eyre::Ok(share)
+            } else {
+                eyre::bail!("Commitment for {idx} wrong");
+            }
+        })
+        .collect::<eyre::Result<Vec<_>>>()?;
+    Ok(DLogShare::from(KeyGenPoly::accumulate_shares(&shares)))
+}
 
-    use ark_ec::{CurveGroup as _, PrimeGroup};
-    use ark_ff::UniformRand as _;
-    use itertools::Itertools;
-    use oprf_types::{
-        ShareEpoch,
-        crypto::{PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertexts},
-    };
-    use rand::Rng;
+fn compute_keygen_proof_max_degree1_parties3(
+    key_gen_material: &Groth16Material,
+    toxic_waste: ToxicWasteRound1,
+    peers: PeerPublicKeyList,
+) -> eyre::Result<(RpSecretGenCiphertexts, ToxicWasteRound2)> {
+    // compute the nonces for every party
+    assert_eq!(
+        peers.len(),
+        3,
+        "amount peers must be checked before calling this function"
+    );
+    let pks = peers.clone().into_inner();
+    let mut rng = rand::thread_rng();
+    let nonces = (0..pks.len())
+        .map(|_| ark_babyjubjub::Fq::rand(&mut rng))
+        .collect_vec();
 
-    use crate::services::{crypto_device::PeerPrivateKey, secret_manager::test::TestSecretManager};
+    let pks = pks
+        .into_iter()
+        .flat_map(|pk| {
+            let p = pk.inner();
+            [p.x.into(), p.y.into()]
+        })
+        .collect::<Vec<U256>>();
 
-    use super::*;
+    let coeffs = toxic_waste
+        .poly
+        .coeffs()
+        .iter()
+        .map(|coeff| coeff.into())
+        .collect::<Vec<U256>>();
 
-    async fn secret_manager_and_dlog_secret_gen(
-        private_key: PeerPrivateKey,
-        public_key_list: PeerPublicKeyList,
-        key_gen_material: Groth16Material,
-    ) -> eyre::Result<(Arc<TestSecretManager>, DLogSecretGenService)> {
-        let secret_manager = Arc::new(TestSecretManager::new(private_key, HashMap::new()));
-        let secret_manager_ = Arc::clone(&secret_manager);
-        let crypto_device = Arc::new(CryptoDevice::init(secret_manager, public_key_list).await?);
-        let dlog_secret_gen = DLogSecretGenService::init(crypto_device, key_gen_material);
-        Ok((secret_manager_, dlog_secret_gen))
+    // build the input for the graph
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        String::from("degree"),
+        vec![U256::from(toxic_waste.poly.degree())],
+    );
+    inputs.insert(String::from("my_sk"), vec![toxic_waste.sk.inner().into()]);
+    inputs.insert(String::from("pks"), pks);
+    inputs.insert(String::from("poly"), coeffs);
+    inputs.insert(
+        String::from("nonces"),
+        nonces.iter().map(|n| n.into()).collect_vec(),
+    );
+
+    let witness = witness::calculate_witness(
+        inputs,
+        &key_gen_material.graph,
+        Some(&key_gen_material.bbfs),
+    )
+    .context("while doing witness extension")?
+    .into_iter()
+    .map(|v| ark_bn254::Fr::from(BigInt(v.into_limbs())))
+    .collect_vec();
+
+    // proof
+    let mut rng = rand::thread_rng();
+    let r = ark_bn254::Fr::rand(&mut rng);
+    let s = ark_bn254::Fr::rand(&mut rng);
+    let proof = Groth16::prove::<CircomReduction>(
+        &key_gen_material.pk,
+        r,
+        s,
+        &key_gen_material.matrices,
+        &witness,
+    )
+    .context("while computing key-gen proof")?;
+
+    let public_inputs = witness[1..key_gen_material.matrices.num_instance_variables].to_vec();
+
+    key_gen_material
+        .verify_proof(&proof, &public_inputs)
+        .context("while verifying key gen proof")?;
+
+    // parse the outputs from the public_input
+    let pk_computed = ark_babyjubjub::EdwardsAffine::new(public_inputs[0], public_inputs[1]);
+    // parse commitment to share
+    let comm_share_computed =
+        ark_babyjubjub::EdwardsAffine::new(public_inputs[2], public_inputs[3]);
+
+    // parse commitment to coefficients
+    let comm_coeffs_computed = public_inputs[4];
+
+    let ciphertexts = public_inputs[5..=7].iter();
+
+    let comm_plains = public_inputs[8..=13]
+        .chunks_exact(2)
+        .map(|coords| ark_babyjubjub::EdwardsAffine::new(coords[0], coords[1]));
+
+    let rp_ciphertexts = izip!(ciphertexts, comm_plains, nonces)
+        .map(|(cipher, comm, nonce)| RpSecretGenCiphertext::new(*cipher, comm, nonce))
+        .collect_vec();
+
+    if pk_computed != toxic_waste.sk.get_public_key().inner() {
+        eyre::bail!("computed public key does not match with my own!");
     }
 
-    fn build_public_inputs(
-        degree: u16,
-        pk: PeerPublicKey,
-        contribution: &RpSecretGenCiphertexts,
-        peer_keys_flattened: &[ark_bn254::Fr],
-        commitments: RpSecretGenCommitment,
-    ) -> Vec<ark_babyjubjub::Fq> {
-        // public input is:
-        // 1) PublicKey from sender (Affine Point Babyjubjub)
-        // 2) Commitment to share (Affine Point Babyjubjub)
-        // 3) Commitment to coeffs (Basefield Babyjubjub)
-        // 4) Ciphertexts for peers (in this case 3 Basefield BabyJubJub)
-        // 5) Commitments to plaintexts (in this case 3 Affine Points BabyJubJub)
-        // 6) Degree (Basefield BabyJubJub)
-        // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
-        // 8) Nonces (in this case 3 Basefield BabyJubJub)
-        let mut ciphers = Vec::with_capacity(3);
-        let mut comm_ciphers = Vec::with_capacity(3);
-        let mut nonces = Vec::with_capacity(3);
-        for cipher in contribution.ciphers.iter() {
-            ciphers.push(cipher.cipher);
-            comm_ciphers.push(cipher.commitment.x);
-            comm_ciphers.push(cipher.commitment.y);
-            nonces.push(cipher.nonce);
-        }
-        let mut public_inputs = Vec::with_capacity(24);
-        public_inputs.push(pk.inner().x);
-        public_inputs.push(pk.inner().y);
-        public_inputs.push(commitments.comm_share.x);
-        public_inputs.push(commitments.comm_share.y);
-        public_inputs.push(commitments.comm_coeffs);
-        public_inputs.extend(ciphers);
-        public_inputs.extend(comm_ciphers);
-        public_inputs.push(ark_babyjubjub::Fq::from(degree));
-        public_inputs.extend(peer_keys_flattened.iter());
-        public_inputs.extend(nonces);
-        public_inputs
+    if comm_share_computed != toxic_waste.poly.get_pk_share() {
+        eyre::bail!("computed commitment to share does not match with my own!");
     }
 
-    #[tokio::test]
-    async fn test_secret_gen() -> eyre::Result<()> {
-        let mut rng = rand::thread_rng();
-        let rp_id = RpId::new(rng.r#gen());
-        let threshold = 2;
-        let graph =
-            PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_graph.bin");
-        let graph = std::fs::read(graph)?;
-        let key_gen_zkey =
-            PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join("../circom/keygen_13.zkey");
-        let key_gen_zkey = std::fs::read(key_gen_zkey)?;
-        let key_gen_material = Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?;
-
-        let sk0 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
-        let sk1 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
-        let sk2 = PeerPrivateKey::from(ark_babyjubjub::Fr::rand(&mut rng));
-
-        let peers = PeerPublicKeyList::from(vec![
-            sk0.get_public_key(),
-            sk1.get_public_key(),
-            sk2.get_public_key(),
-        ]);
-
-        let (secret_manager0, mut dlog_secret_gen0) = secret_manager_and_dlog_secret_gen(
-            sk0,
-            peers.clone(),
-            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
-        )
-        .await?;
-        let (secret_manager1, mut dlog_secret_gen1) = secret_manager_and_dlog_secret_gen(
-            sk1,
-            peers.clone(),
-            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
-        )
-        .await?;
-        let (secret_manager2, mut dlog_secret_gen2) = secret_manager_and_dlog_secret_gen(
-            sk2,
-            peers.clone(),
-            Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?,
-        )
-        .await?;
-
-        let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, threshold);
-        let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, threshold);
-        let dlog_secret_gen2_round1 = dlog_secret_gen2.round1(rp_id, threshold);
-
-        let commitments0 = dlog_secret_gen0_round1.contribution.clone();
-        let commitments1 = dlog_secret_gen1_round1.contribution.clone();
-        let commitments2 = dlog_secret_gen2_round1.contribution.clone();
-
-        let round1_contributions = [
-            dlog_secret_gen0_round1.contribution,
-            dlog_secret_gen1_round1.contribution,
-            dlog_secret_gen2_round1.contribution,
-        ];
-        let should_public_key = round1_contributions.iter().fold(
-            ark_babyjubjub::EdwardsAffine::zero(),
-            |acc, contribution| (acc + contribution.comm_share).into_affine(),
-        );
-
-        let peer_keys_flattened = peers
-            .clone()
-            .into_iter()
-            .flat_map(|p| [p.inner().x, p.inner().y])
-            .collect_vec();
-
-        let dlog_secret_gen0_round2 = dlog_secret_gen0
-            .round2(rp_id)
-            .context("while doing round2")?;
-        let dlog_secret_gen1_round2 = dlog_secret_gen1
-            .round2(rp_id)
-            .context("while doing round2")?;
-        let dlog_secret_gen2_round2 = dlog_secret_gen2
-            .round2(rp_id)
-            .context("while doing round2")?;
-
-        assert_eq!(dlog_secret_gen0_round2.rp_id, rp_id);
-        assert_eq!(dlog_secret_gen1_round2.rp_id, rp_id);
-        assert_eq!(dlog_secret_gen2_round2.rp_id, rp_id);
-        let peer_keys = peers.clone().into_inner();
-        // verify the proofs
-        // build public inputs for proof0
-        let public_inputs0 = build_public_inputs(
-            threshold - 1,
-            peer_keys[0],
-            &dlog_secret_gen0_round2.contribution,
-            &peer_keys_flattened,
-            commitments0,
-        );
-        let public_inputs1 = build_public_inputs(
-            threshold - 1,
-            peer_keys[1],
-            &dlog_secret_gen1_round2.contribution,
-            &peer_keys_flattened,
-            commitments1,
-        );
-        let public_inputs2 = build_public_inputs(
-            threshold - 1,
-            peer_keys[2],
-            &dlog_secret_gen2_round2.contribution,
-            &peer_keys_flattened,
-            commitments2,
-        );
-        let proof0 = dlog_secret_gen0_round2.contribution.proof;
-        let proof1 = dlog_secret_gen1_round2.contribution.proof;
-        let proof2 = dlog_secret_gen2_round2.contribution.proof;
-        key_gen_material.verify_proof(&proof0.into(), &public_inputs0)?;
-        key_gen_material.verify_proof(&proof1.into(), &public_inputs1)?;
-        key_gen_material.verify_proof(&proof2.into(), &public_inputs2)?;
-
-        let ciphers = (0..3)
-            .map(|i| {
-                vec![
-                    dlog_secret_gen0_round2.contribution.ciphers[i].clone(),
-                    dlog_secret_gen1_round2.contribution.ciphers[i].clone(),
-                    dlog_secret_gen2_round2.contribution.ciphers[i].clone(),
-                ]
-            })
-            .collect_vec();
-        let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
-
-        let dlog_secret_gen0_round3 = dlog_secret_gen0.round3(rp_id, ciphers0)?;
-        let dlog_secret_gen1_round3 = dlog_secret_gen1.round3(rp_id, ciphers1)?;
-        let dlog_secret_gen2_round3 = dlog_secret_gen2.round3(rp_id, ciphers2)?;
-        assert_eq!(dlog_secret_gen0_round3.rp_id, rp_id);
-        assert_eq!(dlog_secret_gen1_round3.rp_id, rp_id);
-        assert_eq!(dlog_secret_gen2_round3.rp_id, rp_id);
-
-        let share0 = dlog_secret_gen0
-            .finished_shares
-            .get(&rp_id)
-            .expect("gen0 has no share")
-            .clone();
-        let share1 = dlog_secret_gen1
-            .finished_shares
-            .get(&rp_id)
-            .expect("gen0 has no share")
-            .clone();
-        let share2 = dlog_secret_gen2
-            .finished_shares
-            .get(&rp_id)
-            .expect("gen0 has no share")
-            .clone();
-
-        let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
-        let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
-            &[share0.into(), share1.into(), share2.into()],
-            &lagrange,
-        );
-
-        let is_public_key =
-            (ark_babyjubjub::EdwardsProjective::generator() * secret_key).into_affine();
-
-        assert_eq!(is_public_key, should_public_key);
-
-        let rp_public_key = k256::SecretKey::random(&mut rng).public_key();
-        // finalize round
-        dlog_secret_gen0
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
-        dlog_secret_gen1
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
-        dlog_secret_gen2
-            .finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))
-            .await?;
-
-        let dlog_secret0 = secret_manager0
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
-            .unwrap();
-        let dlog_secret1 = secret_manager1
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
-            .unwrap();
-        let dlog_secret2 = secret_manager2
-            .rp_materials
-            .lock()
-            .get(&rp_id)
-            .unwrap()
-            .shares
-            .get(&ShareEpoch::default())
-            .cloned()
-            .unwrap();
-
-        let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
-        let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
-            &[
-                dlog_secret0.into(),
-                dlog_secret1.into(),
-                dlog_secret2.into(),
-            ],
-            &lagrange,
-        );
-
-        let is_public_key =
-            (ark_babyjubjub::EdwardsProjective::generator() * secret_key).into_affine();
-
-        assert_eq!(is_public_key, should_public_key);
-        // check that shares are removed correctly
-        assert!(!dlog_secret_gen0.finished_shares.contains_key(&rp_id));
-        assert!(!dlog_secret_gen1.finished_shares.contains_key(&rp_id));
-        assert!(!dlog_secret_gen2.finished_shares.contains_key(&rp_id));
-
-        Ok(())
+    if comm_coeffs_computed != toxic_waste.poly.get_coeff_commitment() {
+        eyre::bail!("computed commitment to coeffs does not match with my own!");
     }
+
+    let ciphers = RpSecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
+    Ok((ciphers, toxic_waste.next(peers)))
 }

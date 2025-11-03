@@ -4706,6 +4706,7 @@ dependencies = [
 name = "oprf-types"
 version = "0.1.0"
 dependencies = [
+ "eyre",
  "k256",
  "oprf-core",
  "oprf-zk",

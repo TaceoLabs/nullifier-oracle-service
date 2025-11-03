@@ -1,22 +1,11 @@
-//! Rp registry
+//! This module includes the alloy types for the RpRegistry.
+//!
+//! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
-use std::time::Duration;
-
-use alloy::{
-    network::EthereumWallet,
-    primitives::Address,
-    providers::{DynProvider, Provider as _, ProviderBuilder, WsConnect},
-    sol,
-};
-use ark_ec::AffineRepr as _;
-use eyre::Context as _;
+use alloy::sol;
 use k256::EncodedPoint;
-use oprf_types::{
-    RpId,
-    crypto::{
-        PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext,
-        RpSecretGenCiphertexts, RpSecretGenCommitment,
-    },
+use oprf_types::crypto::{
+    PeerPublicKey, RpSecretGenCiphertext, RpSecretGenCiphertexts, RpSecretGenCommitment,
 };
 use oprf_zk::groth16_serde::Groth16Proof;
 
@@ -31,6 +20,15 @@ sol!(
 impl From<PeerPublicKey> for Types::BabyJubJubElement {
     fn from(value: PeerPublicKey) -> Self {
         Self::from(value.inner())
+    }
+}
+
+impl TryFrom<Types::BabyJubJubElement> for PeerPublicKey {
+    type Error = eyre::Report;
+
+    fn try_from(value: Types::BabyJubJubElement) -> Result<Self, Self::Error> {
+        let point = ark_babyjubjub::EdwardsAffine::try_from(value)?;
+        Ok(Self::new_unchecked(point))
     }
 }
 
@@ -63,27 +61,21 @@ impl From<RpSecretGenCommitment> for Types::Round1Contribution {
         Self {
             commShare: value.comm_share.into(),
             commCoeffs: value.comm_coeffs.into(),
+            ephPubKey: value.eph_pub_key.inner().into(),
         }
     }
 }
 
 impl From<Groth16Proof> for Types::Groth16Proof {
     fn from(value: Groth16Proof) -> Self {
-        // TODO remove unwraps
         Self {
-            pA: [value.a.x().unwrap().into(), value.a.y().unwrap().into()],
+            pA: [value.a.x.into(), value.a.y.into()],
             // This is not a typo - must be c1 and then c0
             pB: [
-                [
-                    value.b.x().unwrap().c1.into(),
-                    value.b.x().unwrap().c0.into(),
-                ],
-                [
-                    value.b.y().unwrap().c1.into(),
-                    value.b.y().unwrap().c0.into(),
-                ],
+                [value.b.x.c1.into(), value.b.x.c0.into()],
+                [value.b.y.c1.into(), value.b.y.c0.into()],
             ],
-            pC: [value.c.x().unwrap().into(), value.c.y().unwrap().into()],
+            pC: [value.c.x.into(), value.c.y.into()],
         }
     }
 }
@@ -141,80 +133,5 @@ impl TryFrom<k256::PublicKey> for Types::EcDsaPubkeyCompressed {
             x: x.try_into()?,
             yParity: y_parity.try_into()?,
         })
-    }
-}
-
-#[derive(Clone)]
-/// Main struct to interact with the `RpRegistry` contract
-pub struct RpRegistryProxy {
-    pub(crate) contract_address: Address,
-    pub(crate) provider: DynProvider,
-}
-
-impl RpRegistryProxy {
-    /// Create a new `RpRegistryProxy`
-    pub async fn init(
-        rpc_url: &str,
-        contract_address: Address,
-        wallet: EthereumWallet,
-    ) -> eyre::Result<Self> {
-        // Create the provider.
-        let ws = WsConnect::new(rpc_url); // rpc-url of anvil
-        let provider = ProviderBuilder::new()
-            .wallet(wallet)
-            .connect_ws(ws)
-            .await
-            .context("while connecting to RPC")?;
-        tracing::info!("checking RpRegistry ready state at address {contract_address}..");
-        let contract = RpRegistry::new(contract_address, provider.clone());
-        if !contract.isContractReady().call().await? {
-            eyre::bail!("RpRegistry contract not ready");
-        }
-        tracing::info!("ready!");
-
-        Ok(Self {
-            provider: provider.erased(),
-            contract_address,
-        })
-    }
-
-    /// Fetch the OPRF peer public keys from the contract
-    pub async fn fetch_peer_public_keys(&self) -> eyre::Result<PeerPublicKeyList> {
-        tracing::info!("fetching peer public keys..");
-        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
-        let peer_public_keys = contract
-            .getPeerPublicKeys()
-            .call()
-            .await?
-            .into_iter()
-            .map(|pk| Ok(PeerPublicKey::new(pk.try_into()?)))
-            .collect::<eyre::Result<Vec<_>>>()?;
-        tracing::info!("success");
-        Ok(PeerPublicKeyList::new(peer_public_keys))
-    }
-
-    /// Fetch the `RpNullifierKey` key from the contract
-    pub async fn fetch_rp_nullifier_key(
-        &self,
-        rp_id: RpId,
-        wait_time: Duration,
-    ) -> eyre::Result<RpNullifierKey> {
-        tracing::info!("fetching rp_nullifier_key..");
-        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
-        let mut interval = tokio::time::interval(Duration::from_millis(500));
-        let rp_nullifier_key = tokio::time::timeout(wait_time, async move {
-            loop {
-                interval.tick().await;
-                let maybe_rp_nullifier_key =
-                    contract.getRpNullifierKey(rp_id.into_inner()).call().await;
-                if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
-                    return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
-                }
-            }
-        })
-        .await
-        .context("could not finish key-gen in 5 seconds")?
-        .context("while polling RP key")?;
-        Ok(rp_nullifier_key)
     }
 }

@@ -57,7 +57,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     uint256 public threshold;
     uint256 public numPeers;
 
-    Types.BabyJubJubElement[] public peerPublicKeys;
     mapping(address => Types.OprfPeer) addressToPeer;
 
     // The keygen state for each RP
@@ -147,18 +146,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
     /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
     /// @param _peerAddresses An array of addresses of the OPRF peers.
-    /// @param _peerPublicKeys An array of BabyJubJub public keys corresponding to the OPRF peers.
-    function registerOprfPeers(address[] calldata _peerAddresses, Types.BabyJubJubElement[] calldata _peerPublicKeys)
-        external
-        virtual
-        onlyProxy
-        onlyInitialized
-        onlyOwner
-    {
+    function registerOprfPeers(address[] calldata _peerAddresses) external virtual onlyProxy onlyInitialized onlyOwner {
         if (isContractReady) revert AlreadySubmitted();
         if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
-        if (_peerPublicKeys.length != numPeers) revert UnexpectedAmountPeers(numPeers);
-        peerPublicKeys = _peerPublicKeys;
         for (uint256 i = 0; i < _peerAddresses.length; i++) {
             addressToPeer[_peerAddresses[i]] = Types.OprfPeer({isParticipant: true, partyId: i});
         }
@@ -286,6 +276,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check that commitments are not zero
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
+        if (_isEmpty(data.ephPubKey)) revert BadContribution();
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
@@ -346,8 +337,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // verifier.verifyProof();
         uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] memory publicInputs;
 
-        publicInputs[0] = peerPublicKeys[partyId].x;
-        publicInputs[1] = peerPublicKeys[partyId].y;
+        Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
+        publicInputs[0] = pubKeyList[partyId].x;
+        publicInputs[1] = pubKeyList[partyId].y;
         publicInputs[2] = st.round1[partyId].commShare.x;
         publicInputs[3] = st.round1[partyId].commShare.y;
         publicInputs[4] = st.round1[partyId].commCoeffs;
@@ -357,8 +349,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
             publicInputs[5 + i] = data.ciphers[i].cipher;
             publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
             publicInputs[5 + numPeers + (i * 2) + 1] = data.ciphers[i].commitment.y;
-            publicInputs[15 + (i * 2) + 0] = peerPublicKeys[i].x;
-            publicInputs[15 + (i * 2) + 1] = peerPublicKeys[i].y;
+            publicInputs[15 + (i * 2) + 0] = pubKeyList[i].x;
+            publicInputs[15 + (i * 2) + 1] = pubKeyList[i].y;
             publicInputs[21 + i] = data.ciphers[i].nonce;
         }
         _tryEmitRound3Event(rpId, st);
@@ -389,7 +381,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
             // cleanup all old data
             delete st.ecdsaPubKey;
             delete st.round1;
-            // we keep round2 ciphertexts in case we need to restore shares
+            delete st.round2;
             delete st.keyAggregate;
             delete st.round2Done;
             delete st.round3Done;
@@ -415,6 +407,26 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return peer.partyId;
     }
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided rp id.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The ephemeral public keys generated in round 1
+    function checkIsParticipantAndReturnEphemeralPublicKeys(uint128 rpId)
+        external
+        view
+        virtual
+        isReady
+        onlyProxy
+        returns (Types.BabyJubJubElement[] memory)
+    {
+        // check if a participant
+        Types.OprfPeer memory peer = addressToPeer[msg.sender];
+        if (!peer.isParticipant) revert NotAParticipant();
+        // check if there exists this a key-gen
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        if (!st.exists) revert UnknownId(rpId);
+        return _loadPeerPublicKeys(st);
+    }
+
     /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
     /// @param rpId The unique identifier for the RP.
     /// @return An array of Round 2 ciphertexts belonging to the caller.
@@ -435,12 +447,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check that round2 ciphers are finished
         if (!allRound2Submitted(st)) revert NotReady();
         return st.round2[peer.partyId];
-    }
-
-    /// @notice Retrieves the public keys of all registered OPRF peers.
-    /// @return An array of BabyJubJub public keys of the OPRF peers.
-    function getPeerPublicKeys() external view virtual onlyProxy isReady returns (Types.BabyJubJubElement[] memory) {
-        return peerPublicKeys;
     }
 
     /// @notice Retrieves the nullifier public key for a specific RP.
@@ -489,6 +495,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
             if (!st.round3Done[i]) return false;
         }
         return true;
+    }
+
+    function _loadPeerPublicKeys(Types.RpNullifierGenState storage st)
+        internal
+        view
+        returns (Types.BabyJubJubElement[] memory)
+    {
+        if (!st.round2EventEmitted) revert WrongRound();
+        Types.BabyJubJubElement[] memory pubKeyList = new Types.BabyJubJubElement[](numPeers);
+        for (uint256 i = 0; i < numPeers; ++i) {
+            pubKeyList[i] = st.round1[i].ephPubKey;
+        }
+        return pubKeyList;
     }
 
     function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {

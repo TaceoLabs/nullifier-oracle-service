@@ -42,24 +42,10 @@ contract TestSetupScript is Script {
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
         address nullifierVerifierAddress = deployGroth16VerifierNullifier();
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
-        uint256 aliceX = vm.envUint("ALICE_PK_X");
-        uint256 aliceY = vm.envUint("ALICE_PK_Y");
-
-        uint256 bobX = vm.envUint("BOB_PK_X");
-        uint256 bobY = vm.envUint("BOB_PK_Y");
-
-        uint256 carolX = vm.envUint("CAROL_PK_X");
-        uint256 carolY = vm.envUint("CAROL_PK_Y");
 
         address aliceAddress = vm.envAddress("ALICE_ADDRESS");
         address bobAddress = vm.envAddress("BOB_ADDRESS");
         address carolAddress = vm.envAddress("CAROL_ADDRESS");
-
-        Types.BabyJubJubElement memory publicKeyAlice = Types.BabyJubJubElement({x: aliceX, y: aliceY});
-
-        Types.BabyJubJubElement memory publicKeyBob = Types.BabyJubJubElement({x: bobX, y: bobY});
-
-        Types.BabyJubJubElement memory publicKeyCarol = Types.BabyJubJubElement({x: carolX, y: carolY});
 
         // Deploy implementation
         RpRegistry implementation = new RpRegistry();
@@ -79,12 +65,8 @@ contract TestSetupScript is Script {
         peerAddresses[0] = aliceAddress;
         peerAddresses[1] = bobAddress;
         peerAddresses[2] = carolAddress;
-        Types.BabyJubJubElement[] memory peerPublicKeys = new Types.BabyJubJubElement[](3);
-        peerPublicKeys[0] = publicKeyAlice;
-        peerPublicKeys[1] = publicKeyBob;
-        peerPublicKeys[2] = publicKeyCarol;
 
-        rpRegistry.registerOprfPeers(peerAddresses, peerPublicKeys);
+        rpRegistry.registerOprfPeers(peerAddresses);
 
         // check that contract is ready
         assert(rpRegistry.isContractReady());

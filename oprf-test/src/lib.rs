@@ -7,7 +7,6 @@ pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
 
 pub mod credentials;
 pub mod rp_registry_scripts;
-pub mod test_setup_utils;
 pub mod world_id_protocol_mock;
 
 /// anvil wallet 0
@@ -24,7 +23,7 @@ pub const OPRF_PEER_ADDRESS_1: Address = address!("0x23618e81E3f5cdF7f54C3d65f7F
 pub const OPRF_PEER_ADDRESS_2: Address = address!("0xa0Ee7A142d267C1f36714E4a8F75612F20a79720");
 
 // FIXME
-// once we dont need to sign nonces ourself, remove this even in tests
+// once we don't need to sign nonces ourself, remove this even in tests
 // this signing key is constant and used by all rps so that we do not need to run init_key_gen every time
 // and can instead reuse the key_material in the contract/secret_manager
 //
@@ -51,7 +50,6 @@ async fn start_service(
         max_wait_time_shutdown: Duration::from_secs(10),
         session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/query.vk.json"),
-        private_key_secret_id: format!("oprf/sk/n{id}"),
         rp_secret_id_prefix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),

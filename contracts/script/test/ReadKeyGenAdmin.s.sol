@@ -11,7 +11,7 @@ contract ReadKeyGenAdminScript is Script {
     RpRegistry public rpRegistry;
 
     function setUp() public {
-        rpRegistry = RpRegistry(vm.envAddress("RP_REGISTRY_ADDRESS"));
+        rpRegistry = RpRegistry(vm.envAddress("RP_REGISTRY_PROXY"));
     }
 
     function run() external {
