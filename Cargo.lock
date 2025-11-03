@@ -2230,7 +2230,7 @@ dependencies = [
 [[package]]
 name = "circom-types"
 version = "0.9.0"
-source = "git+https://github.com/TaceoLabs/co-snarks.git#74df28773c269f067253e70822c6f96806b32e48"
+source = "git+https://github.com/TaceoLabs/co-snarks.git#33609690dff2b6738f7bce5cd0482c4b8d3c68a3"
 dependencies = [
  "ark-bn254 0.5.0",
  "ark-ec 0.5.0",
