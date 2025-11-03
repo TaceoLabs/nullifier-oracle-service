@@ -3,6 +3,8 @@ use std::{path::PathBuf, sync::LazyLock, time::Duration};
 use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
 
+pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
+
 pub mod credentials;
 pub mod rp_registry_scripts;
 pub mod test_setup_utils;

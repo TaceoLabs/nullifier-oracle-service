@@ -14,8 +14,9 @@ use eyre::Context as _;
 use groth16::Groth16;
 use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
-use oprf_service::rp_registry::{RpRegistry, Types};
+use oprf_service::rp_registry::Types;
 use oprf_test::world_id_protocol_mock::Authenticator;
+use oprf_test::{EcDsaPubkeyCompressed, RpRegistry};
 use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY, test_setup_utils};
 use oprf_test::{
     credentials,
@@ -64,7 +65,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     )
     .await;
 
-    let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
+    let rp_pk = EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
     let rp_id = rp_registry_scripts::init_key_gen(
         &anvil.ws_endpoint(),
         rp_registry_contract,
@@ -217,7 +218,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     assert!(result, "on-chain verification failed");
 
     let elapsed = time.elapsed();
-    println!("Success! Completed in {:?}", elapsed);
+    println!("Success! Completed in {elapsed:?}");
     println!("Produced nullifier: {nullifier}");
     Ok(())
 }

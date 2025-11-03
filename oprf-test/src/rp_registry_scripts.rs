@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, process::Command, str::FromStr as _};
 
+use crate::EcDsaPubkeyCompressed;
 use alloy::primitives::Address;
-use oprf_service::rp_registry::Types;
 use oprf_types::RpId;
 use regex::Regex;
 
@@ -44,7 +44,7 @@ pub fn deploy_test_setup(
 pub fn init_key_gen(
     rpc_url: &str,
     key_gen_contract: Address,
-    ecdsa_key: Types::EcDsaPubkeyCompressed,
+    ecdsa_key: EcDsaPubkeyCompressed,
     taceo_admin_private_key: &str,
 ) -> eyre::Result<RpId> {
     let pk_x = ecdsa_key.x.to_string();
