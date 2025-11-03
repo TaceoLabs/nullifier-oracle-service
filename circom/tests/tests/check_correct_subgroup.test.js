@@ -37,6 +37,15 @@ describe("BabyJubJub Check Correct Subgroup", function () {
     const witness = await circuit.calculateWitness({ in: [0, 1] }, true);
     await circuit.checkConstraints(witness);
   });
+  it("Two-Torsion is not in correct subgroup", async () => {
+    var did_fail = false;
+    try {
+      await circuit.calculateWitness({ in: [0, -1] }, true);
+    } catch (e) {
+      did_fail = true;
+    }
+    expect(did_fail).to.be.true;
+  });
 
   it("Random point not correct subgroup", async () => {
     var did_fail = false;
