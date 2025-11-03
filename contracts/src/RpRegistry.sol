@@ -516,11 +516,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         internal
         virtual
     {
+        if (accumulator.isOnCurve(newPointX, newPointY) == false) {
+            revert BadContribution();
+        }
+
         if (_isEmpty(st.keyAggregate)) {
+            // We checked above that the point is on curve, so we can just set it
             st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
             return;
         }
 
+        // we checked above that the new point is on curve
+        // the initial aggregate is on curve as well, checked inside the if above
+        // induction: sum of two on-curve points is on-curve, so the result is on-curve as well
         (uint256 resultX, uint256 resultY) = accumulator.add(st.keyAggregate.x, st.keyAggregate.y, newPointX, newPointY);
 
         st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
