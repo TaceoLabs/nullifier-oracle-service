@@ -131,7 +131,7 @@ template MulModPVar(B_NUM_BITS) {
     var b_bits[B_NUM_BITS] = Num2Bits(B_NUM_BITS)(b);
 
     signal result[B_NUM_BITS];
-    result[0] <== Mux1()([0, 8], b_bits[B_NUM_BITS - 1]);
+    result[0] <== Mux1()([0, a], b_bits[B_NUM_BITS - 1]);
 
     component dbl[B_NUM_BITS-1];
     component dbladd[B_NUM_BITS-1];
