@@ -488,7 +488,7 @@ In order to rewrite @alg:add_prover from additive to Shamir secret-sharing, we h
         Assign[$R_1$][$F_1+ b dot G_1$]
         Assign[$R_2$][$F_2+ b dot G_2$]
         Assign[$e$][$H(A, B, C, D, R_1, R_2) in bb(F)_q$]
-        Assign[$s$][$s_1 + dots + s_n$]
+        Assign[$s$][$s_1 + dots + s_t$]
         Return[$e, s$]
       },
     )
