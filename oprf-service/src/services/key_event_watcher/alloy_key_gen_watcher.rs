@@ -136,7 +136,6 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                     eyre::bail!("cannot finish transaction: {receipt:?}");
                 }
             }
-            ChainEventResult::NothingToReport => (),
         };
         Ok(())
     }
@@ -161,8 +160,8 @@ async fn subscribe_task(
             RpRegistry::SecretGenRound2::SIGNATURE_HASH,
             RpRegistry::SecretGenRound3::SIGNATURE_HASH,
             RpRegistry::SecretGenFinalize::SIGNATURE_HASH,
+            RpRegistry::KeyDeletion::SIGNATURE_HASH,
         ]);
-    let contract = RpRegistry::new(contract_address, provider.clone());
     // Subscribe to event logs
     let sub = provider.subscribe_logs(&filter).await?;
     let mut stream = sub.into_stream();
@@ -188,22 +187,20 @@ async fn subscribe_task(
                     .log_decode()
                     .context("while decoding secret-gen round2 event")?;
                 let RpRegistry::SecretGenRound2 { rpId } = round2.inner.data;
-                let peers = contract
-                    .checkIsParticipantAndReturnEphemeralPublicKeys(rpId)
-                    .call()
-                    .await?;
-                // TODO handle error case better - we want to know which one send wrong key
-                let list = peers
-                    .into_iter()
-                    .map(PeerPublicKey::try_from)
-                    .collect::<eyre::Result<Vec<_>>>()?;
-                let event = ChainEvent::SecretGenRound2(SecretGenRound2Event {
-                    rp_id: RpId::from(rpId),
-                    peers: PeerPublicKeyList::from(list),
-                });
-                if tx.send(event).await.is_err() {
-                    tracing::debug!("subscriber dropped channel - will shutdown");
-                    break;
+                let event = prepare_round2_event(rpId, contract_address, provider.clone())
+                    .await
+                    .context("while preparing round2 event");
+                match event {
+                    Ok(event) => {
+                        if tx.send(event).await.is_err() {
+                            tracing::debug!("subscriber dropped channel - will shutdown");
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!("could not prepare round2 event: {err:?}");
+                        tracing::warn!("try fetching next event");
+                    }
                 }
             }
             Some(&RpRegistry::SecretGenRound3::SIGNATURE_HASH) => {
@@ -212,20 +209,20 @@ async fn subscribe_task(
                     .log_decode()
                     .context("while decoding secret-gen round3 event")?;
                 let RpRegistry::SecretGenRound3 { rpId } = round3.inner.data;
-                let ciphers = contract
-                    .checkIsParticipantAndReturnRound2Ciphers(rpId)
-                    .call()
-                    .await?;
-                let event = ChainEvent::SecretGenRound3(SecretGenRound3Event {
-                    rp_id: RpId::from(rpId),
-                    ciphers: ciphers
-                        .into_iter()
-                        .map(RpSecretGenCiphertext::try_from)
-                        .collect::<eyre::Result<Vec<_>>>()?,
-                });
-                if tx.send(event).await.is_err() {
-                    tracing::debug!("subscriber dropped channel - will shutdown");
-                    break;
+                let event = prepare_round3_event(rpId, contract_address, provider.clone())
+                    .await
+                    .context("while preparing round3 event");
+                match event {
+                    Ok(event) => {
+                        if tx.send(event).await.is_err() {
+                            tracing::debug!("subscriber dropped channel - will shutdown");
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!("could not prepare round3 event: {err:?}");
+                        tracing::warn!("try fetching next event");
+                    }
                 }
             }
             Some(&RpRegistry::SecretGenFinalize::SIGNATURE_HASH) => {
@@ -233,12 +230,30 @@ async fn subscribe_task(
                     .log_decode()
                     .context("while decoding secret-gen finalize event")?;
                 let RpRegistry::SecretGenFinalize { rpId } = finalize.inner.data;
-                let rp_material = contract.getRpMaterial(rpId).call().await?;
-                let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
-                    rp_id: RpId::from(rpId),
-                    rp_public_key: rp_material.ecdsaKey.try_into()?,
-                    rp_nullifier_key: RpNullifierKey::new(rp_material.nullifierKey.try_into()?),
-                });
+                let event = prepare_finalize_event(rpId, contract_address, provider.clone())
+                    .await
+                    .context("while preparing finalize event");
+                match event {
+                    Ok(event) => {
+                        if tx.send(event).await.is_err() {
+                            tracing::debug!("subscriber dropped channel - will shutdown");
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!("could not prepare finalize event: {err:?}");
+                        tracing::warn!("try fetching next event");
+                    }
+                }
+            }
+
+            Some(&RpRegistry::KeyDeletion::SIGNATURE_HASH) => {
+                let key_delete = log
+                    .log_decode()
+                    .context("while decoding key deletion event")?;
+                let RpRegistry::KeyDeletion { rpId } = key_delete.inner.data;
+                tracing::info!("got key deletion event for {rpId}");
+                let event = ChainEvent::DeleteRpMaterial(RpId::from(rpId));
                 if tx.send(event).await.is_err() {
                     tracing::debug!("subscriber dropped channel - will shutdown");
                     break;
@@ -282,4 +297,63 @@ async fn watch_receipt(
             return Err(alloy::contract::Error::TransportError(RpcError::NullResp));
         }
     }
+}
+
+async fn prepare_round2_event(
+    rp_id: u128,
+    contract_address: Address,
+    provider: DynProvider,
+) -> eyre::Result<ChainEvent> {
+    let contract = RpRegistry::new(contract_address, provider.clone());
+    let peers = contract
+        .checkIsParticipantAndReturnEphemeralPublicKeys(rp_id)
+        .call()
+        .await
+        .context("while loading eph keys")?;
+    // TODO handle error case better - we want to know which one send wrong key
+    let list = peers
+        .into_iter()
+        .map(PeerPublicKey::try_from)
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let event = ChainEvent::SecretGenRound2(SecretGenRound2Event {
+        rp_id: RpId::from(rp_id),
+        peers: PeerPublicKeyList::from(list),
+    });
+    Ok(event)
+}
+
+async fn prepare_round3_event(
+    rp_id: u128,
+    contract_address: Address,
+    provider: DynProvider,
+) -> eyre::Result<ChainEvent> {
+    let contract = RpRegistry::new(contract_address, provider.clone());
+    let ciphers = contract
+        .checkIsParticipantAndReturnRound2Ciphers(rp_id)
+        .call()
+        .await
+        .context("while loading ciphers")?;
+    let event = ChainEvent::SecretGenRound3(SecretGenRound3Event {
+        rp_id: RpId::from(rp_id),
+        ciphers: ciphers
+            .into_iter()
+            .map(RpSecretGenCiphertext::try_from)
+            .collect::<eyre::Result<Vec<_>>>()?,
+    });
+    Ok(event)
+}
+
+async fn prepare_finalize_event(
+    rp_id: u128,
+    contract_address: Address,
+    provider: DynProvider,
+) -> eyre::Result<ChainEvent> {
+    let contract = RpRegistry::new(contract_address, provider.clone());
+    let rp_material = contract.getRpMaterial(rp_id).call().await?;
+    let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
+        rp_id: RpId::from(rp_id),
+        rp_public_key: rp_material.ecdsaKey.try_into()?,
+        rp_nullifier_key: RpNullifierKey::new(rp_material.nullifierKey.try_into()?),
+    });
+    Ok(event)
 }

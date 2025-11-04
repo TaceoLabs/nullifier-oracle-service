@@ -18,7 +18,9 @@ use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
 use oprf_client::{NullifierArgs, OprfQuery, SignedOprfQuery, groth16::Groth16};
 use oprf_service::rp_registry::Types;
-use oprf_test::{MOCK_RP_SECRET_KEY, RpRegistry, rp_registry_scripts, world_id_protocol_mock};
+use oprf_test::{
+    MOCK_RP_SECRET_KEY, RpRegistry, health_checks, rp_registry_scripts, world_id_protocol_mock,
+};
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use oprf_zk::{
@@ -313,16 +315,6 @@ fn avg(durations: &[Duration]) -> Duration {
     }
 }
 
-async fn health_check(health_url: String) {
-    loop {
-        if reqwest::get(&health_url).await.is_ok() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-    tracing::info!("healthy: {health_url}");
-}
-
 #[expect(clippy::too_many_arguments)]
 async fn stress_test(
     cmd: StressTestCommand,
@@ -492,13 +484,7 @@ async fn main() -> eyre::Result<()> {
     )?;
 
     tracing::info!("health check for all peers...");
-    let health_checks = config
-        .services
-        .iter()
-        .map(|service| health_check(format!("{service}/health")))
-        .collect::<JoinSet<_>>();
-
-    tokio::time::timeout(Duration::from_secs(5), health_checks.join_all())
+    health_checks::services_health_check(&config.services, Duration::from_secs(5))
         .await
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
@@ -517,7 +503,7 @@ async fn main() -> eyre::Result<()> {
             config.rp_registry_contract,
             rp_pk,
             config.taceo_private_key.expose_secret(),
-        )?;
+        );
         tracing::info!("registered rp with rp_id: {rp_id}");
 
         let rp_nullifier_key = fetch_rp_nullifier_key(rp_id, &wallet, &config).await?;

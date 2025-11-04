@@ -31,12 +31,6 @@ use crate::services::key_event_watcher::KeyGenEventListenerService;
 use crate::services::rp_material_store::RpMaterialStore;
 use crate::services::secret_gen::DLogSecretGenService;
 use crate::services::secret_manager::SecretManagerService;
-use crate::services::secret_manager::StoreDLogShare;
-
-pub enum ReportTarget {
-    Chain(ChainEventResult),
-    SecretManager(StoreDLogShare),
-}
 
 /// Handle for the chain event processing task.
 ///
@@ -51,6 +45,7 @@ impl ChainEventHandler {
     /// # Arguments
     /// * `watcher` - The [`KeyGenEventListenerService`] used to read and report events from the chain.
     /// * `rp_material_store` - Holds the [`crate::services::rp_material_store::RpMaterial`] for all RPs.
+    /// * `secret_manager` - An instance of [`SecretManagerService`] needed for storage/deletion of shares.
     /// * `cancellation_token` - Token used to signal shutdown of the handler task.
     /// * `key_gen_material` - The ZK material for computing the proofs for key generation.
     ///
@@ -98,6 +93,7 @@ impl ChainEventHandler {
 ///
 /// # Arguments
 /// * `event_listener` — Receives and reports chain events.
+/// * `secret_manager` — Securely persists created/updated shares.
 /// * `secret_gen` — Handles secret generation.
 /// * `cancellation_token` — Signals shutdown.
 ///
@@ -126,54 +122,58 @@ async fn run(
             }
         };
 
-        let report_target =
-            tokio::task::block_in_place(|| handle_chain_event(&mut secret_gen, event))
-                .context("while handling chain event")?;
-        match report_target {
-            ReportTarget::Chain(chain_event_result) => event_listener
-                .report_result(chain_event_result)
-                .await
-                .context("while reporting chain result")?,
-            ReportTarget::SecretManager(store_dlog_share) => secret_manager
-                .store_dlog_share(store_dlog_share)
-                .await
-                .context("while storing secret")?,
-        }
+        handle_chain_event(&mut secret_gen, &event_listener, &secret_manager, event)
+            .await
+            .context("while handling chain event")?;
     }
 }
 
 /// Processes a single [`ChainEvent`] using the provided [`DLogSecretGenService`].
 ///
 /// For round 1 and round 2 secret generation events, blocks the current thread to call synchronous methods.
-/// Finalization is handled asynchronously, because we need to store the
-/// resulting DLog-share into our secret-manager.
+/// Finalization is handled asynchronously, because we need to interact with the secret manager and event-listener, which are `async`.
 ///
 /// # Errors
-/// Returns an error if processing the event fails.
-pub(crate) fn handle_chain_event(
+/// Returns an error if either processing the event or reporting the result fails.
+pub(crate) async fn handle_chain_event(
     secret_gen: &mut DLogSecretGenService,
+    event_listener: &KeyGenEventListenerService,
+    secret_manager: &SecretManagerService,
     event: ChainEvent,
-) -> eyre::Result<ReportTarget> {
+) -> eyre::Result<()> {
     match event {
         ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => {
-            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound1(
-                secret_gen.round1(rp_id, threshold),
-            )))
+            let event = tokio::task::block_in_place(|| {
+                ChainEventResult::SecretGenRound1(secret_gen.round1(rp_id, threshold))
+            });
+            event_listener
+                .report_result(event)
+                .await
+                .context("while reporting chain result")
         }
-
         ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, peers }) => {
-            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound2(
-                secret_gen
-                    .round2(rp_id, peers)
-                    .context("while doing round2")?,
-            )))
+            let event = tokio::task::block_in_place(|| {
+                eyre::Ok(ChainEventResult::SecretGenRound2(
+                    secret_gen
+                        .round2(rp_id, peers)
+                        .context("while doing round2")?,
+                ))
+            })?;
+            event_listener
+                .report_result(event)
+                .await
+                .context("while reporting chain result")
         }
         ChainEvent::SecretGenRound3(SecretGenRound3Event { rp_id, ciphers }) => {
-            Ok(ReportTarget::Chain(ChainEventResult::SecretGenRound3(
+            let event = ChainEventResult::SecretGenRound3(
                 secret_gen
                     .round3(rp_id, ciphers)
                     .context("while doing round3")?,
-            )))
+            );
+            event_listener
+                .report_result(event)
+                .await
+                .context("while reporting chain result")
         }
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
             rp_id,
@@ -183,7 +183,18 @@ pub(crate) fn handle_chain_event(
             let store_dlog_share = secret_gen
                 .finalize(rp_id, rp_public_key, rp_nullifier_key)
                 .context("while finalizing secret-gen")?;
-            Ok(ReportTarget::SecretManager(store_dlog_share))
+            secret_manager
+                .store_dlog_share(store_dlog_share)
+                .await
+                .context("while storing share to secret manager")
+        }
+        ChainEvent::DeleteRpMaterial(rp_id) => {
+            // we need to delete all the toxic waste associated with the rp id
+            secret_gen.delete_rp_material(rp_id);
+            secret_manager
+                .remove_dlog_share(rp_id)
+                .await
+                .context("while storing share to secret manager")
         }
     }
 }

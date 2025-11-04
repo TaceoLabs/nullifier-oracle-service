@@ -15,10 +15,10 @@ use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::Types;
 use oprf_test::{
-    EcDsaPubkeyCompressed, RpRegistry, TACEO_ADMIN_ADDRESS, anvil_testcontainer,
-    indexer_testcontainer, localstack_testcontainer, postgres_testcontainer,
+    EcDsaPubkeyCompressed, MOCK_RP_SECRET_KEY, RpRegistry, TACEO_ADMIN_ADDRESS,
+    TACEO_ADMIN_PRIVATE_KEY, anvil_testcontainer, health_checks, indexer_testcontainer, localstack,
+    localstack_testcontainer, postgres_testcontainer,
 };
-use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY};
 use oprf_test::{
     credentials,
     rp_registry_scripts::{self},
@@ -37,6 +37,7 @@ use oprf_zk::{
 };
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[serial_test::file_serial]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
     let _localstack_container = localstack_testcontainer().await?;
     let (_anvil_container, host_rpc_url, host_ws_url, bridge_rpc_url, bridge_ws_url) =
@@ -77,7 +78,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         rp_registry_contract,
         rp_pk,
         TACEO_ADMIN_PRIVATE_KEY,
-    )?;
+    );
     println!("init key-gen with rp id: {rp_id}");
 
     let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)
@@ -233,5 +234,102 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let elapsed = time.elapsed();
     println!("Success! Completed in {elapsed:?}");
     println!("Produced nullifier: {nullifier}");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[serial_test::file_serial]
+async fn test_delete_rp_material() -> eyre::Result<()> {
+    let _localstack_container = localstack_testcontainer().await?;
+    let (_anvil_container, host_rpc_url, host_ws_url, _, _) = anvil_testcontainer().await?;
+
+    println!("Deploying AccountRegistry contract...");
+    let account_registry_contract = world_id_protocol_mock::deploy_account_registry(&host_rpc_url);
+
+    println!("Deploying RpRegistry contract...");
+    let rp_registry_contract = rp_registry_scripts::deploy_test_setup(
+        &host_ws_url,
+        &TACEO_ADMIN_ADDRESS.to_string(),
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+
+    println!("Starting OPRF peers...");
+    let oprf_services = oprf_test::start_services(
+        &host_ws_url,
+        rp_registry_contract,
+        account_registry_contract,
+    )
+    .await;
+
+    let rp_pk = EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
+    let rp_id = rp_registry_scripts::init_key_gen(
+        &host_ws_url,
+        rp_registry_contract,
+        rp_pk,
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+    println!("init key-gen with rp id: {rp_id}");
+
+    let ws = WsConnect::new(&host_ws_url); // rpc-url of anvil
+    let provider = ProviderBuilder::new()
+        .connect_ws(ws)
+        .await
+        .context("while connecting to RPC")?;
+    let contract = RpRegistry::new(rp_registry_contract, provider.clone());
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            interval.tick().await;
+            let maybe_rp_nullifier_key =
+                contract.getRpNullifierKey(rp_id.into_inner()).call().await;
+            if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
+                return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+            }
+        }
+    })
+    .await
+    .context("could not finish key-gen in 5 seconds")?
+    .context("while polling RP key")?;
+
+    println!("checking that key-material is registered at services..");
+    let public_rp_material =
+        health_checks::rp_material_from_services(rp_id, &oprf_services, Duration::from_secs(5))
+            .await
+            .context("while loading rp material from services")?;
+    assert_eq!(public_rp_material.nullifier_key, rp_nullifier_key);
+    assert_eq!(
+        public_rp_material.public_key,
+        MOCK_RP_SECRET_KEY.public_key().into()
+    );
+
+    // load keys from aws and check that they exist
+    let localstack_client = localstack::client().await;
+
+    let secret_before_delete =
+        localstack::list_secrets(localstack_client.clone(), "oprf/rp").await?;
+    assert_eq!(secret_before_delete.len(), 3);
+    assert!(
+        secret_before_delete
+            .iter()
+            .all(|secret| secret.ends_with(&rp_id.to_string()))
+    );
+
+    println!("deletion of rp material..");
+    rp_registry_scripts::delete_rp_material(
+        &host_ws_url,
+        rp_registry_contract,
+        rp_id,
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+
+    println!("check that services don't know key anymore...");
+    health_checks::assert_rp_unknown(rp_id, &oprf_services, Duration::from_secs(5)).await?;
+    println!("check that shares are not in localstack anymore...");
+
+    let secrets_after_delete = localstack::list_secrets(localstack_client, "oprf/rp").await?;
+
+    assert!(secrets_after_delete.is_empty());
+
     Ok(())
 }

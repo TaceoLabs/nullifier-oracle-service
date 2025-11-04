@@ -40,6 +40,7 @@ library Types {
         bool round3EventEmitted;
         bool finalizeEventEmitted;
         bool exists;
+        bool deleted;
     }
 
     struct Groth16Proof {
@@ -63,9 +64,11 @@ library Types {
         BabyJubJubElement nullifierKey;
     }
 
-    // events
+    // events for key-gen
     event SecretGenRound1(uint128 indexed rpId, uint256 threshold);
     event SecretGenRound2(uint128 indexed rpId);
     event SecretGenRound3(uint128 indexed rpId);
     event SecretGenFinalize(uint128 indexed rpId);
+    // event to delete created key
+    event KeyDeletion(uint128 indexed rpId);
 }

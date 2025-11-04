@@ -111,6 +111,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     error InvalidProof();
     error OutdatedNullifier();
     error UnknownId(uint128 id);
+    error DeletedId(uint128 id);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -184,6 +185,42 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
         // Emit Round1 event for everyone
         emit Types.SecretGenRound1(rpId, threshold);
+    }
+
+    /// @notice Deletes the RP and its associated material. Works if during key-gen or afterwards.
+    /// @param rpId The unique identifier for the RP.
+    function deleteRpMaterial(uint128 rpId) external virtual onlyProxy isReady onlyAdmin {
+        // try to delete the runningKeyGen data
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        bool needToEmitEvent = false;
+        if (st.exists) {
+            // delete all the material and set to deleted
+            delete st.ecdsaPubKey;
+            delete st.round1;
+            delete st.round2;
+            delete st.keyAggregate;
+            delete st.round2Done;
+            delete st.round3Done;
+            delete st.round2EventEmitted;
+            delete st.round3EventEmitted;
+            delete st.finalizeEventEmitted;
+            // mark the rp as deleted
+            // we need this to prevent race conditions during the key-gen
+            st.deleted = true;
+            needToEmitEvent = true;
+        }
+
+        Types.RpMaterial storage material = rpRegistry[rpId];
+        if (!_isEmpty(material.nullifierKey)) {
+            // delete the created key and the ecdsa key
+            delete material.ecdsaKey;
+            delete material.nullifierKey;
+            needToEmitEvent = true;
+        }
+
+        if (needToEmitEvent) {
+            emit Types.KeyDeletion(rpId);
+        }
     }
 
     // ==================================
@@ -280,6 +317,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
+        if (st.deleted) revert DeletedId(rpId);
         if (st.round2EventEmitted) revert WrongRound();
 
         // return the partyId if sender is really a participant
@@ -309,6 +348,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
+        if (st.deleted) revert DeletedId(rpId);
         // check that we are actually in round2
         if (!st.round2EventEmitted || st.round3EventEmitted) revert WrongRound();
         // return the partyId if sender is really a participant
@@ -367,6 +408,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
+        if (st.deleted) revert DeletedId(rpId);
         // check that we are actually in round3
         if (!st.round3EventEmitted || st.finalizeEventEmitted) revert NotReady();
         // return the partyId if sender is really a participant
@@ -421,9 +464,11 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check if a participant
         Types.OprfPeer memory peer = addressToPeer[msg.sender];
         if (!peer.isParticipant) revert NotAParticipant();
-        // check if there exists this a key-gen
+        // check if there exists this key-gen
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
+        if (st.deleted) revert DeletedId(rpId);
         return _loadPeerPublicKeys(st);
     }
 
@@ -444,6 +489,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         // check if there exists this a key-gen
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
+        if (st.deleted) revert DeletedId(rpId);
         // check that round2 ciphers are finished
         if (!allRound2Submitted(st)) revert NotReady();
         return st.round2[peer.partyId];

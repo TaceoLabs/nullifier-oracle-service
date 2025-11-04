@@ -16,7 +16,7 @@ use oprf_core::{
 };
 use oprf_types::{
     RpId, ShareEpoch,
-    api::v1::NullifierShareIdentifier,
+    api::v1::{NullifierShareIdentifier, PublicRpMaterial},
     crypto::{PartyId, RpNullifierKey},
 };
 use parking_lot::RwLock;
@@ -112,17 +112,17 @@ impl RpMaterial {
     }
 
     /// Returns the [`DLogShare`] for the given epoch, or `None` if not found.
-    pub(super) fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShare> {
+    fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShare> {
         self.shares.get(&epoch).cloned()
     }
 
     /// Returns the RP's ECDSA `VerifyingKey`.
-    pub(super) fn get_public_key(&self) -> k256::ecdsa::VerifyingKey {
+    fn get_public_key(&self) -> k256::ecdsa::VerifyingKey {
         self.public_key
     }
 
     /// Returns the RP's `RpNullifierKey`.
-    pub(super) fn get_nullifier_key(&self) -> RpNullifierKey {
+    fn get_nullifier_key(&self) -> RpNullifierKey {
         self.nullifier_key
     }
 }
@@ -221,10 +221,7 @@ impl RpMaterialStore {
     /// Retrieves the secret share for the given [`NullifierShareIdentifier`].
     ///
     /// Returns `None` if the RP or share epoch is not found.
-    pub(super) fn get(
-        &self,
-        key_identifier: &NullifierShareIdentifier,
-    ) -> Option<ark_babyjubjub::Fr> {
+    fn get(&self, key_identifier: &NullifierShareIdentifier) -> Option<ark_babyjubjub::Fr> {
         self.0
             .read()
             .get(&key_identifier.rp_id)?
@@ -233,12 +230,12 @@ impl RpMaterialStore {
     }
 
     /// Returns the ECDSA `VerifyingKey` of the specified RP, if registered.
-    pub(super) fn get_rp_public_key(&self, rp_id: RpId) -> Option<k256::ecdsa::VerifyingKey> {
+    fn get_rp_public_key(&self, rp_id: RpId) -> Option<k256::ecdsa::VerifyingKey> {
         Some(self.0.read().get(&rp_id)?.get_public_key())
     }
 
     /// Returns the `RpNullifierKey` of the specified RP, if registered.
-    pub(super) fn get_rp_nullifier_key(&self, rp_id: RpId) -> Option<RpNullifierKey> {
+    fn get_rp_nullifier_key(&self, rp_id: RpId) -> Option<RpNullifierKey> {
         Some(self.0.read().get(&rp_id)?.get_nullifier_key())
     }
 
@@ -246,7 +243,7 @@ impl RpMaterialStore {
     ///
     /// Overwrites any existing entry.  
     /// Intended for creating new shares, not rotation.
-    pub(crate) fn add(
+    pub(super) fn add(
         &self,
         rp_id: RpId,
         public_key: k256::ecdsa::VerifyingKey,
@@ -270,5 +267,26 @@ impl RpMaterialStore {
         {
             tracing::warn!("overwriting share for {rp_id}");
         }
+    }
+
+    /// Removes the RP entry associated with the provided [`RpId`].
+    ///
+    /// If the id is not registered, doesn't do anything.
+    pub(super) fn remove(&self, rp_id: RpId) {
+        if self.0.write().remove(&rp_id).is_some() {
+            tracing::debug!("removed {rp_id:?} material from RpMaterialStore");
+        }
+    }
+
+    /// Returns the [`PublicRpMaterial`] of the specified RP, if registered.
+    /// This contains
+    /// * ECDSA `VerifyingKey`
+    /// * [`RpNullifierKey`]
+    pub(crate) fn get_rp_public_material(&self, rp_id: RpId) -> Option<PublicRpMaterial> {
+        let rp_material = self.0.read().get(&rp_id)?.to_owned();
+        Some(PublicRpMaterial {
+            public_key: rp_material.public_key,
+            nullifier_key: rp_material.nullifier_key,
+        })
     }
 }

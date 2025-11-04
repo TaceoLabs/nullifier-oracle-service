@@ -13,6 +13,8 @@ use testcontainers_modules::{anvil::AnvilNode, localstack::LocalStack, postgres:
 pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
 
 pub mod credentials;
+pub mod health_checks;
+pub mod localstack;
 pub mod rp_registry_scripts;
 pub mod world_id_protocol_mock;
 
@@ -73,7 +75,7 @@ async fn start_service(
         let res = oprf_service::start(config, never).await;
         eprintln!("service failed to start: {res:?}");
     });
-    tokio::time::timeout(Duration::from_secs(1), async {
+    tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if reqwest::get(url.clone() + "/health").await.is_ok() {
                 break;

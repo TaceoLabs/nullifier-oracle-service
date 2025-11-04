@@ -41,6 +41,11 @@ pub(crate) trait SecretManager {
     /// existing shares, use [`Self::update_dlog_share`].
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()>;
 
+    /// Removes all information stored associated with the specified [`RpId`].
+    ///
+    /// Certain secret-managers might not be able to immediately delete the secret. In that case it shall mark the secret for deletion.
+    async fn remove_dlog_share(&self, rp_id: RpId) -> eyre::Result<()>;
+
     /// Updates the [`DLogShare`] of an existing [`RpId`] to a new epoch.
     ///
     /// Use this method for updating existing shares. For creating a new share,

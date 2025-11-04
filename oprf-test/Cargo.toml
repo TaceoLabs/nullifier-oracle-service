@@ -44,3 +44,6 @@ testcontainers-modules = { version = "0.13", features = ["postgres", "localstack
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
 world-id-primitives.workspace = true
+
+[dev-dependencies]
+serial_test = { version = "3.2", features = ["file_locks"] }

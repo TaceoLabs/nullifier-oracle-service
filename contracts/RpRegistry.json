@@ -279,6 +279,19 @@
   },
   {
     "type": "function",
+    "name": "deleteRpMaterial",
+    "inputs": [
+      {
+        "name": "rpId",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "getRpMaterial",
     "inputs": [
       {
@@ -416,16 +429,6 @@
         "name": "_accumulatorAddress",
         "type": "address",
         "internalType": "address"
-      },
-      {
-        "name": "_threshold",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_numPeers",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -707,6 +710,19 @@
   },
   {
     "type": "event",
+    "name": "KeyDeletion",
+    "inputs": [
+      {
+        "name": "rpId",
+        "type": "uint128",
+        "indexed": true,
+        "internalType": "uint128"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
@@ -834,6 +850,17 @@
     "type": "error",
     "name": "BadContribution",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DeletedId",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ]
   },
   {
     "type": "error",

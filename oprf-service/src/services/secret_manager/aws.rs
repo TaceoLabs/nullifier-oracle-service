@@ -187,6 +187,20 @@ impl SecretManager for AwsSecretManager {
         Ok(())
     }
 
+    #[instrument(level = "info", skip(self))]
+    async fn remove_dlog_share(&self, rp_id: RpId) -> eyre::Result<()> {
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
+        self.client
+            .delete_secret()
+            .secret_id(secret_id)
+            .force_delete_without_recovery(true)
+            .send()
+            .await
+            .context("while deleting DLog Share")?;
+        tracing::info!("deleted secret from AWS {rp_id}");
+        Ok(())
+    }
+
     #[instrument(level = "info", skip(self, share))]
     async fn update_dlog_share(
         &self,

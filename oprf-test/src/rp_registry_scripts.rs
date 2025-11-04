@@ -48,10 +48,10 @@ pub fn deploy_test_setup(
 
 pub fn init_key_gen(
     rpc_url: &str,
-    key_gen_contract: Address,
+    rp_registry_contract: Address,
     ecdsa_key: EcDsaPubkeyCompressed,
     taceo_admin_private_key: &str,
-) -> eyre::Result<RpId> {
+) -> RpId {
     let pk_x = ecdsa_key.x.to_string();
     let pk_y_parity = ecdsa_key.yParity.to_string();
     let mut cmd = Command::new("forge");
@@ -59,10 +59,10 @@ pub fn init_key_gen(
     let rp_id = rand::random::<u128>();
     tracing::debug!("init key gen with rp_id: {rp_id}");
     tracing::debug!("with rpc url: {rpc_url}");
-    tracing::debug!("on contract: {key_gen_contract}");
+    tracing::debug!("on contract: {rp_registry_contract}");
     let cmd = cmd
         .current_dir(dir.join("../contracts/script/deploy/"))
-        .env("RP_REGISTRY_PROXY", key_gen_contract.to_string())
+        .env("RP_REGISTRY_PROXY", rp_registry_contract.to_string())
         .env("SESSION_ID", rp_id.to_string())
         .env("ECDSA_X", pk_x)
         .env("ECDSA_Y_PARITY", pk_y_parity)
@@ -80,5 +80,33 @@ pub fn init_key_gen(
         "forge script failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    Ok(RpId::new(rp_id))
+    RpId::new(rp_id)
+}
+
+pub fn delete_rp_material(
+    rpc_url: &str,
+    rp_registry_contract: Address,
+    rp_id: RpId,
+    taceo_admin_private_key: &str,
+) {
+    let mut cmd = Command::new("forge");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let cmd = cmd
+        .current_dir(dir.join("../contracts/script/"))
+        .env("RP_REGISTRY_PROXY", rp_registry_contract.to_string())
+        .env("RP_ID", rp_id.to_string())
+        .arg("script")
+        .arg("DeleteRpMaterial.s.sol")
+        .arg("--rpc-url")
+        .arg(rpc_url)
+        .arg("--broadcast")
+        .arg("--private-key")
+        .arg(taceo_admin_private_key);
+    tracing::debug!("executing cmd: {:?}", cmd);
+    let output = cmd.output().expect("failed to run forge script");
+    assert!(
+        output.status.success(),
+        "forge script failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

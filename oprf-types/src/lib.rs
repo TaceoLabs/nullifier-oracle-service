@@ -67,7 +67,7 @@ impl From<u128> for RpId {
 
 impl fmt::Display for RpId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&format!("RpId({})", self.0))
+        f.write_str(&format!("{}", self.0))
     }
 }
 

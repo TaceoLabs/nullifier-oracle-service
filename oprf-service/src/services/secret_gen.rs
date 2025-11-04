@@ -154,6 +154,25 @@ impl DLogSecretGenService {
         }
     }
 
+    /// Deletes all material associated with the [`RpId`].
+    /// This includes:
+    /// * [`ToxicWasteRound1`]
+    /// * [`ToxicWasteRound2`]
+    /// * Any finished shares that wait for finalize from all peers
+    /// * The [`crate::services::rp_material_store::RpMaterial`] in the [`RpMaterialStore`].
+    pub(crate) fn delete_rp_material(&mut self, rp_id: RpId) {
+        if self.toxic_waste_round1.remove(&rp_id).is_some() {
+            tracing::debug!("removed {rp_id:?} toxic waste round 1 from secret-gen");
+        };
+        if self.toxic_waste_round2.remove(&rp_id).is_some() {
+            tracing::debug!("removed {rp_id:?} toxic waste round 2 from secret-gen");
+        };
+        if self.finished_shares.remove(&rp_id).is_some() {
+            tracing::debug!("removed {rp_id:?} finished share from secret-gen");
+        };
+        self.rp_material_store.remove(rp_id);
+    }
+
     /// Executes round 1 of the secret generation protocol.
     ///
     /// Generates a polynomial of the specified degree and stores it internally.

@@ -70,7 +70,7 @@ pub(crate) enum OprfServiceError {
 
 #[derive(Clone)]
 pub(crate) struct OprfService {
-    rp_material_store: RpMaterialStore,
+    pub(crate) rp_material_store: RpMaterialStore,
     pub(crate) session_store: SessionStore,
     merkle_watcher: MerkleWatcherService,
     signature_history: SignatureHistory,

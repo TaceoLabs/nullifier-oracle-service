@@ -17,8 +17,6 @@ use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::AppState;
 
-use super::errors::ApiError;
-
 /// Create a router containing the health endpoints.
 ///
 /// All endpoints have `Cache-Control: no-cache` set.
@@ -34,6 +32,6 @@ pub(crate) fn routes() -> Router<AppState> {
 /// General health check endpoint.
 ///
 /// Returns `200 OK` with a plain `"healthy"` response.
-async fn health(State(_app_state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    Ok((StatusCode::OK, "healthy"))
+async fn health(State(_app_state): State<AppState>) -> impl IntoResponse {
+    (StatusCode::OK, "healthy")
 }

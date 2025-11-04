@@ -225,6 +225,228 @@ contract RpRegistryTest is Test {
         rpRegistry.initKeyGen(1, ecdsaPubKeyBroken);
     }
 
+    function testDeleteBeforeRound1() public {
+        uint128 rpId = 42;
+        vm.prank(taceoAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit Types.SecretGenRound1(rpId, THRESHOLD);
+        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
+        vm.stopPrank();
+        vm.prank(taceoAdmin);
+        // now delete
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyDeletion(rpId);
+        rpRegistry.deleteRpMaterial(rpId);
+        vm.stopPrank();
+
+        // check that we can add round1 but nothing happens
+        // do round 1 contributions
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
+        );
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnRound2Ciphers(rpId);
+        vm.stopPrank();
+    }
+
+    function testDeleteDuringRound1() public {
+        uint128 rpId = 42;
+        vm.prank(taceoAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit Types.SecretGenRound1(rpId, THRESHOLD);
+        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
+        vm.stopPrank();
+
+        // check that we can add round1 but nothing happens
+        // do round 1 contributions
+        vm.prank(bob);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
+        );
+        vm.stopPrank();
+
+        vm.prank(taceoAdmin);
+        // now delete
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyDeletion(rpId);
+        rpRegistry.deleteRpMaterial(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
+        );
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnRound2Ciphers(rpId);
+        vm.stopPrank();
+    }
+
+    function testDeleteDuringRound2() public {
+        uint128 rpId = 42;
+        vm.prank(taceoAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit Types.SecretGenRound1(rpId, THRESHOLD);
+        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
+        vm.stopPrank();
+
+        // do round 1 contributions
+        vm.prank(bob);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
+        );
+        vm.stopPrank();
+
+        vm.prank(alice);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
+        );
+        vm.stopPrank();
+
+        vm.prank(carol);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+            })
+        );
+        vm.stopPrank();
+
+        vm.prank(bob);
+        rpRegistry.addRound2Contribution(rpId, bobRound2Contribution());
+        vm.stopPrank();
+
+        vm.prank(taceoAdmin);
+        // now delete
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyDeletion(rpId);
+        rpRegistry.deleteRpMaterial(rpId);
+        vm.stopPrank();
+
+        vm.recordLogs();
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.addRound2Contribution(rpId, aliceRound2Contribution());
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnRound2Ciphers(rpId);
+        vm.stopPrank();
+    }
+
+    function testDeleteDuringRound3() public {
+        uint128 rpId = 42;
+        vm.prank(taceoAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit Types.SecretGenRound1(rpId, THRESHOLD);
+        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
+        vm.stopPrank();
+
+        // do round 1 contributions
+        vm.prank(bob);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
+        );
+        vm.stopPrank();
+
+        vm.prank(alice);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+            })
+        );
+        vm.stopPrank();
+
+        vm.prank(carol);
+        rpRegistry.addRound1Contribution(
+            rpId,
+            Types.Round1Contribution({
+                commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+            })
+        );
+        vm.stopPrank();
+
+        vm.prank(bob);
+        rpRegistry.addRound2Contribution(rpId, bobRound2Contribution());
+        vm.stopPrank();
+
+        vm.prank(alice);
+        rpRegistry.addRound2Contribution(rpId, aliceRound2Contribution());
+        vm.stopPrank();
+
+        vm.prank(carol);
+        rpRegistry.addRound2Contribution(rpId, carolRound2Contribution());
+        vm.stopPrank();
+
+        // do round 3 contributions
+        vm.prank(alice);
+        rpRegistry.addRound3Contribution(rpId);
+        vm.stopPrank();
+
+        vm.prank(taceoAdmin);
+        // now delete
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyDeletion(rpId);
+        rpRegistry.deleteRpMaterial(rpId);
+        vm.stopPrank();
+
+        vm.recordLogs();
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.addRound3Contribution(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnknownId.selector, rpId));
+        rpRegistry.getRpMaterial(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(rpId);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.DeletedId.selector, rpId));
+        rpRegistry.checkIsParticipantAndReturnRound2Ciphers(rpId);
+        vm.stopPrank();
+    }
+
     function testE2E() public {
         uint128 rpId = 42;
         vm.prank(taceoAdmin);

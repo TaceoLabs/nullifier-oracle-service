@@ -15,7 +15,23 @@ use oprf_core::ddlog_equality::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-use crate::{RpId, ShareEpoch, crypto::PartyId};
+use crate::{
+    RpId, ShareEpoch,
+    crypto::{PartyId, RpNullifierKey},
+};
+
+/// The public components of the `RpMaterial`.
+///
+/// This contains
+/// * ECDSA `VerifyingKey`
+/// * [`RpNullifierKey`]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PublicRpMaterial {
+    /// The public key used to verify the nonces of an Rp
+    pub public_key: k256::ecdsa::VerifyingKey,
+    /// The public part of the Nullifier Key.
+    pub nullifier_key: RpNullifierKey,
+}
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]

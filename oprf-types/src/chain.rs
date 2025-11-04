@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-/// Events emitted by the mock contract during key generation.
+/// Events emitted by the RpRegistry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChainEvent {
     /// First-round key-generation event.
@@ -26,6 +26,8 @@ pub enum ChainEvent {
     SecretGenRound3(SecretGenRound3Event),
     /// Finalization event for key generation.
     SecretGenFinalize(SecretGenFinalizeEvent),
+    /// Delete RpMaterial event.
+    DeleteRpMaterial(RpId),
 }
 
 /// Represents the result of processing a chain event.
@@ -38,9 +40,6 @@ pub enum ChainEventResult {
     SecretGenRound2(SecretGenRound2Contribution),
     /// Output for handling key-generation round 3 event
     SecretGenRound3(SecretGenRound3Contribution),
-    /// Indicates that the chain event did not produce something
-    /// that needs to be reported to chain
-    NothingToReport,
 }
 
 /// Payload of a first-round key-generation event.
