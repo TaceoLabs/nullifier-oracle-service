@@ -30,7 +30,7 @@ template KeyGenSingleParty(MAX_DEGREE, INDEX) {
     // Commit to the polynomial and my public key
     ////////////////////////////////////////////////////////////////////////////
 
-    component keygen_commit = KeyGenCommmit(MAX_DEGREE);
+    component keygen_commit = KeyGenCommit(MAX_DEGREE);
     keygen_commit.my_sk <== my_sk;
     keygen_commit.poly <== poly;
     my_pk <== keygen_commit.my_pk;
@@ -80,7 +80,7 @@ template KeyGenSinglePartyVar(MAX_DEGREE, MAX_INDEX_BITS) {
     // Commit to the polynomial and my public key
     ////////////////////////////////////////////////////////////////////////////
 
-    component keygen_commit = KeyGenCommmit(MAX_DEGREE);
+    component keygen_commit = KeyGenCommit(MAX_DEGREE);
     keygen_commit.my_sk <== my_sk;
     keygen_commit.poly <== poly;
     my_pk <== keygen_commit.my_pk;
