@@ -1,3 +1,11 @@
+//! Alloy-based Key Generation Event Watcher
+//!
+//! This module provides [`AlloyKeyGenWatcher`], an implementation of [`KeyGenEventListener`]
+//! that monitors an on-chain RpRegistry contract for key generation events.
+//!
+//! The watcher subscribes to various key generation events (Round 1, 2, 3, and Finalize)
+//! and reports contributions back to the contract. It uses Alloy for blockchain interaction.
+
 use alloy::{
     eips::BlockNumberOrTag,
     network::EthereumWallet,
@@ -23,12 +31,25 @@ use tokio::sync::mpsc;
 
 use crate::{rp_registry::RpRegistry, services::key_event_watcher::KeyGenEventListener};
 
+/// Monitors key generation events from an on-chain RpRegistry contract.
+///
+/// Subscribes to blockchain events for key generation rounds and reports
+/// contributions back to the contract.
 pub(crate) struct AlloyKeyGenWatcher {
     contract_address: Address,
     provider: DynProvider,
 }
 
 impl AlloyKeyGenWatcher {
+    /// Creates a new key generation event watcher.
+    ///
+    /// Connects to the blockchain via WebSocket and verifies that the
+    /// RpRegistry contract is ready.
+    ///
+    /// # Arguments
+    /// * `rpc_url` - WebSocket RPC URL for blockchain connection
+    /// * `contract_address` - Address of the RpRegistry contract
+    /// * `wallet` - Ethereum wallet for signing transactions
     pub(crate) async fn new(
         rpc_url: &str,
         contract_address: Address,
@@ -140,6 +161,7 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         Ok(())
     }
 
+    /// Loads the party ID for this peer from the RpRegistry contract.
     async fn load_party_id(&self) -> eyre::Result<PartyId> {
         let contract = RpRegistry::new(self.contract_address, self.provider.clone());
         let party_id = contract.checkIsParticipantAndReturnPartyId().call().await?;
@@ -147,6 +169,10 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
     }
 }
 
+/// Background task that subscribes to key generation events.
+///
+/// Filters for various key generation event signatures and sends them
+/// to the provided channel.
 async fn subscribe_task(
     provider: DynProvider,
     contract_address: Address,
@@ -267,6 +293,10 @@ async fn subscribe_task(
     Ok(())
 }
 
+/// Watches for a transaction receipt with improved polling.
+///
+/// Polls the blockchain at regular intervals to fetch the transaction receipt,
+/// working around potential race conditions with block confirmations.
 async fn watch_receipt(
     provider: DynProvider,
     mut pending_tx: PendingTransaction,
@@ -299,6 +329,10 @@ async fn watch_receipt(
     }
 }
 
+/// Prepares a Round 2 event by fetching ephemeral public keys from the contract.
+///
+/// Queries the RpRegistry contract to retrieve the ephemeral public keys
+/// submitted by all peers in Round 1.
 async fn prepare_round2_event(
     rp_id: u128,
     contract_address: Address,
@@ -322,6 +356,10 @@ async fn prepare_round2_event(
     Ok(event)
 }
 
+/// Prepares a Round 3 event by fetching ciphertexts from the contract.
+///
+/// Queries the RpRegistry contract to retrieve the ciphertexts
+/// submitted by all peers in Round 2.
 async fn prepare_round3_event(
     rp_id: u128,
     contract_address: Address,
@@ -343,6 +381,10 @@ async fn prepare_round3_event(
     Ok(event)
 }
 
+/// Prepares a finalize event by fetching RP material from the contract.
+///
+/// Queries the RpRegistry contract to retrieve the final RP material
+/// including the public key and nullifier key.
 async fn prepare_finalize_event(
     rp_id: u128,
     contract_address: Address,

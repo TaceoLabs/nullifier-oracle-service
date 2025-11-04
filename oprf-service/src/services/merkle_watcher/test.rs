@@ -1,3 +1,9 @@
+//! Test Implementation of Merkle Watcher
+//!
+//! This module provides [`TestMerkleWatcher`], a simple in-memory implementation
+//! of [`MerkleWatcher`] for testing purposes. It maintains a static store of
+//! merkle roots without connecting to a blockchain.
+
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -7,11 +13,19 @@ use tracing::instrument;
 
 use crate::services::merkle_watcher::{MerkleRootStore, MerkleWatcher, MerkleWatcherError};
 
+/// In-memory merkle watcher for testing.
+///
+/// Maintains a static store of merkle roots without blockchain interaction.
 pub(crate) struct TestMerkleWatcher {
     pub(crate) merkle_root_store: Mutex<MerkleRootStore>,
 }
 
 impl TestMerkleWatcher {
+    /// Creates a new test merkle watcher with the given initial store.
+    ///
+    /// # Arguments
+    /// * `init_store` - Initial merkle roots with their timestamps
+    /// * `max_merkle_store_size` - Maximum number of merkle roots to store
     pub(crate) fn new(
         init_store: HashMap<MerkleRoot, u64>,
         max_merkle_store_size: usize,

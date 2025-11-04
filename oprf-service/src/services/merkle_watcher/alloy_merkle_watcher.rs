@@ -1,3 +1,11 @@
+//! Alloy-based Merkle Root Watcher
+//!
+//! This module provides [`AlloyMerkleWatcher`], an implementation of [`MerkleWatcher`]
+//! that monitors an on-chain AccountRegistry contract for merkle root updates.
+//!
+//! The watcher subscribes to `RootRecorded` events and maintains a store of valid
+//! merkle roots with their timestamps. It uses Alloy for blockchain interaction.
+
 use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
 use alloy::{
@@ -26,6 +34,9 @@ sol! {
     event RootRecorded(uint256 indexed root, uint256 timestamp, uint256 indexed rootEpoch);
 }
 
+/// Monitors merkle roots from an on-chain AccountRegistry contract.
+///
+/// Subscribes to blockchain events and maintains a store of valid merkle roots.
 pub(crate) struct AlloyMerkleWatcher {
     merkle_root_store: Arc<Mutex<MerkleRootStore>>,
     provider: DynProvider, // do not drop provider while we want to stay subscribed
@@ -33,6 +44,15 @@ pub(crate) struct AlloyMerkleWatcher {
 }
 
 impl AlloyMerkleWatcher {
+    /// Initializes the merkle watcher and starts listening for events.
+    ///
+    /// Connects to the blockchain via WebSocket, fetches the current merkle root,
+    /// and spawns a background task to monitor for new `RootRecorded` events.
+    ///
+    /// # Arguments
+    /// * `contract_address` - Address of the AccountRegistry contract
+    /// * `ws_rpc_url` - WebSocket RPC URL for blockchain connection
+    /// * `max_merkle_store_size` - Maximum number of merkle roots to store
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn init(
         contract_address: Address,

@@ -1,23 +1,18 @@
 #![deny(missing_docs)]
-//! OPRF Peer Service
+//! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
+//! nullifier oracle service. The service participates in multi-party key generation and provides
+//! partial OPRF evaluations for World ID protocol nullifiers.
 //!
-//! This crate implements the main entry point, configuration, metrics, telemetry,
-//! and service components for an OPRF peer.
+//! # Overview
 //!
-//! TODO TOP LEVEL DOCUMENTATION
+//! The OPRF peer:
+//! - Participates in distributed secret generation with other peers
+//! - Evaluates partial OPRF shares for authenticated clients
+//! - Monitors on-chain events for key generation and merkle root updates
+//! - Stores and manages cryptographic material securely via agnostic Secrets Manager (currently only AWS supported).
 //!
-//! # Key Components
-//! - `AppState`: Holds shared state for Axum, including OPRF service and chain watcher.
-//! - `start()`: Main async entry point to start the service, initialize crypto, secret manager, and spawn Axum server and background tasks.
-//! - `spawn_shutdown_task()`: Helper to create a `CancellationToken` for coordinated shutdown.
-//! - `default_shutdown_signal()`: Default shutdown signal using CTRL+C or UNIX terminate signals.
-//!
-//! # Modules
-//! - `config`: Configuration via environment variables or CLI.
-//! - `metrics`: Metrics keys and helpers.
-//! - `services`: Core services like OPRF evaluation, chain watcher, and secret management.
-//! - `api`: REST API routes.
-use std::{fs::File, str::FromStr, sync::Arc};
+//! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
+use std::{fs::File, future::Future, str::FromStr, sync::Arc};
 
 use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
 use axum::extract::FromRef;
@@ -74,8 +69,26 @@ impl FromRef<AppState> for PartyId {
     }
 }
 
-/// Main entry point for the OPRF-Service.
-/// TODO better docs
+/// Main entry point for the OPRF service.
+///
+/// Initializes all services, loads cryptographic material, and starts:
+/// - The Axum HTTP server for API endpoints
+/// - Chain event watcher for key generation
+/// - Merkle root watcher for account registry
+/// - Background cleanup tasks
+///
+/// The function blocks until the shutdown signal is triggered or an error occurs.
+///
+/// # Arguments
+/// * `config` - Service configuration from CLI or environment
+/// * `shutdown_signal` - Future that completes when shutdown is requested
+///
+/// # Errors
+/// Returns an error if:
+/// - Cryptographic material cannot be loaded
+/// - Blockchain connections fail
+/// - Secret manager initialization fails
+/// - Server binding fails
 pub async fn start(
     config: config::OprfPeerConfig,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,

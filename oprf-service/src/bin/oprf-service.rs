@@ -1,3 +1,9 @@
+//! OPRF Service Binary
+//!
+//! This is the main entry point for the OPRF peer service.
+//! It initializes tracing, metrics, and starts the service with configuration
+//! from command-line arguments or environment variables.
+
 use std::process::ExitCode;
 
 use clap::Parser;

@@ -1,3 +1,9 @@
+//! Tests for Distributed Secret Generation
+//!
+//! This module contains integration tests for the [`DLogSecretGenService`],
+//! verifying the correctness of the multi-round secret generation protocol
+//! including proof generation and verification.
+
 use std::path::PathBuf;
 
 use ark_ec::{CurveGroup as _, PrimeGroup};

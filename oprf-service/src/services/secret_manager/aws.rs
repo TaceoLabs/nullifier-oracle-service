@@ -1,3 +1,15 @@
+//! AWS Secret Manager Implementation
+//!
+//! This module provides an implementation of [`SecretManager`] using AWS Secrets Manager
+//! to store and retrieve RP (Relying Party) secrets.
+//!
+//! The module supports both production and development environments:
+//! - Production: Uses standard AWS credentials and configuration
+//! - Development: Uses LocalStack with hardcoded test credentials
+//!
+//! Secrets are stored as JSON objects containing the RP's public key, nullifier key,
+//! and current/previous epoch secrets.
+
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -100,6 +112,9 @@ impl AwsRpSecret {
 }
 
 impl From<AwsRpSecret> for RpMaterial {
+    /// Converts an [`AwsRpSecret`] into [`RpMaterial`].
+    ///
+    /// Includes both current and previous epoch secrets if available.
     fn from(value: AwsRpSecret) -> Self {
         let mut shares = HashMap::new();
         shares.insert(value.current.epoch, value.current.secret);
@@ -112,6 +127,10 @@ impl From<AwsRpSecret> for RpMaterial {
 
 #[async_trait]
 impl SecretManager for AwsSecretManager {
+    /// Loads all RP secrets from AWS Secrets Manager.
+    ///
+    /// Iterates through all secrets with the configured prefix and deserializes
+    /// them into an [`RpMaterialStore`].
     #[instrument(level = "info", skip_all)]
     async fn load_secrets(&self) -> eyre::Result<RpMaterialStore> {
         tracing::debug!(
@@ -166,6 +185,9 @@ impl SecretManager for AwsSecretManager {
         Ok(RpMaterialStore::new(rp_materials))
     }
 
+    /// Stores a new DLog share for an RP in AWS Secrets Manager.
+    ///
+    /// Creates a new secret with the configured prefix and RP ID.
     #[instrument(level = "info", skip_all)]
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
         let StoreDLogShare {
@@ -187,6 +209,9 @@ impl SecretManager for AwsSecretManager {
         Ok(())
     }
 
+    /// Removes an RP's secret from AWS Secrets Manager.
+    ///
+    /// Permanently deletes the secret without recovery period.
     #[instrument(level = "info", skip(self))]
     async fn remove_dlog_share(&self, rp_id: RpId) -> eyre::Result<()> {
         let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
@@ -201,6 +226,10 @@ impl SecretManager for AwsSecretManager {
         Ok(())
     }
 
+    /// Updates an RP's secret with a new epoch.
+    ///
+    /// Loads the existing secret, moves the current epoch to previous,
+    /// and stores the new share as the current epoch.
     #[instrument(level = "info", skip(self, share))]
     async fn update_dlog_share(
         &self,
@@ -247,6 +276,9 @@ impl SecretManager for AwsSecretManager {
     }
 }
 
+/// Constructs the full secret ID for an RP in AWS Secrets Manager.
+///
+/// Combines the prefix with the RP ID.
 #[inline(always)]
 fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
     format!("{}/{}", rp_secret_id_prefix, rp.into_inner())

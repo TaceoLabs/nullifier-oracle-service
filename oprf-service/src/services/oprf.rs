@@ -68,6 +68,11 @@ pub(crate) enum OprfServiceError {
     InternalServerErrpr(#[from] eyre::Report),
 }
 
+/// Main OPRF service managing session lifecycle and cryptographic operations.
+///
+/// Holds references to the RP material store, session store, merkle watcher,
+/// signature history, and verification key. Cloneable for use across multiple
+/// tasks and API handlers.
 #[derive(Clone)]
 pub(crate) struct OprfService {
     pub(crate) rp_material_store: RpMaterialStore,

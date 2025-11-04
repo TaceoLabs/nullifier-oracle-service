@@ -28,10 +28,9 @@ use zeroize::ZeroizeOnDrop;
 
 type RpMaterialStoreResult<T> = std::result::Result<T, RpMaterialStoreError>;
 
-/// The errors the `RpMaterialStore
+/// Errors returned by the [`RpMaterialStore`].
 ///
-///` returns. This error types is mostly
-/// used in API contexts, meaning it should be digested by the
+/// This error type is mostly used in API contexts, meaning it should be digested by the
 /// [`crate::api::errors`] module.
 ///
 /// Methods that are used in other contexts may return one of the variants

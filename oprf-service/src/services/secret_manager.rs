@@ -20,6 +20,10 @@ pub mod aws;
 /// Must be `Send + Sync` to work with async contexts (e.g., Axum).
 pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
 
+/// Data required to store a new RP's DLog share.
+///
+/// Contains all the information needed to initialize a new RP's
+/// cryptographic material in the secret manager.
 pub(crate) struct StoreDLogShare {
     pub(crate) rp_id: RpId,
     pub(crate) public_key: k256::PublicKey,
