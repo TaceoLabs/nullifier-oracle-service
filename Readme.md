@@ -69,6 +69,7 @@ This command does multiple things in order:
 6. start 3 OPRF nodes
 
 Log files for all processes can be found in the created `logs` directory.
+You can kill the setup with `Ctrl+C`, which kills all processes and stops all docker containers.
 You can then use the dev client to send nullifier requests using the following command:
 
 ```bash
