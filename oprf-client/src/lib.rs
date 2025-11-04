@@ -394,6 +394,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         nonce: query.nonce,
     };
 
+    tracing::debug!("generate query proof");
     let query_input_json = serde_json::to_value(&query_input)
         .expect("can serialize")
         .as_object()
@@ -564,6 +565,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.query_hash,
     );
 
+    tracing::debug!("generate nullifier proof");
     let nullifier_input_json = serde_json::to_value(&nullifier_input)
         .expect("can serialize")
         .as_object()

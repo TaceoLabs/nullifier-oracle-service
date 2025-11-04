@@ -102,7 +102,7 @@ pub async fn start(
     tracing::info!("spawning chain event listener..");
     let key_gen_watcher: KeyGenEventListenerService = Arc::new(
         AlloyKeyGenWatcher::new(
-            &config.chain_ws_rpc_url,
+            config.chain_ws_rpc_url.expose_secret(),
             config.rp_registry_contract,
             wallet,
         )
@@ -129,7 +129,7 @@ pub async fn start(
     let merkle_watcher: MerkleWatcherService = Arc::new(
         AlloyMerkleWatcher::init(
             config.account_registry_contract,
-            &config.chain_ws_rpc_url,
+            config.chain_ws_rpc_url.expose_secret(),
             config.max_merkle_store_size,
         )
         .await

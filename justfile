@@ -4,8 +4,8 @@ default:
 
 
 [group: 'build']
-dev-up:
-    cd oprf-service/deploy && docker-compose up -d
+dev-up *args:
+    cd oprf-service/deploy && docker-compose up -d {{args}}
 
 [group: 'build']
 dev-down:
@@ -48,20 +48,6 @@ lint:
     RUSTDOCFLAGS='-D warnings' cargo doc --workspace -q --no-deps --document-private-items
     cd contracts && forge fmt
 
-[private]
-run-account-registry:
-    cd contracts && forge script script/test/AccountRegistry.s.sol --broadcast --rpc-url 127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
-[private]
-run-auth-tree-indexer *args:
-    #!/usr/bin/env bash
-    cargo build --workspace --release
-    RUST_LOG="debug" ./target/release/auth-tree-indexer {{args}} > logs/auth_tree_indexer.log 2>&1 &
-    auth_tree_indexer=$!
-    echo "started AuthTreeIndexer service with PID $auth_tree_indexer"
-    trap "kill $auth_tree_indexer" SIGINT SIGTERM
-    wait $auth_tree_indexer
-
 [group: 'local-setup']
 run-services:
     #!/usr/bin/env bash
@@ -86,26 +72,31 @@ run-services:
 run-setup:
     #!/usr/bin/env bash
     mkdir -p logs
-    anvil &
+    echo "starting localstack"
+    just dev-up localstack
+    echo "starting anvil..."
+    anvil > logs/anvil.log 2>&1 &
     anvil_pid=$!
     echo "started anvil with PID $anvil_pid"
     sleep 1
     echo "starting AccountRegistry contract..."
-    just run-account-registry
+    just deploy-account-registry-anvil | tee logs/deploy_account_registry.log
+    account_registry=$(grep -oP 'AccountRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_account_registry.log)
     echo "starting RpRegistry contract.."
-    just deploy-rp-registry-with-deps-anvil | tee logs/rp_registry.log
-    address=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/rp_registry.log)
+    just deploy-rp-registry-with-deps-anvil | tee logs/deploy_rp_registry.log
+    rp_registry=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_rp_registry.log)
     echo "register oprf-nodes..."
-    RP_REGISTRY_PROXY=$address just register-participants-anvil
-    echo "starting AuthTreeIndexer service..."
-    just run-auth-tree-indexer &
-    sleep 2
+    RP_REGISTRY_PROXY=$rp_registry just register-participants-anvil
+    echo "starting indexer..."
+    just dev-up postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services &
-    sleep 2
+    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_RP_REGISTRY_CONTRACT=$account_registry just run-services &
+    sleep 1
     echo "ready to run dev-client"
     trap "kill $anvil_pid" SIGINT SIGTERM
     wait $anvil_pid
+    echo "stoping containers..."
+    just dev-down
 
 [group: 'local-setup']
 run-rp-registry-and-services account_registry:
@@ -114,7 +105,7 @@ run-rp-registry-and-services account_registry:
     echo "starting RpRegistry contract.."
     just deploy-rp-registry-with-deps-anvil | tee logs/rp_registry.log
     address=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/rp_registry.log)
-    sleep 2
+    sleep 1
     echo "starting OPRF services..."
     OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{account_registry}} OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services
 
