@@ -123,6 +123,11 @@ run-dev-client *args:
     cargo build --workspace --release
     ./target/release/oprf-dev-client {{args}}
 
+
+[working-directory: 'contracts']
+show-contract-errors:
+    forge inspect src/RpRegistry.sol:RpRegistry errors
+
 [group: 'deploy']
 [working-directory: 'contracts/script/deploy']
 deploy-rp-registry-with-deps-dry-run *args: 
