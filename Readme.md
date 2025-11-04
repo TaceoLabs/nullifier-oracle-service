@@ -37,17 +37,6 @@ To manage AWS credentials and configurations, you can use the `AWS_PROFILE` envi
 export AWS_PROFILE=localstack
 ```
 
-To start/stop the docker containers run:
-
-```bash
-just dev-up
-```
-and
-
-```bash
-just dev-down
-```
-
 ### Forge
 
 To install the dependencies for the smart contracts run the following command:
@@ -72,18 +61,16 @@ just run-setup
 
 This command does multiple things in order:
 
-1. run the [key-gen](./oprf-service/src/bin/key-gen.rs) binary to fill the AWS secretsmanager and generate a `pubkey-list.hex` file in `contracts/script/script-data`.
+1. start `localstack` docker container
 2. start `anvil`
 3. deploy the `AccountRegistry` and `RpRegistry` smart contracts
-4. start the [auth-tree-indexer](./oprf-test/src/bin/auth-tree-indexer.rs) binary.
-5. start 3 OPRF services/nodes
+4. register the OPRF nodes at the `RpRegistry` contract
+5. start `postgres` and `world-id-indexer` docker containers
+6. start 3 OPRF nodes
 
 Log files for all processes can be found in the created `logs` directory.
 You can then use the dev client to send nullifier requests using the following command:
 
 ```bash
-just run-dev-client
+just run-dev-client test
 ```
-
-> [!NOTE]
-> Currently, you can only run the dev client once per setup, subsequent runs will fail because the created authenticator for the account already exists in the AccountRegistry contract.
