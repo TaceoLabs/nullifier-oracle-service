@@ -56,7 +56,7 @@ template KeyGenSinglePartyVar(MAX_DEGREE, MAX_INDEX_BITS) {
     // The actual degree
     signal input degree; // Public
     // The index of the party who is receiving the share
-    signal input party_index;
+    signal input party_index; // Public
     // My secret key and public key
     signal input my_sk;
     signal output my_pk[2]; // Public
@@ -105,5 +105,5 @@ template KeyGenSinglePartyVar(MAX_DEGREE, MAX_INDEX_BITS) {
 // component main {public [degree, pk, nonce]} = KeyGenSingleParty(1, 2);
 // component main {public [degree, pk, nonce]} = KeyGenSingleParty(15, 29);
 
-// component main {public [degree, pk, nonce]} = KeyGenSinglePartyVar(1, 7);
-// component main {public [degree, pk, nonce]} = KeyGenSinglePartyVar(15, 7);
+// component main {public [degree, party_index, pk, nonce]} = KeyGenSinglePartyVar(1, 7);
+// component main {public [degree, party_index, pk, nonce]} = KeyGenSinglePartyVar(15, 7);
