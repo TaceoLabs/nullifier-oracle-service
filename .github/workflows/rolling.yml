@@ -22,11 +22,6 @@ jobs:
   # https://twitter.com/mycoliza/status/1571295690063753218
   nightly-test:
     runs-on: ubuntu-latest
-    services:
-      localstack:
-        image: localstack/localstack:latest
-        ports:
-          - "4566:4566"            
     name: Nightly tests
     steps:
       - uses: actions/checkout@v5
@@ -46,11 +41,6 @@ jobs:
   # https://twitter.com/alcuadrado/status/1571291687837732873
   update:
     runs-on: ubuntu-latest
-    services:
-      localstack:
-        image: localstack/localstack:latest
-        ports:
-          - "4566:4566"            
     name: ubuntu / beta / updated
     # There's no point running this if no Cargo.lock was checked in in the
     # first place, since we'd just redo what happened in the regular test job.
