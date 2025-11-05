@@ -24,11 +24,11 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use ark_bn254::Bn254;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
 use circom_types::{groth16::ZKey, traits::CheckElement};
+use circom_witness_rs::{BlackBoxFunction, Graph};
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, Proof, ProvingKey};
 use k256::sha2::Digest as _;
 use rand::{CryptoRng, Rng};
-use witness::Graph;
-use witness::{BlackBoxFunction, ruint::aliases::U256};
+use ruint::aliases::U256;
 
 use crate::groth16_serde::Groth16Proof;
 
@@ -140,7 +140,7 @@ impl Groth16Material {
                 ZKey::from_reader(zkey_bytes, CheckElement::No).map_err(ZkError::ZKeyInvalid)?;
             query_zkey.into()
         };
-        let graph = witness::init_graph(graph_bytes).map_err(ZkError::GraphInvalid)?;
+        let graph = circom_witness_rs::init_graph(graph_bytes).map_err(ZkError::GraphInvalid)?;
         Ok(Self {
             pk,
             matrices,
@@ -222,7 +222,7 @@ impl Groth16Material {
             .into_iter()
             .map(|(name, value)| (name, parse(value)))
             .collect();
-        let witness = witness::calculate_witness(inputs, &self.graph, Some(&self.bbfs))
+        let witness = circom_witness_rs::calculate_witness(inputs, &self.graph, Some(&self.bbfs))
             .map_err(|err| {
                 tracing::error!("error during calculate_witness: {err:?}");
                 Groth16Error::WitnessGeneration

@@ -2257,6 +2257,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "circom-witness-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4ffb423ecdfea516ad77c12a0a4b6e7a52b42656fe5b31df151ca2abc44545f"
+dependencies = [
+ "ark-bn254",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "byteorder",
+ "cxx",
+ "cxx-build",
+ "eyre",
+ "hex",
+ "num-bigint",
+ "num-traits",
+ "postcard",
+ "rand 0.8.5",
+ "ruint",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4895,6 +4918,7 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
+ "circom-witness-rs",
  "clap",
  "eyre",
  "futures",
@@ -4928,7 +4952,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "uuid",
- "witness",
  "zeroize",
 ]
 
@@ -5010,19 +5033,20 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-groth16",
  "circom-types",
+ "circom-witness-rs",
  "eyre",
  "groth16",
  "hex",
  "k256",
  "rand 0.8.5",
  "reqwest",
+ "ruint",
  "serde",
  "serde_json",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat",
  "thiserror 2.0.17",
  "tracing",
- "witness",
 ]
 
 [[package]]
@@ -8262,28 +8286,6 @@ name = "wit-bindgen"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
-
-[[package]]
-name = "witness"
-version = "0.2.0"
-source = "git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=c8ce390#c8ce39065c158a7d58414212e3cc2ac671b1c088"
-dependencies = [
- "ark-bn254",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "byteorder",
- "cxx",
- "cxx-build",
- "eyre",
- "hex",
- "num-bigint",
- "num-traits",
- "postcard",
- "rand 0.8.5",
- "ruint",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "world-id-primitives"
