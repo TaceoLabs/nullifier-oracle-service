@@ -90,7 +90,7 @@ run-setup:
     echo "starting indexer..."
     just dev-up postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_RP_REGISTRY_CONTRACT=$account_registry just run-services &
+    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services &
     sleep 1
     echo "ready to run dev-client"
     trap "kill $anvil_pid" SIGINT SIGTERM
