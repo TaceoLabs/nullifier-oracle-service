@@ -2,7 +2,8 @@
 //!
 //! Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary
 //!
-//! - `/info` – general info about the deployment
+//! - `/version` – returns the version string
+//! - `/wallet` – returns the wallet address
 //! - `/rp/{rp_id}` – returns the [`oprf_types::api::v1::PublicRpMaterial`] associated with the [`RpId`] iff the OPRF peer has the information stored.
 //!
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
@@ -18,14 +19,13 @@ use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{AppState, services::oprf::OprfService};
 
-use super::errors::ApiError;
-
 /// Create a router containing the info endpoints.
 ///
 /// All endpoints have `Cache-Control: no-cache` set.
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/info", get(info))
+        .route("/version", get(version))
+        .route("/wallet", get(wallet))
         .route("/rp/{rp_id}", get(rp_available))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -36,8 +36,15 @@ pub(crate) fn routes() -> Router<AppState> {
 /// Responds with cargo package name, cargo package version, and the git hash of the repository that was used to build the binary
 ///
 /// Returns `200 OK` with a string response.
-async fn info(State(_app_state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    Ok((StatusCode::OK, crate::version_info()))
+async fn version(State(_app_state): State<AppState>) -> impl IntoResponse {
+    (StatusCode::OK, crate::version_info())
+}
+
+/// Responds with the wallet address of the oprf peer
+///
+/// Returns `200 OK` with a string response.
+async fn wallet(State(state): State<AppState>) -> impl IntoResponse {
+    (StatusCode::OK, state.wallet_address.to_string())
 }
 
 /// Checks whether a RP associated with the [`RpId`] is registered at the service.
