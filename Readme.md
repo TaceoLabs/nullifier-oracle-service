@@ -28,15 +28,6 @@ This is a monorepo containing:
 
 ## Setup
 
-### LocalStack
-
-We use [LocalStack](https://localstack.cloud/) docker container to emulate AWS services locally during development and testing.
-To manage AWS credentials and configurations, you can use the `AWS_PROFILE` environment variable (assuming you have a profile for LocalStack).
-
-```bash
-export AWS_PROFILE=localstack
-```
-
 ### Forge
 
 To install the dependencies for the smart contracts run the following command:
