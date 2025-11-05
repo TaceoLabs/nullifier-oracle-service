@@ -23,11 +23,6 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    services:
-      localstack:
-        image: localstack/localstack:latest
-        ports:
-          - "4566:4566"            
     steps:
       - uses: actions/checkout@v5
         with:
