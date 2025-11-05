@@ -4865,15 +4865,20 @@ dependencies = [
 name = "oprf-core"
 version = "0.1.0"
 dependencies = [
+ "ark-bn254",
  "ark-ec",
  "ark-ff 0.5.0",
+ "ark-groth16",
  "ark-serialize 0.5.0",
  "blake3",
+ "circom-types",
  "criterion",
  "itertools 0.14.0",
  "num-bigint",
+ "oprf-zk",
  "rand 0.8.5",
  "serde",
+ "serde_json",
  "subtle",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat 0.2.0",
