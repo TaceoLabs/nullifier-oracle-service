@@ -11,7 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
 ark-ff.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }

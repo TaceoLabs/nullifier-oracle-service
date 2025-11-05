@@ -53,7 +53,7 @@ just run-setup
 This command does multiple things in order:
 
 1. start `localstack` docker container
-2. start `anvil`
+2. start `anvil` docker container
 3. deploy the `AccountRegistry` and `RpRegistry` smart contracts
 4. register the OPRF nodes at the `RpRegistry` contract
 5. start `postgres` and `world-id-indexer` docker containers

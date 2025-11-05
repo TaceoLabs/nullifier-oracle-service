@@ -8,7 +8,7 @@ use testcontainers::{
     core::{IntoContainerPort, WaitFor, wait::HttpWaitStrategy},
     runners::AsyncRunner as _,
 };
-use testcontainers_modules::{localstack::LocalStack, postgres::Postgres};
+use testcontainers_modules::{anvil::AnvilNode, localstack::LocalStack, postgres::Postgres};
 
 pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
 
@@ -129,7 +129,6 @@ pub async fn postgres_testcontainer() -> eyre::Result<(ContainerAsync<Postgres>,
 pub async fn indexer_testcontainer(
     rpc_url: &str,
     ws_url: &str,
-    anvil_port: u16,
     registry_address: &str,
     db_url: &str,
 ) -> eyre::Result<(ContainerAsync<GenericImage>, String)> {
@@ -144,17 +143,11 @@ pub async fn indexer_testcontainer(
             .with_response_matcher(|res| res.status() == StatusCode::OK),
     ))
     .with_network("network")
-    .with_env_var(
-        "RPC_URL",
-        rpc_url.replace("localhost", "host.testcontainers.internal"),
-    )
-    .with_env_var(
-        "WS_URL",
-        ws_url.replace("localhost", "host.testcontainers.internal"),
-    )
+    .with_env_var("RPC_URL", rpc_url)
+    .with_env_var("WS_URL", ws_url)
     .with_env_var("REGISTRY_ADDRESS", registry_address)
-    .with_env_var("DATABASE_URL", db_url)
-    .with_exposed_host_port(anvil_port);
+    .with_env_var("DATABASE_URL", db_url);
+    // .with_exposed_host_port(anvil_port);
 
     let indexer_container = image.start().await.expect("can start indexer image");
     let indexer_url = format!(
@@ -165,6 +158,25 @@ pub async fn indexer_testcontainer(
             .expect("can bind ip"),
     );
     Ok((indexer_container, indexer_url))
+}
+
+pub async fn anvil_testcontainer()
+-> eyre::Result<(ContainerAsync<AnvilNode>, String, String, String, String)> {
+    let container = AnvilNode::default().with_network("network").start().await?;
+    let host_ip = container.get_host().await?;
+    let host_port = container.get_host_port_ipv4(8545).await?;
+    let bridge_ip = container.get_bridge_ip_address().await?;
+    let host_rpc_url = format!("http://{host_ip}:{host_port}");
+    let host_ws_url = format!("ws://{host_ip}:{host_port}");
+    let bridge_rpc_url = format!("http://{bridge_ip}:8545");
+    let bridge_ws_url = format!("ws://{bridge_ip}:8545");
+    Ok((
+        container,
+        host_rpc_url,
+        host_ws_url,
+        bridge_rpc_url,
+        bridge_ws_url,
+    ))
 }
 
 pub async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
