@@ -86,7 +86,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
 witness = { git = "https://github.com/TaceoLabs/circom-witness-rs.git", rev = "c8ce390" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "a1bd07e"}
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "a1bd07e"} # if this gets updated, also update indexer docker tags
 zeroize = "1"
 
 [profile.profiling]
