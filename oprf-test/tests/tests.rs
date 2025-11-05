@@ -3,7 +3,6 @@ use std::time::{Duration, SystemTime};
 use std::{path::PathBuf, time::Instant};
 
 use alloy::network::EthereumWallet;
-use alloy::node_bindings::Anvil;
 use alloy::providers::{ProviderBuilder, WsConnect};
 use alloy::signers::k256;
 use alloy::signers::k256::ecdsa::signature::Signer as _;
@@ -16,8 +15,8 @@ use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::Types;
 use oprf_test::{
-    EcDsaPubkeyCompressed, RpRegistry, TACEO_ADMIN_ADDRESS, indexer_testcontainer,
-    localstack_testcontainer, postgres_testcontainer,
+    EcDsaPubkeyCompressed, RpRegistry, TACEO_ADMIN_ADDRESS, anvil_testcontainer,
+    indexer_testcontainer, localstack_testcontainer, postgres_testcontainer,
 };
 use oprf_test::{MOCK_RP_SECRET_KEY, TACEO_ADMIN_PRIVATE_KEY};
 use oprf_test::{
@@ -40,19 +39,16 @@ use oprf_zk::{
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
     let _localstack_container = localstack_testcontainer().await?;
+    let (_anvil_container, host_rpc_url, host_ws_url, bridge_rpc_url, bridge_ws_url) =
+        anvil_testcontainer().await?;
     let mut rng = rand::thread_rng();
-    println!("==== OPRF Client Example ====");
-
-    println!("Starting anvil...");
-    let anvil = Anvil::new().spawn();
 
     println!("Deploying AccountRegistry contract...");
-    let account_registry_contract =
-        world_id_protocol_mock::deploy_account_registry(&anvil.endpoint());
+    let account_registry_contract = world_id_protocol_mock::deploy_account_registry(&host_rpc_url);
 
     println!("Deploying RpRegistry contract...");
     let rp_registry_contract = rp_registry_scripts::deploy_test_setup(
-        &anvil.ws_endpoint(),
+        &host_ws_url,
         &TACEO_ADMIN_ADDRESS.to_string(),
         TACEO_ADMIN_PRIVATE_KEY,
     );
@@ -60,9 +56,8 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Starting indexer...");
     let (_postgres_container, db_url) = postgres_testcontainer().await?;
     let (_indexer_container, indexer_url) = indexer_testcontainer(
-        &anvil.endpoint(),
-        &anvil.ws_endpoint(),
-        anvil.port(),
+        &bridge_rpc_url,
+        &bridge_ws_url,
         &account_registry_contract.to_string(),
         &db_url,
     )
@@ -70,7 +65,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
-        &anvil.ws_endpoint(),
+        &host_ws_url,
         rp_registry_contract,
         account_registry_contract,
     )
@@ -78,7 +73,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     let rp_pk = EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
     let rp_id = rp_registry_scripts::init_key_gen(
-        &anvil.ws_endpoint(),
+        &host_ws_url,
         rp_registry_contract,
         rp_pk,
         TACEO_ADMIN_PRIVATE_KEY,
@@ -97,14 +92,14 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let key_material = world_id_protocol_mock::create_account(
         offchain_signer_private_key,
         &onchain_signer,
-        &anvil.ws_endpoint(),
+        &host_ws_url,
         account_registry_contract,
         wallet.clone(),
     )
     .await?;
     let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
         &onchain_signer,
-        &anvil.ws_endpoint(),
+        &host_ws_url,
         account_registry_contract,
         wallet,
         &indexer_url,
@@ -164,7 +159,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let id_commitment_r = ark_babyjubjub::Fq::rand(&mut rng);
 
     println!("Fetching RpNullifierKey...");
-    let ws = WsConnect::new(anvil.ws_endpoint()); // rpc-url of anvil
+    let ws = WsConnect::new(&host_ws_url);
     let provider = ProviderBuilder::new()
         .connect_ws(ws)
         .await

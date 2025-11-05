@@ -1,28 +1,40 @@
 services:
-  postgres:
-    container_name: "postgres"
-    image: postgres
-    network_mode: host
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
   localstack:
     image: localstack/localstack
     container_name: localstack
+    stop_grace_period: 1s
     ports:
       - "4566:4566"            
     environment:
       - SERVICES=secretsmanager
       - DEBUG=1
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: anvil
+    stop_grace_period: 1s
+    ports:
+      - "8545:8545"            
+    command: anvil
+    environment:
+        ANVIL_IP_ADDR: 0.0.0.0
+  postgres:
+    container_name: "postgres"
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
   world-id-indexer:
     image: ghcr.io/worldcoin/world-id-protocol/world-id-indexer:sha-a1bd07e
     container_name: world-id-indexer
-    network_mode: host
+    stop_grace_period: 1s
     depends_on:
       - "postgres"
+      - "anvil"
+    ports:
+      - "8080:8080"            
     environment:
-       RPC_URL: http://127.0.0.1:8545
-       WS_URL: ws://127.0.0.1:8545
-       REGISTRY_ADDRESS: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+       RPC_URL: http://anvil:8545
+       WS_URL: ws://anvil:8545
+       REGISTRY_ADDRESS: ${REGISTRY_ADDRESS}
+       DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres

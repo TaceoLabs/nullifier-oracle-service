@@ -11,7 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws", "node-bindings"] }
+alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
 ark-ec.workspace = true
 ark-ff.workspace = true
@@ -40,7 +40,7 @@ regex.workspace = true
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 testcontainers = { version = "0.25.2", features = ["http_wait_plain", "host-port-exposure"] }
-testcontainers-modules = { version = "0.13", features = ["postgres", "localstack"] }
+testcontainers-modules = { version = "0.13", features = ["postgres", "localstack", "anvil"] }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
 world-id-primitives.workspace = true

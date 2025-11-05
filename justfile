@@ -72,12 +72,8 @@ run-services:
 run-setup:
     #!/usr/bin/env bash
     mkdir -p logs
-    echo "starting localstack"
-    just dev-up localstack
-    echo "starting anvil..."
-    anvil > logs/anvil.log 2>&1 &
-    anvil_pid=$!
-    echo "started anvil with PID $anvil_pid"
+    echo "starting localstack and anvil"
+    just dev-up localstack anvil
     sleep 1
     echo "starting AccountRegistry contract..."
     just deploy-account-registry-anvil | tee logs/deploy_account_registry.log
@@ -88,13 +84,9 @@ run-setup:
     echo "register oprf-nodes..."
     RP_REGISTRY_PROXY=$rp_registry just register-participants-anvil
     echo "starting indexer..."
-    just dev-up postgres world-id-indexer
+    REGISTRY_ADDRESS=$account_registry just dev-up postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services &
-    sleep 1
-    echo "ready to run dev-client"
-    trap "kill $anvil_pid" SIGINT SIGTERM
-    wait $anvil_pid
+    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services
     echo "stoping containers..."
     just dev-down
 
