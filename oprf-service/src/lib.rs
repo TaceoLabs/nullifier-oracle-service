@@ -92,7 +92,8 @@ pub async fn start(
 
     // Load the secret manager. For now we only support AWS.
     // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
-    let secret_manager = Arc::new(AwsSecretManager::init(config.rp_secret_id_prefix).await);
+    let secret_manager =
+        Arc::new(AwsSecretManager::init(config.rp_secret_id_prefix, config.environment).await);
 
     tracing::info!("connecting to wallet..");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())

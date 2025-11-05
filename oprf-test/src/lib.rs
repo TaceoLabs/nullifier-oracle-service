@@ -168,13 +168,15 @@ pub async fn indexer_testcontainer(
 }
 
 pub async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
-    let request = LocalStack::default().with_env_var("SERVICES", "secretsmanager");
-    let container = request.start().await?;
+    let container = LocalStack::default()
+        .with_env_var("SERVICES", "secretsmanager")
+        .start()
+        .await?;
     let host_ip = container.get_host().await?;
     let host_port = container.get_host_port_ipv4(4566).await?;
     let endpoint_url = format!("http://{host_ip}:{host_port}");
     unsafe {
-        std::env::set_var("AWS_ENDPOINT_URL", endpoint_url);
+        std::env::set_var("TEST_AWS_ENDPOINT_URL", endpoint_url);
     }
     Ok(container)
 }

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use aws_config::Region;
+use aws_sdk_secretsmanager::config::Credentials;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
 use eyre::Context;
 use oprf_types::crypto::RpNullifierKey;
@@ -8,6 +10,7 @@ use oprf_types::{RpId, ShareEpoch};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::config::Environment;
 use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
 use crate::services::secret_manager::{DLogShare, SecretManager, StoreDLogShare};
 
@@ -23,10 +26,27 @@ impl AwsSecretManager {
     ///
     /// Loads AWS configuration from the environment and wraps the client
     /// in a `SecretManagerService`.
-    pub(crate) async fn init(rp_secret_id_prefix: String) -> Self {
+    pub(crate) async fn init(rp_secret_id_prefix: String, environment: Environment) -> Self {
         // loads the latest defaults for aws
         tracing::info!("initializing AWS secret manager from env...");
-        let aws_config = aws_config::load_from_env().await;
+        let aws_config = match environment {
+            Environment::Prod => aws_config::load_from_env().await,
+            Environment::Dev => {
+                tracing::info!("using localstack config");
+                let region_provider = Region::new("us-east-1");
+                let credentials = Credentials::new("test", "test", None, None, "Static");
+                // use TEST_AWS_ENDPOINT_URL if set in testcontainer
+                aws_config::from_env()
+                    .region(region_provider)
+                    .endpoint_url(
+                        std::env::var("TEST_AWS_ENDPOINT_URL")
+                            .unwrap_or("http://localhost:4566".to_string()),
+                    )
+                    .credentials_provider(credentials)
+                    .load()
+                    .await
+            }
+        };
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
         AwsSecretManager {
             client,
