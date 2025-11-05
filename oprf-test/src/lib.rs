@@ -135,7 +135,7 @@ pub async fn indexer_testcontainer(
 ) -> eyre::Result<(ContainerAsync<GenericImage>, String)> {
     let image = GenericImage::new(
         "ghcr.io/worldcoin/world-id-protocol/world-id-indexer",
-        "latest",
+        "sha-a1bd07e",
     )
     .with_exposed_port(8080.tcp())
     .with_wait_for(WaitFor::http(

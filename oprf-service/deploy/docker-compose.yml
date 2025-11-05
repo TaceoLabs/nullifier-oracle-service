@@ -16,7 +16,7 @@ services:
       - SERVICES=secretsmanager
       - DEBUG=1
   world-id-indexer:
-    image: ghcr.io/worldcoin/world-id-protocol/world-id-indexer:latest
+    image: ghcr.io/worldcoin/world-id-protocol/world-id-indexer:sha-a1bd07e
     container_name: world-id-indexer
     network_mode: host
     depends_on:
