@@ -27,6 +27,7 @@ services:
   world-id-indexer:
     image: ghcr.io/worldcoin/world-id-protocol/world-id-indexer:sha-a1bd07e
     container_name: world-id-indexer
+    platform: linux/x86_64
     stop_grace_period: 1s
     depends_on:
       - "postgres"
