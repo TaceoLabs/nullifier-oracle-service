@@ -75,6 +75,9 @@ impl From<OprfServiceError> for ApiErrors {
         tracing::debug!("{value:?}");
         match value {
             OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
+            OprfServiceError::BlindedQueryIsIdentity => {
+                ApiErrors::BadRequest("blinded query not allowed to be identity".to_string())
+            }
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
             OprfServiceError::RpMaterialStoreError(rp_material_error) => {
                 Self::from(rp_material_error)

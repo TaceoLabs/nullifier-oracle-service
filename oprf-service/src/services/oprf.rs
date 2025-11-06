@@ -45,6 +45,9 @@ pub(crate) enum OprfServiceError {
     /// The client Groth16 proof did not verify.
     #[error("client proof did not verify")]
     InvalidProof,
+    /// The client Groth16 proof did not verify.
+    #[error("blinded query input is the identity element - not allowed")]
+    BlindedQueryIsIdentity,
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
@@ -132,6 +135,11 @@ impl OprfService {
             .expect("system time is after unix epoch");
         if current_time.abs_diff(req_time_stamp) > self.current_time_stamp_max_difference {
             return Err(OprfServiceError::TimeStampDifference);
+        }
+
+        // check that blinded query (B) is not the identity element
+        if request.blinded_query.is_zero() {
+            return Err(OprfServiceError::BlindedQueryIsIdentity);
         }
 
         // check the RP nonce signature - this also lightens the threat

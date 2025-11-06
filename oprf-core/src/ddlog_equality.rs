@@ -79,7 +79,7 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualitySession {
-    /// Computes C=B*x_share and commitments to two random values d_share and e_share, which will be the shares of the randomness used in the DlogEqualityProof.
+    /// Computes C=B·x_share and commitments to two random values d_share and e_share, which will be the shares of the randomness used in the DlogEqualityProof.
     /// The result is meant to be sent to one accumulating party (e.g., the verifier) who combines all the shares of all parties and creates the challenge hash.
     pub fn partial_commitments(
         b: Affine,

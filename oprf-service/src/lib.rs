@@ -506,6 +506,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_blinded_query_identity_is_bad_request() -> eyre::Result<()> {
+        let setup = TestSetup::new().await?;
+        let mut req = setup.oprf_req;
+        req.blinded_query = ark_babyjubjub::EdwardsAffine::zero();
+        let res = setup
+            .server
+            .post("/api/v1/init")
+            .json(&req)
+            .expect_failure()
+            .await;
+        res.assert_text("blinded query not allowed to be identity");
+        res.assert_status_bad_request();
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_init_bad_signature() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
