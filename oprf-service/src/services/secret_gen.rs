@@ -366,7 +366,7 @@ fn compute_keygen_proof_max_degree1_parties3(
         nonces.iter().map(|n| n.into()).collect_vec(),
     );
 
-    let witness = witness::calculate_witness(
+    let witness = circom_witness_rs::calculate_witness(
         inputs,
         &key_gen_material.graph,
         Some(&key_gen_material.bbfs),

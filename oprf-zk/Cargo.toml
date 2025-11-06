@@ -22,12 +22,13 @@ groth16 = { workspace = true }
 hex = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 rand.workspace = true
+ruint.workspace = true
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-witness = { workspace = true }
+circom-witness-rs = { workspace = true }
 
 [features]
 default = ["embed-zkeys"]
