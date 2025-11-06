@@ -216,7 +216,7 @@ The above OPRF in @fig:twohashdh requires a function $H: bb(F)_p mapsto E$ to en
 == Discrete Logarithm Equality Proof
 
 
-Adding verifiability to @fig:twohashdh can be done by adding a discrete logarithm equality proof. The OPRF server is required to publish a public key $A = k dot D$, where $D$ is a known point (in practice, this can just be the base point). The server then proves to the client that it has used the same key $k$ in the OPRF evaluation @JareckiKK14. In the following we describe how one can prove that two group elements $A$ and $C$ share the same discrete logarithm $k$ for their respective bases $D$ and $B$. In other words, given $A, B, C, D in bb(G)$, we show that $A=k dot D$ and $C = k dot B$ for the same $k in bb(F)_q$. The following algorithm specifies $D$ as an arbitrary group element, in practice $D$ can simply be chosen as the generator of $bb(G)$.
+Adding verifiability to @fig:twohashdh can be done by adding a discrete logarithm equality proof @ChaumP92. The OPRF server is required to publish a public key $A = k dot D$, where $D$ is a known point (in practice, this can just be the base point). The server then proves to the client that it has used the same key $k$ in the OPRF evaluation @JareckiKK14. In the following we describe how one can prove that two group elements $A$ and $C$ share the same discrete logarithm $k$ for their respective bases $D$ and $B$. In other words, given $A, B, C, D in bb(G)$, we show that $A=k dot D$ and $C = k dot B$ for the same $k in bb(F)_q$. The following algorithm specifies $D$ as an arbitrary group element, in practice $D$ can simply be chosen as the generator of $bb(G)$.
 
 #show: style-algorithm
 #algorithm-figure(

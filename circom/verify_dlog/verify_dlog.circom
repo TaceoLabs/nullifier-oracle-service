@@ -33,7 +33,7 @@ template ComputeChallengeHash() {
     challenge <== poseidon.out[1];
 }
 
-
+// This template takes a Dlog equality proof (= Chaum-Pedersen proof) e,s and verifies that A=x*D and C=x*B have the same discrete logarithm x, given A,B,C. D is currently hard coded as the generator of the group.
 template VerifyDlog() {
     input BabyJubJubBaseField() e;
     input signal s;
