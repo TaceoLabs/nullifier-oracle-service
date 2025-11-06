@@ -303,6 +303,9 @@ template KeyGenCommit(DEGREE) {
     comm_coeffs <== poseidon2_sponge[NUM_POSEIDONS - 1].out[1];
 }
 
+// Encrypts the share with a derived symmetric key.
+//
+// The symmetric key is derived using DH with the provided secret-key and public-key. The public-key must be on the curve and in the correct subgroup, as this template does not perform any checks to verify these conditions.
 template EncryptAndCommit() {
     // My secret key
     input BabyJubJubScalarField() my_sk;

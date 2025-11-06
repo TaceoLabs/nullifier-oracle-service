@@ -25,6 +25,8 @@ template AuthenticatedEncryption() {
     tag <== poseidon2_tag.out[1];
 }
 
+
+// We expect that the mpc_public_keys are on curve and in correct subgroup. These are public inputs therefore we assume the verifier to check this.
 template OprfDelegate(MAX_DEPTH, RP_MAX_DEPTH) {
     // Signature verification of the OPRF nonce (There such that sk correponding to pk is never used in a proof directly)
     signal input user_pk[7][2];

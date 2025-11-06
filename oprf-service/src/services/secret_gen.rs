@@ -339,6 +339,15 @@ fn decrypt_key_gen_ciphertexts(
     Ok(DLogShare::from(KeyGenPoly::accumulate_shares(&shares)))
 }
 
+/// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
+///
+/// ## Security Considerations
+/// This method expects that the parameter `peers` contains exactly three [`PeerPublicKeys`] that encapsulate valid BabyJubJub points on the correct subgroup.
+///
+/// If `peers.len()` != 3, the method panics.
+/// If `peers` were constructed without [`PeerPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
+///
+/// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
 fn compute_keygen_proof_max_degree1_parties3(
     key_gen_material: &Groth16Material,
     toxic_waste: ToxicWasteRound1,

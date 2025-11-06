@@ -43,11 +43,9 @@ bus BabyJubJubScalarField {
 // where a = 168700 and d = 168696.
 //
 // If the check succeeds, outputs a BabyJubJubPoint bus tagged twisted_edwards.
-// This template is the canonical way to obtain a point that can be safely used
-// with the other templates defined in this file.
+// This template is the canonical way to obtain a point that can be safely used with the other templates defined in this file.
 //
-// Use this method to construct BabyJubJub points in Twisted Edwards form unless you explicitly
-// know what you are doing.
+// Use this method to construct BabyJubJub points in Twisted Edwards form unless you explicitly know what you are doing.
 template BabyJubJubCheck() {
     signal input x;
     signal input y;
@@ -108,8 +106,9 @@ template BabyJubJubScalarGeneratorBits() {
 }
 
 // Performs fixed-point scalar multiplication e·P for a constant point P.
-// When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul
-// to reduce constraints.
+// When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul to reduce constraints.
+// 
+// Note that this template assumes P is on the curve and belongs to the correct subgroup. It does not perform any checks to verify these conditions.
 template BabyJubJubScalarMulFix(BASE) {
     input BabyJubJubScalarField() e;
     output BabyJubJubPoint() { twisted_edwards } out;
@@ -118,8 +117,9 @@ template BabyJubJubScalarMulFix(BASE) {
 }
 
 // Performs fixed-point scalar multiplication e·P for a constant point P.
-// When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul
-// to reduce constraints.
+// When P is known at compile time (e.g., the generator), prefer this over BabyJubJubScalarMul to reduce constraints.
+//
+// Note that this template assumes P is on the curve and belongs to the correct subgroup. It does not perform any checks to verify these conditions.
 template BabyJubJubScalarMulFixBits(BASE) {
     signal input e[251];
     output BabyJubJubPoint() { twisted_edwards } out;
@@ -130,6 +130,8 @@ template BabyJubJubScalarMulFixBits(BASE) {
 
 
 // Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
+// 
+// Note that this template assumes P is on the curve and belongs to the correct subgroup. It does not perform any checks to verify these conditions.
 template BabyJubJubScalarMul() {
     input BabyJubJubScalarField() e;
     input BabyJubJubPoint() { twisted_edwards } p;
@@ -139,6 +141,8 @@ template BabyJubJubScalarMul() {
 }
 
 // Performs scalar multiplication e·P for an arbitrary point P in Twisted Edwards form.
+// 
+// Note that this template assumes P is on the curve and belongs to the correct subgroup. It does not perform any checks to verify these conditions.
 template BabyJubJubScalarMulBits() {
     signal input e[251];
     input BabyJubJubPoint() { twisted_edwards } p;
@@ -151,12 +155,12 @@ template BabyJubJubScalarMulBits() {
 
 
 // Performs scalar multiplication e·P where e is provided in the base field Fq of BabyJubJub.
-// The scalar field Fr has 251 bits. To avoid an explicit modular reduction in-circuit,
-// we use a strict 254-bit decomposition. EscalarMulAny correctly handles the modular
-// reduction internally despite the redundant high bits.
+// 
+// The scalar field Fr has 251 bits. To avoid an explicit modular reduction in-circuit, we use a strict 254-bit decomposition. EscalarMulAny correctly handles the modular reduction internally despite the redundant high bits.
 //
-// This is useful for verifiers that provide scalars in Fq: reducing them to Fr in-circuit
-// would be more expensive than letting EscalarMulAny handle the modular reduction.
+// This is useful for verifiers that provide scalars in Fq: reducing them to Fr in-circuit would be more expensive than letting EscalarMulAny handle the modular reduction.
+// 
+// Note that this template assumes P is on the curve and belongs to the correct subgroup. It does not perform any checks to verify these conditions.
 template BabyJubJubScalarMulBaseField() {
     input BabyJubJubBaseField() e;
     input BabyJubJubPoint() { twisted_edwards } p;
