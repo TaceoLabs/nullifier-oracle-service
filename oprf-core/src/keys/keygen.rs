@@ -20,6 +20,7 @@ pub struct KeyGenPoly {
 }
 
 impl KeyGenPoly {
+    // From SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
     // Absorb 2, squeeze 1,  domainsep = 0x4142
     // [0x80000002, 0x00000001, 0x4142]
     const T1_DS: u128 = 0x80000002000000014142;

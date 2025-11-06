@@ -332,6 +332,10 @@ template EncryptAndCommit() {
     sym_key.e <== my_sk;
 
     // Encrypt the shares with the derived symmetric keys
+
+    // From SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
+    // Absorb 2, squeeze 1,  domainsep = 0x4142
+    // [0x80000002, 0x00000001, 0x4142]
     var T1_DS = 0x80000002000000014142;
     var poseidon2_cipher_state[3] = Poseidon2(3)([T1_DS, sym_key.out.x, nonce]);
     ciphertext <== poseidon2_cipher_state[1] + share;

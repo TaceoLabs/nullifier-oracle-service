@@ -71,6 +71,7 @@ impl<const MAX_DEPTH: usize, const RP_MAX_DEPTH: usize>
 {
     pub const MAX_PUBLIC_KEYS: usize = RpIdQueryProofInput::<MAX_DEPTH>::MAX_PUBLIC_KEYS;
 
+    // From SAFE-API paper (https://eprint.iacr.org/2023/522.pdf)
     // Absorb 2, squeeze 3, absorb 3, squeeze 1, domainsep = 0x4142
     // [0x80000002, 0x00000003, 0x80000003, 0x00000001, 0x4142]
     const T3: &str = "0x800000020000000380000003000000014142";
