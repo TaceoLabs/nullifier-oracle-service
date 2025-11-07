@@ -526,22 +526,22 @@ contract RpRegistryTest is Test {
 function aliceProof() pure returns (Types.Groth16Proof memory) {
     return Types.Groth16Proof({
         pA: [
-            0x0730d45e94d07a4b54f225fd0d0b89bae66f89d8731f9cc50f6a87e072871ea6,
-            0x2f20d1bdef6a6417b268bd954cd8e1d4be12d4cd51fa05eb9b76b990f931fe7f
+            0x02d426aeb4bdbc458021dbdb04b03075df20f91ead8abd9561711960287e8f1a,
+            0x1ef3643eb0d7b87e8007089fb21cfd69966f7f9e574cce694656204039c43e42
         ],
         pB: [
             [
-                0x19a178b3af5e560e9563744674e8deef661468e0b64848670b395a1b98d93e3c,
-                0x047d859e0c4c151d55a4a983a33e7c15df8ef3a2d3c77a8ac5049238e3305788
+                0x24fafb9c47b411d9466c1e5f12b35792ec297c0520a8e4f225639c08f474cf4f,
+                0x220a805ad4d15dc5241e296753d645bfea896691603f3caab8beb442dea2b9d6
             ],
             [
-                0x0ed5a75f3e1d43fa555c9525912f10d7d30a344447ea6724df6df995615e0c64,
-                0x0570c2f37467f1eaf8f351065545942b2624fabcb908a1ea483a4c2c913ef872
+                0x217d0611d75ffda4385cb0ed737b1ef58ce85825ae3c556ff20e05d4a76f037c,
+                0x0244b8cc06256016d00281662f32ef0f970bc62d0ff2abff26b2de59f3712f2b
             ]
         ],
         pC: [
-            0x00176fd3aa2c901a0b49edd8a05fbb7aae532d5e36c355939f9cdc617a63e5d3,
-            0x21ea25e4273c82581c7bc0040f61a6b1ddc0de7cc86fda106554880bacf57c47
+            0x23623f67629728787e692a1e96ec463eb1e85de56972ca495b95c79be1785afc,
+            0x0265a96ebd271c1bb3c94647b65b8ae48305fee3aedb964ce68500ccf2fef178
         ]
     });
 }
@@ -549,22 +549,22 @@ function aliceProof() pure returns (Types.Groth16Proof memory) {
 function bobProof() pure returns (Types.Groth16Proof memory) {
     return Types.Groth16Proof({
         pA: [
-            0x1775f93c20a9d661e64c77d5b926242dc180f504878e185b3df0e2ae078c66dc,
-            0x26d55220a7396de0477d01d9e72163d74b6b3b1642ed262bbcfce6ec250739ff
+            0x1ec0cda76ce6427de77f8f04a9a75a3e0b97a38dad3c8c04c7ffab019b94f97b,
+            0x2f6d0a0dd98693d43b40e837e60162f8988534437ae0bcaf05e44a68ed3ebeea
         ],
         pB: [
             [
-                0x2dc70a7ecc35079e827c98b9fb27e67c0483fe924b93e8d07932791981c98509,
-                0x2dec711659f448b6f6a483e347ea64c75b075f3fefb3d9a0f0792eb8ae171c1b
+                0x10e835f46a442f362f7c1b8fe214da79fdbb4d75de434292d76d88afa6392399,
+                0x03aa6b6261249751c496298d5aaa61a72f7cd23eec4db79313a791e0deb3c2e3
             ],
             [
-                0x138101131f156b73f0a872f28b8ebe59e87d876462a64cf9af1f542be021f727,
-                0x16523fe5288ca03c732ea124ed345a31da9124c357e792bcde2f6ae0e2119318
+                0x0e85dd5fed92425825d4246d68536265e266ad49e486316784145013ed80d5c6,
+                0x0ce500b3f77e03c4b7ecd519c09490b3c214db22d7b269ae8ce6478c0e32cd18
             ]
         ],
         pC: [
-            0x194a217452c303c8c4c60ffa9b9077d54d8aeb70b50ddbe52e63f185f8a3b271,
-            0x0930f3480ecb9d0e358348e644c93fe60dd31f991d1cdcc241b550b973db6715
+            0x0f7fafe9d43b2bf6b52af59a8f9e50b8aaacbd4ba61aef4fbb711f19c163695f,
+            0x283d0425e9f41055484757a501757db5151c880c78bdb890924172b087a74df6
         ]
     });
 }
@@ -572,22 +572,22 @@ function bobProof() pure returns (Types.Groth16Proof memory) {
 function carolProof() pure returns (Types.Groth16Proof memory) {
     return Types.Groth16Proof({
         pA: [
-            0x01c16ff2a1a1768ae54f6227eeb4b1d75a30bd4e5903a344b811086a97abd7a9,
-            0x262a56b0984658af82b7bdc5ee162a173a5b4292693ef05f38ff82131c37f87d
+            0x2894143e50b0401aa65a2d446b79f30280cf673579ab5a325a129ae14ebf7eae,
+            0x24e49f24a3bfd6a5c6b272fae1e0bd140c08c362ebf6aac9c4d9efb015d71dfd
         ],
         pB: [
             [
-                0x19703205648c477e62e4d9930f150b8e637e63dd88f2e15e97a30e07e54b9ee3,
-                0x2cd6e7b1df66d4682e43ec8e078e34b6a62d4baa14ad89def0f101204c0655e8
+                0x09353482013fe78f4bd2fd007012d1300bfa4ea02eee7e3ec05dca73a9e450fd,
+                0x1c92b9f1a256875ea863dd3a39ce8cd69e82ed142632a869ea176301f499c81f
             ],
             [
-                0x0321effea2ac7b5dd32b48d6ca909b717214bb82693a9f5671d00dd93164042a,
-                0x28309ec5da1acbae0af98b5b894d1f1bdef4aa1fc2228245311ec347d7583833
+                0x04aa8e18614388657b5a172b2474f39723820c4f4f5e5448e7a36d5b76004262,
+                0x14309a0d1eff86870a91091e7f7d43abfdae7d5cf5846f5908e934d30df3182a
             ]
         ],
         pC: [
-            0x03d8e55483c4c9badbc2dae476f1b574e138db33483537890352b8bc9343ed71,
-            0x1d3926bfc37027313855514eaaae7a897cd31f859b4f13c646851d98a6c3941d
+            0x14177ba03c780cba11f2582c1b9c1bd13dacbd8817d35cf1acb37a9b85838e7f,
+            0x2be36650ef268ba6efdec3ad5ca6feb1d0883fcb2fb4f87162da0fd6d3a5d7be
         ]
     });
 }

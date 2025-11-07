@@ -15,6 +15,18 @@ dev-down:
 export-contract-abi:
     cd contracts && forge build --silent && jq '.abi' out/RpRegistry.sol/RpRegistry.json > RpRegistry.json
 
+[group: 'build']
+[working-directory: 'circom/main']
+print-constraints:
+    #!/usr/bin/env bash
+    key_gen=$(circom OPRFKeyGenProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    nullifier=$(circom OPRFNullifierProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    proof=$(circom OPRFQueryProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    printf "%-20s %s\n" "Circuit" "Constraints"
+    printf "%-20s %s\n" "KeyGen(3-1)" "$key_gen"
+    printf "%-20s %s\n" "OPRFNullifier" "$nullifier"
+    printf "%-20s %s\n" "QueryProof" "$proof"
+
 [group: 'test']
 unit-tests:
     cargo test --release --all-features --lib
@@ -54,15 +66,15 @@ run-services:
     mkdir -p logs
     cargo build --workspace --release
     # anvil wallet 7
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service0.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356 --key-gen-zkey-path ./circom/OPRFKeyGenProof.13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
     # anvil wallet 8
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service1.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 --key-gen-zkey-path ./circom/OPRFKeyGenProof.13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service1.log 2>&1 &
     pid1=$!
     echo "started service1 with PID $pid1"
     # anvil wallet 9
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --key-gen-zkey-path ./circom/keygen_13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service2.log 2>&1  &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/query.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --key-gen-zkey-path ./circom/OPRFKeyGenProof.13.zkey --key-gen-witness-graph-path ./circom/keygen_graph.bin > logs/service2.log 2>&1  &
     pid2=$!
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM

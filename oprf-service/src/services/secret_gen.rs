@@ -342,7 +342,7 @@ fn decrypt_key_gen_ciphertexts(
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
 ///
 /// ## Security Considerations
-/// This method expects that the parameter `peers` contains exactly three [`PeerPublicKeys`] that encapsulate valid BabyJubJub points on the correct subgroup.
+/// This method expects that the parameter `peers` contains exactly three [`PeerPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
 ///
 /// If `peers.len()` != 3, the method panics.
 /// If `peers` were constructed without [`PeerPublicKey::new_unchecked`], the points are on curve and the correct subgroup.

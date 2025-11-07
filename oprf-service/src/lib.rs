@@ -375,7 +375,7 @@ mod tests {
             let signature = rp_signing_key.sign(&msg);
 
             let query_material = Groth16Material::from_bytes(
-                &std::fs::read(dir.join("../circom/query.zkey"))?,
+                &std::fs::read(dir.join("../circom/main/query/OPRFQuery.zkey"))?,
                 QUERY_FINGERPRINT.into(),
                 QUERY_GRAPH_BYTES,
             )?;
@@ -439,7 +439,7 @@ mod tests {
                 HashMap::from([(merkle_root, 0)]),
                 max_merkle_store_size,
             )?);
-            let user_verification_key_path = dir.join("../circom/query.vk.json");
+            let user_verification_key_path = dir.join("../circom/main/query/OPRFQuery.vk.json");
             let vk = File::open(&user_verification_key_path)?;
             let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);

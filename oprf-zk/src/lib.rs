@@ -34,20 +34,22 @@ use crate::groth16_serde::Groth16Proof;
 
 pub mod groth16_serde;
 
-pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/query_graph.bin");
-pub const NULLIFIER_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/nullifier_graph.bin");
+pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
+pub const NULLIFIER_GRAPH_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifierGraph.bin");
 
 #[cfg(feature = "embed-zkeys")]
-pub const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/query.zkey");
+pub const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.zkey");
 #[cfg(feature = "embed-zkeys")]
-pub const NULLIFIER_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/nullifier.zkey");
+pub const NULLIFIER_ZKEY_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifier.zkey");
 
 /// The SHA-256 fingerprint of the OPRFQuery ZKey.
 pub const QUERY_FINGERPRINT: &str =
-    "18e942559f5db90d86e1f24dfc3c79c486d01f6284ccca80fdb61a5cca9da16a";
+    "67c0c6c5f0a76ee4af13762e86257ec966c458fa624eca1ed93b3f422b8af223";
 /// The SHA-256 fingerprint of the OPRFNullifier ZKey.
 pub const NULLIFIER_FINGERPRINT: &str =
-    "69195d6c04b0751b03109641c0b8aaf9367af2c1740909406deaefd24440dfb2";
+    "5240a5553726aaafd9d4e4f437996ed12dfb808b8f3917c6d844d9baa45f7cd7";
 
 /// Errors that can occur while loading or parsing a `.zkey` or graph file.
 #[derive(Debug, thiserror::Error)]

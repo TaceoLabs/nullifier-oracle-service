@@ -473,12 +473,12 @@ async fn main() -> eyre::Result<()> {
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let query_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/query.zkey"))?,
+        &std::fs::read(dir.join("../circom/OPRFQueryProof.zkey"))?,
         QUERY_FINGERPRINT.into(),
         QUERY_GRAPH_BYTES,
     )?;
     let nullifier_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/nullifier.zkey"))?,
+        &std::fs::read(dir.join("../circom/OPRFNullifierProof.zkey"))?,
         NULLIFIER_FINGERPRINT.into(),
         NULLIFIER_GRAPH_BYTES,
     )?;

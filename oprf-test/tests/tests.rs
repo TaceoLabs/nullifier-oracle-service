@@ -128,12 +128,12 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Loading zkeys and matrices...");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let query_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/query.zkey"))?,
+        &std::fs::read(dir.join("../circom/main/query/OPRFQuery.zkey"))?,
         QUERY_FINGERPRINT.into(),
         QUERY_GRAPH_BYTES,
     )?;
     let nullifier_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/nullifier.zkey"))?,
+        &std::fs::read(dir.join("../circom/main/nullifier/OPRFNullifier.zkey"))?,
         NULLIFIER_FINGERPRINT.into(),
         NULLIFIER_GRAPH_BYTES,
     )?;

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {RpRegistry} from "../../src/RpRegistry.sol";
+import {RpRegistry} from "../src/RpRegistry.sol";
 
 contract DeleteRpMaterialScript is Script {
     RpRegistry public rpRegistry;
