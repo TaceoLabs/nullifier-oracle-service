@@ -4,9 +4,10 @@
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health endpoints (`/health`).
-//! - [`info`] – Info about the software and version (`/info`).
+//! - [`info`] – Info about the service (`/version` and `/wallet`).
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
+use alloy::primitives::Address;
 use axum::Router;
 use oprf_types::crypto::PartyId;
 use tower_http::trace::TraceLayer;
@@ -32,10 +33,15 @@ pub(crate) mod v1;
 ///
 /// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
 /// instances needed to handle requests.
-pub(crate) fn new_app(party_id: PartyId, oprf_service: OprfService) -> Router {
+pub(crate) fn new_app(
+    party_id: PartyId,
+    oprf_service: OprfService,
+    wallet_address: Address,
+) -> Router {
     let app_state = AppState {
         oprf_service,
         party_id,
+        wallet_address,
     };
     Router::new()
         .nest("/api/v1", v1::build())
@@ -51,8 +57,12 @@ pub(crate) fn new_app(party_id: PartyId, oprf_service: OprfService) -> Router {
 /// to spin up the full API with mock services and expectations.
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) fn new_test_app(party_id: PartyId, oprf_service: OprfService) -> TestServer {
-    let app = new_app(party_id, oprf_service);
+pub(crate) fn new_test_app(
+    party_id: PartyId,
+    oprf_service: OprfService,
+    wallet_address: Address,
+) -> TestServer {
+    let app = new_app(party_id, oprf_service, wallet_address);
     TestServer::builder()
         .expect_success_by_default()
         .mock_transport()

@@ -14,7 +14,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}/${{ inputs.image-name }}
   BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 permissions:
@@ -65,11 +65,17 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
           flavor: |
-            latest=false
+            latest=auto
 
           tags: |
             type=sha,format=long
-            type=match,pattern=(.*)-(v\d+\.\d+\.\d+.*),group=2
+            type=match,pattern=^${{ inputs.image-name }}-(v\d+\.\d+\.\d+.*)$,group=1
+            type=raw,value=latest,enable={{is_default_branch}}
+
+          labels: |
+            org.opencontainers.image.title=${{ inputs.image-name }}
+            org.opencontainers.image.description=Docker image for ${{ inputs.image-name }} from ${{ github.repository_owner }}/${{ github.repository }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Build and push
         id: build
@@ -131,17 +137,25 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
           flavor: |
-            latest=false
+            latest=auto
 
           tags: |
             type=sha,format=long
-            type=match,pattern=(.*)-(v\d+\.\d+\.\d+.*),group=2
+            type=match,pattern=^${{ inputs.image-name }}-(v\d+\.\d+\.\d+.*)$,group=1
+            type=raw,value=latest,enable={{is_default_branch}}
+
+          labels: |
+            org.opencontainers.image.title=${{ inputs.image-name }}
+            org.opencontainers.image.description=Docker image for ${{ inputs.image-name }} from ${{ github.repository_owner }}/${{ github.repository }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            --annotation "index:org.opencontainers.image.description=REST API service that answers OPRF requests" \
+            --annotation "index:org.opencontainers.image.title=${{ inputs.image-name }}" \
+            --annotation "index:org.opencontainers.image.description=Docker image for ${{ inputs.image-name }} from ${{ github.repository_owner }}/${{ github.repository }}" \
+            --annotation "index:org.opencontainers.image.vendor=${{ github.repository_owner }}" \
             $(printf '${{ env.REGISTRY }}/${{ steps.meta.outputs.tags }}@sha256:%s ' *)
 
       - name: Inspect image

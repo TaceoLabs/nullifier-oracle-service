@@ -14,7 +14,7 @@
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 use std::{fs::File, future::Future, str::FromStr, sync::Arc};
 
-use alloy::{network::EthereumWallet, signers::local::PrivateKeySigner};
+use alloy::{network::EthereumWallet, primitives::Address, signers::local::PrivateKeySigner};
 use axum::extract::FromRef;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
@@ -55,6 +55,7 @@ pub fn version_info() -> String {
 pub(crate) struct AppState {
     oprf_service: OprfService,
     party_id: PartyId,
+    wallet_address: Address,
 }
 
 impl FromRef<AppState> for OprfService {
@@ -111,6 +112,7 @@ pub async fn start(
     tracing::info!("connecting to wallet..");
     let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
         .context("while reading wallet private key")?;
+    let wallet_address = private_key.address();
     let wallet = EthereumWallet::from(private_key);
 
     tracing::info!("spawning chain event listener..");
@@ -177,7 +179,7 @@ pub async fn start(
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
 
-    let axum_rest_api = api::new_app(party_id, oprf_service);
+    let axum_rest_api = api::new_app(party_id, oprf_service, wallet_address);
 
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {
@@ -272,6 +274,7 @@ mod tests {
     use std::time::SystemTime;
     use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
 
+    use alloy::primitives::address;
     use ark_ff::{BigInteger as _, PrimeField as _, UniformRand, Zero};
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
@@ -452,7 +455,11 @@ mod tests {
                 current_time_stamp_max_difference,
                 signature_history_cleanup_interval,
             );
-            let server = api::new_test_app(PartyId::from(0), oprf_service.clone());
+            let server = api::new_test_app(
+                PartyId::from(0),
+                oprf_service.clone(),
+                address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"), // random anvil address
+            );
 
             Ok(Self {
                 server,
