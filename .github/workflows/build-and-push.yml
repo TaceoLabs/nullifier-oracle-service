@@ -65,12 +65,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
           flavor: |
-            latest=auto
+            latest=false
 
           tags: |
             type=sha,format=long
             type=match,pattern=^${{ inputs.image-name }}-(v\d+\.\d+\.\d+.*)$,group=1
-            type=raw,value=latest,enable={{is_default_branch}}
 
           labels: |
             org.opencontainers.image.title=${{ inputs.image-name }}
@@ -137,12 +136,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
           flavor: |
-            latest=auto
+            latest=false
 
           tags: |
             type=sha,format=long
             type=match,pattern=^${{ inputs.image-name }}-(v\d+\.\d+\.\d+.*)$,group=1
-            type=raw,value=latest,enable={{is_default_branch}}
 
           labels: |
             org.opencontainers.image.title=${{ inputs.image-name }}
