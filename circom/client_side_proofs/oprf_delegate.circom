@@ -116,10 +116,11 @@ template OprfDelegate(MAX_DEPTH, RP_MAX_DEPTH) {
     BabyJubJubScalarField() beta_f;
     beta_f.f <== beta;
     // The following checks that the oprf_response is on the curve.
-    // We do not check the correct subgroup, since we compute p^beta_f and match it with the blinded response.
+    // The following checks that the oprf_response is on the curve and in the correct subgroup.
     component p_check = BabyJubJubCheck();
     p_check.x <== oprf_response[0];
     p_check.y <== oprf_response[1];
+    BabyJubJubCheckInCorrectSubgroup()(p_check.p);
 
     component unblinder = BabyJubJubScalarMul();
     unblinder.e <== beta_f;
