@@ -45,7 +45,7 @@ pub(crate) enum OprfServiceError {
     /// The client Groth16 proof did not verify.
     #[error("client proof did not verify")]
     InvalidProof,
-    /// The client Groth16 proof did not verify.
+    /// The blinded query is the identity element
     #[error("blinded query input is the identity element - not allowed")]
     BlindedQueryIsIdentity,
     /// The request ID is unknown or has already been finalized.
