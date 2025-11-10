@@ -180,14 +180,44 @@ contract RpRegistryTest is Test {
         rpRegistryTest.registerOprfPeers(peerAddresses);
     }
 
-    function testRegisterParticipantsTwice() public {
+    function testUpdateParticipants() public {
+        // check the partyIDs
+        vm.prank(alice);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 0);
+        vm.stopPrank();
+
+        vm.prank(bob);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 1);
+        vm.stopPrank();
+
+        vm.prank(carol);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 2);
+        vm.stopPrank();
+
         address[] memory peerAddresses = new address[](3);
-        peerAddresses[0] = alice;
-        peerAddresses[1] = bob;
-        peerAddresses[2] = carol;
-        // check that not ready
-        vm.expectRevert(abi.encodeWithSelector(RpRegistry.AlreadySubmitted.selector));
+        peerAddresses[0] = bob;
+        peerAddresses[1] = carol;
+        peerAddresses[2] = taceoAdmin;
+
+        // update
         rpRegistry.registerOprfPeers(peerAddresses);
+
+        vm.prank(bob);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 0);
+        vm.stopPrank();
+
+        vm.prank(carol);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 1);
+        vm.stopPrank();
+
+        vm.prank(taceoAdmin);
+        assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 2);
+        vm.stopPrank();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.NotAParticipant.selector));
+        rpRegistry.checkIsParticipantAndReturnPartyId();
+        vm.stopPrank();
     }
 
     function testRegisterParticipantsWrongNumberKeys() public {
