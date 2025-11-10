@@ -33,9 +33,9 @@ WORKDIR /app
 COPY --from=healthcheck-builder /usr/local/cargo/bin/simple-web-healthcheck /healthcheck
 
 # copy needed files and binary for oprf-service
-COPY --from=builder /app/circom/query.vk.json /app/query.vk.json
-COPY ./circom/OPRFKeyGenProof.13.zkey /app/OPRFKeyGenProof.13.zkey
-COPY ./circom/keygen_graph.bin /app/keygen_graph.bin
+COPY ./circom/main/query/OPRFQuery.vk.json /app/OPRFQuery.vk.json
+COPY ./circom/main/key-gen/OPRFKeyGen.13.zkey /app/OPRFKeyGenProof.13.zkey
+COPY ./circom/main/key-gen/OPRFKeyGenGraph.13.bin /app/OPRFKeyGenGraph.13.bin
 COPY --from=builder /app/target/release/oprf-service /app/oprf-service
 
 ENTRYPOINT [ "/app/oprf-service" ]
