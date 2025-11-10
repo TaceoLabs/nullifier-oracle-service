@@ -57,6 +57,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     uint256 public threshold;
     uint256 public numPeers;
 
+    // The addresses of the currently participating peers.
+    address[] public peerAddresses;
+    // Maps the address of a peer to its party id.
     mapping(address => Types.OprfPeer) addressToPeer;
 
     // The keygen state for each RP
@@ -148,11 +151,16 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
     /// @param _peerAddresses An array of addresses of the OPRF peers.
     function registerOprfPeers(address[] calldata _peerAddresses) external virtual onlyProxy onlyInitialized onlyOwner {
-        if (isContractReady) revert AlreadySubmitted();
         if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
+        // delete the old participants
+        for (uint256 i = 0; i < peerAddresses.length; ++i) {
+            delete addressToPeer[peerAddresses[i]];
+        }
+        // set the new ones
         for (uint256 i = 0; i < _peerAddresses.length; i++) {
             addressToPeer[_peerAddresses[i]] = Types.OprfPeer({isParticipant: true, partyId: i});
         }
+        peerAddresses = _peerAddresses;
         isContractReady = true;
     }
 
