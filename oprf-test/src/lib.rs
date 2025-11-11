@@ -82,12 +82,13 @@ async fn start_service(
         let res = oprf_service::start(config, Arc::new(secret_manager), never).await;
         eprintln!("service failed to start: {res:?}");
     });
-    tokio::time::timeout(Duration::from_secs(5), async {
+    // very graceful timeout for CI
+    tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             if reqwest::get(url.clone() + "/health").await.is_ok() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     })
     .await

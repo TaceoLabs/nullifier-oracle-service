@@ -73,13 +73,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     .await;
 
     let rp_pk = EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
-    let rp_id = rp_registry_scripts::init_key_gen(
-        &host_ws_url,
-        rp_registry_contract,
-        rp_pk,
-        TACEO_ADMIN_PRIVATE_KEY,
-    );
-    println!("init key-gen with rp id: {rp_id}");
 
     let private_key = PrivateKeySigner::from_str(TACEO_ADMIN_PRIVATE_KEY)
         .context("while reading wallet private key")?;
@@ -98,6 +91,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         wallet.clone(),
     )
     .await?;
+    // FIXME we need to wait for 5 seconds (unfortunately) because there is a bug in the world-indexer.
+    // remove this as soon as the bug is resolved
+    tokio::time::sleep(Duration::from_secs(5)).await;
     let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
         &onchain_signer,
         &host_ws_url,
@@ -108,16 +104,25 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     )
     .await?;
 
+    // current time stamp before the transactions to anvil to don't get proof from future errors
+    let current_time_stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system time is after unix epoch")
+        .as_secs();
+    let rp_id = rp_registry_scripts::init_key_gen(
+        &host_ws_url,
+        rp_registry_contract,
+        rp_pk,
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+    println!("init key-gen with rp id: {rp_id}");
+
     println!("Creating nonce and and sign it...");
     println!("In a real-world scenario, the RP would sign the nonce.");
     println!();
     println!("IMPORTANT: The signature is computed as enc(nonce) | enc(timestamp),");
     println!("where enc(x) is the little-endian byte representation of x.");
     let nonce = ark_babyjubjub::Fq::rand(&mut rand::thread_rng());
-    let current_time_stamp = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("system time is after unix epoch")
-        .as_secs();
 
     let mut msg = Vec::new();
     msg.extend(nonce.into_bigint().to_bytes_le());
@@ -167,7 +172,8 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         .context("while connecting to RPC")?;
     let contract = RpRegistry::new(rp_registry_contract, provider.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async {
+    // very graceful timeout for CI
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             interval.tick().await;
             let maybe_rp_nullifier_key =
@@ -178,7 +184,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         }
     })
     .await
-    .context("could not finish key-gen in 5 seconds")?
+    .context("could not finish key-gen in 60 seconds")?
     .context("while polling RP key")?;
 
     println!("Running OPRF client flow...");
@@ -279,7 +285,8 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
         .context("while connecting to RPC")?;
     let contract = RpRegistry::new(rp_registry_contract, provider.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(5), async {
+    // very graceful timeout for CI
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             interval.tick().await;
             let maybe_rp_nullifier_key =
@@ -290,7 +297,7 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
         }
     })
     .await
-    .context("could not finish key-gen in 5 seconds")?
+    .context("could not finish key-gen in 60 seconds")?
     .context("while polling RP key")?;
 
     println!("checking that key-material is registered at services..");

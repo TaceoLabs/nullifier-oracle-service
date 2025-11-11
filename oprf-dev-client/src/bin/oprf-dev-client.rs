@@ -523,6 +523,8 @@ async fn main() -> eyre::Result<()> {
         wallet.clone(),
     )
     .await?;
+    tracing::info!("we wait for 5 seconds to wait for worlds auth-tree indexer...");
+    tokio::time::sleep(Duration::from_secs(5)).await;
     let merkle_membership = world_id_protocol_mock::fetch_inclusion_proof(
         &onchain_signer,
         config.chain_ws_rpc_url.expose_secret(),
