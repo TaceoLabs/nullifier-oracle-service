@@ -119,10 +119,6 @@ pub struct OprfPeerConfig {
     #[clap(long, env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT")]
     pub account_registry_contract: Address,
 
-    /// Wallet private key
-    #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY")]
-    pub wallet_private_key: SecretString,
-
     /// The websocket rpc url of the chain
     #[clap(
         long,
@@ -139,6 +135,10 @@ pub struct OprfPeerConfig {
         default_value = "oprf/rp"
     )]
     pub rp_secret_id_prefix: String,
+
+    /// Secret Id of the wallet private key.
+    #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY_SECRET_ID")]
+    pub wallet_private_key_secret_id: String,
 
     /// The maximum size of the merkle store.
     ///

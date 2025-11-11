@@ -10,15 +10,19 @@
 //! Secrets are stored as JSON objects containing the RP's public key, nullifier key,
 //! and current/previous epoch secrets.
 
+use alloy::hex;
+use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
+use k256::ecdsa::SigningKey;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
 use aws_config::Region;
 use aws_sdk_secretsmanager::config::Credentials;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
-use eyre::Context;
+use eyre::{Context, ContextCompat};
 use oprf_types::crypto::RpNullifierKey;
 use oprf_types::{RpId, ShareEpoch};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -28,9 +32,10 @@ use crate::services::secret_manager::{DLogShare, SecretManager, StoreDLogShare};
 
 /// AWS Secret Manager client wrapper.
 #[derive(Debug, Clone)]
-pub(crate) struct AwsSecretManager {
+pub struct AwsSecretManager {
     client: aws_sdk_secretsmanager::Client,
     rp_secret_id_prefix: String,
+    wallet_private_key_secret_id: String,
 }
 
 impl AwsSecretManager {
@@ -38,7 +43,11 @@ impl AwsSecretManager {
     ///
     /// Loads AWS configuration from the environment and wraps the client
     /// in a `SecretManagerService`.
-    pub(crate) async fn init(rp_secret_id_prefix: String, environment: Environment) -> Self {
+    pub async fn init(
+        rp_secret_id_prefix: &str,
+        wallet_private_key_secret_id: &str,
+        environment: Environment,
+    ) -> Self {
         // loads the latest defaults for aws
         tracing::info!("initializing AWS secret manager from env...");
         let aws_config = match environment {
@@ -62,7 +71,8 @@ impl AwsSecretManager {
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
         AwsSecretManager {
             client,
-            rp_secret_id_prefix,
+            rp_secret_id_prefix: rp_secret_id_prefix.to_string(),
+            wallet_private_key_secret_id: wallet_private_key_secret_id.to_string(),
         }
     }
 }
@@ -92,7 +102,7 @@ impl AwsRpSecret {
     /// Creates a new secret for a given `RpId`.
     ///
     /// Current epoch is set to 0, previous is `None`.
-    fn new(
+    pub fn new(
         rp_id: RpId,
         rp_public: k256::PublicKey,
         rp_nullifier_key: RpNullifierKey,
@@ -127,6 +137,51 @@ impl From<AwsRpSecret> for RpMaterial {
 
 #[async_trait]
 impl SecretManager for AwsSecretManager {
+    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<SecretString> {
+        tracing::debug!(
+            "checking if there exists a private key at: {}",
+            self.wallet_private_key_secret_id
+        );
+        let hex_private_key = match self
+            .client
+            .get_secret_value()
+            .secret_id(&self.wallet_private_key_secret_id)
+            .send()
+            .await
+        {
+            Ok(secret_string) => {
+                tracing::info!("loaded wallet private key from secret-manager");
+                SecretString::from(
+                    secret_string
+                        .secret_string()
+                        .context("expected string private-key, but is byte")?
+                        .to_owned(),
+                )
+            }
+            Err(x) => {
+                match x.into_service_error() {
+                    GetSecretValueError::ResourceNotFoundException(_) => {
+                        tracing::info!("secret not found - will create wallet");
+                        // Create a new wallet
+                        let private_key = SigningKey::random(&mut rand::thread_rng());
+                        let hex_string = hex::encode_prefixed(private_key.to_bytes());
+                        tracing::debug!("uploading secret to AWS..");
+                        self.client
+                            .create_secret()
+                            .name(&self.wallet_private_key_secret_id)
+                            .secret_string(&hex_string)
+                            .send()
+                            .await
+                            .context("while creating wallet secret")?;
+                        SecretString::from(hex_string)
+                    }
+                    x => Err(x)?,
+                }
+            }
+        };
+        Ok(hex_private_key)
+    }
+
     /// Loads all RP secrets from AWS Secrets Manager.
     ///
     /// Iterates through all secrets with the configured prefix and deserializes
@@ -282,4 +337,88 @@ impl SecretManager for AwsSecretManager {
 #[inline(always)]
 fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
     format!("{}/{}", rp_secret_id_prefix, rp.into_inner())
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::{AwsSecretManager, SecretManager as _, config};
+    use aws_config::Region;
+    use aws_sdk_secretsmanager::config::Credentials;
+    use secrecy::ExposeSecret;
+    use testcontainers_modules::{
+        localstack::LocalStack,
+        testcontainers::{ContainerAsync, ImageExt as _, runners::AsyncRunner as _},
+    };
+
+    const WALLET_SECRET_ID: &str = "wallet_secret_id";
+    const RP_SECRET_ID_PREFIX: &str = "rp_suffix";
+    async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
+        let container = LocalStack::default()
+            .with_env_var("SERVICES", "secretsmanager")
+            .start()
+            .await?;
+        let host_ip = container.get_host().await?;
+        let host_port = container.get_host_port_ipv4(4566).await?;
+        let endpoint_url = format!("http://{host_ip}:{host_port}");
+        unsafe {
+            std::env::set_var("TEST_AWS_ENDPOINT_URL", endpoint_url);
+        }
+        Ok(container)
+    }
+
+    pub async fn localstack_client() -> aws_sdk_secretsmanager::Client {
+        let region_provider = Region::new("us-east-1");
+        let credentials = Credentials::new("test", "test", None, None, "Static");
+        // use TEST_AWS_ENDPOINT_URL if set in testcontainer
+        let aws_config = aws_config::from_env()
+            .region(region_provider)
+            .endpoint_url(
+                std::env::var("TEST_AWS_ENDPOINT_URL").expect("TEST_AWS_ENDPOINT_URL is set"),
+            )
+            .credentials_provider(credentials)
+            .load()
+            .await;
+        aws_sdk_secretsmanager::Client::new(&aws_config)
+    }
+
+    pub async fn load_secret(
+        client: aws_sdk_secretsmanager::Client,
+        secret_id: &str,
+    ) -> eyre::Result<String> {
+        let secret = client
+            .get_secret_value()
+            .secret_id(secret_id)
+            .send()
+            .await?
+            .secret_string()
+            .ok_or_else(|| eyre::eyre!("is not a secret-string"))?
+            .to_owned();
+        Ok(secret)
+    }
+
+    #[tokio::test]
+    async fn load_eth_wallet_empty() -> eyre::Result<()> {
+        let _localstack_container = localstack_testcontainer().await?;
+        let secret_manager = AwsSecretManager::init(
+            RP_SECRET_ID_PREFIX,
+            WALLET_SECRET_ID,
+            config::Environment::Dev,
+        )
+        .await;
+        let client = localstack_client().await;
+        let _ = load_secret(client.clone(), WALLET_SECRET_ID)
+            .await
+            .expect_err("should not be there");
+
+        let secret_string_new_created = secret_manager.load_or_insert_wallet_private_key().await?;
+        let secret_string_loading = secret_manager.load_or_insert_wallet_private_key().await?;
+        assert_eq!(
+            secret_string_new_created.expose_secret(),
+            secret_string_loading.expose_secret()
+        );
+        let is_secret = load_secret(client, WALLET_SECRET_ID).await?;
+        assert_eq!(is_secret, secret_string_new_created.expose_secret());
+
+        Ok(())
+    }
 }

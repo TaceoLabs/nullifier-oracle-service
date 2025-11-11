@@ -1,4 +1,8 @@
-use std::{path::PathBuf, sync::LazyLock, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
 use alloy::primitives::{Address, address};
 use oprf_service::config::{Environment, OprfPeerConfig};
@@ -8,14 +12,16 @@ use testcontainers::{
     core::{IntoContainerPort, WaitFor, wait::HttpWaitStrategy},
     runners::AsyncRunner as _,
 };
-use testcontainers_modules::{anvil::AnvilNode, localstack::LocalStack, postgres::Postgres};
+use testcontainers_modules::{anvil::AnvilNode, postgres::Postgres};
 
 pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
 
+use crate::test_secret_manager::TestSecretManager;
+
 pub mod credentials;
 pub mod health_checks;
-pub mod localstack;
 pub mod rp_registry_scripts;
+pub mod test_secret_manager;
 pub mod world_id_protocol_mock;
 
 /// anvil wallet 0
@@ -43,7 +49,7 @@ pub static MOCK_RP_SECRET_KEY: LazyLock<k256::SecretKey> =
 async fn start_service(
     id: usize,
     chain_ws_rpc_url: &str,
-    wallet_private_key: &str,
+    secret_manager: TestSecretManager,
     rp_registry_contract: Address,
     account_registry_contract: Address,
 ) -> String {
@@ -65,14 +71,15 @@ async fn start_service(
         signature_history_cleanup_interval: Duration::from_secs(30),
         rp_registry_contract,
         account_registry_contract,
-        wallet_private_key: wallet_private_key.into(),
         chain_ws_rpc_url: chain_ws_rpc_url.into(),
         key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
         key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.zkey"),
+        wallet_private_key_secret_id: "wallet/privatekey".to_string(),
     };
     let never = async { futures::future::pending::<()>().await };
+
     tokio::spawn(async move {
-        let res = oprf_service::start(config, never).await;
+        let res = oprf_service::start(config, Arc::new(secret_manager), never).await;
         eprintln!("service failed to start: {res:?}");
     });
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -88,16 +95,32 @@ async fn start_service(
     url
 }
 
+pub fn create_secret_managers() -> [TestSecretManager; 3] {
+    [
+        TestSecretManager::new(
+            "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356".to_string(),
+        ),
+        TestSecretManager::new(
+            "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97".to_string(),
+        ),
+        TestSecretManager::new(
+            "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6".to_string(),
+        ),
+    ]
+}
+
 pub async fn start_services(
     chain_ws_rpc_url: &str,
+    secret_manager: [TestSecretManager; 3],
     key_gen_contract: Address,
     account_registry_contract: Address,
 ) -> [String; 3] {
+    let [secret_manager0, secret_manager1, secret_manager2] = secret_manager;
     [
         start_service(
             0,
             chain_ws_rpc_url,
-            "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
+            secret_manager0,
             key_gen_contract,
             account_registry_contract,
         )
@@ -105,7 +128,7 @@ pub async fn start_services(
         start_service(
             1,
             chain_ws_rpc_url,
-            "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
+            secret_manager1,
             key_gen_contract,
             account_registry_contract,
         )
@@ -113,7 +136,7 @@ pub async fn start_services(
         start_service(
             2,
             chain_ws_rpc_url,
-            "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
+            secret_manager2,
             key_gen_contract,
             account_registry_contract,
         )
@@ -179,18 +202,4 @@ pub async fn anvil_testcontainer()
         bridge_rpc_url,
         bridge_ws_url,
     ))
-}
-
-pub async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
-    let container = LocalStack::default()
-        .with_env_var("SERVICES", "secretsmanager")
-        .start()
-        .await?;
-    let host_ip = container.get_host().await?;
-    let host_port = container.get_host_port_ipv4(4566).await?;
-    let endpoint_url = format!("http://{host_ip}:{host_port}");
-    unsafe {
-        std::env::set_var("TEST_AWS_ENDPOINT_URL", endpoint_url);
-    }
-    Ok(container)
 }

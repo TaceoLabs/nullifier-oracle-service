@@ -4,10 +4,10 @@
 //! It initializes tracing, metrics, and starts the service with configuration
 //! from command-line arguments or environment variables.
 
-use std::process::ExitCode;
+use std::{process::ExitCode, sync::Arc};
 
 use clap::Parser;
-use oprf_service::config::OprfPeerConfig;
+use oprf_service::{AwsSecretManager, config::OprfPeerConfig};
 
 #[tokio::main]
 async fn main() -> eyre::Result<ExitCode> {
@@ -19,8 +19,20 @@ async fn main() -> eyre::Result<ExitCode> {
         .install_default()
         .expect("can install");
 
+    let config = OprfPeerConfig::parse();
+    // Load the AWS secret manager.
+    let secret_manager = Arc::new(
+        AwsSecretManager::init(
+            &config.rp_secret_id_prefix,
+            &config.wallet_private_key_secret_id,
+            config.environment,
+        )
+        .await,
+    );
+
     let result = oprf_service::start(
-        OprfPeerConfig::parse(),
+        config,
+        secret_manager,
         oprf_service::default_shutdown_signal(),
     )
     .await;
