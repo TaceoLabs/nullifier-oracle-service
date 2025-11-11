@@ -26,8 +26,8 @@ async fn main() -> eyre::Result<()> {
     let wallet_address = signer.address();
 
     client
-        .put_secret_value()
-        .secret_id(config.private_key_secret_id)
+        .create_secret()
+        .name(config.private_key_secret_id)
         .secret_string(private_key_hex)
         .send()
         .await?;
