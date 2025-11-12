@@ -16,8 +16,8 @@ use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
 use oprf_service::rp_registry::Types;
 use oprf_test::{
     EcDsaPubkeyCompressed, MOCK_RP_SECRET_KEY, RpRegistry, TACEO_ADMIN_ADDRESS,
-    TACEO_ADMIN_PRIVATE_KEY, anvil_testcontainer, health_checks, indexer_testcontainer, localstack,
-    localstack_testcontainer, postgres_testcontainer,
+    TACEO_ADMIN_PRIVATE_KEY, anvil_testcontainer, health_checks, indexer_testcontainer,
+    postgres_testcontainer,
 };
 use oprf_test::{
     credentials,
@@ -39,7 +39,6 @@ use oprf_zk::{
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
-    let _localstack_container = localstack_testcontainer().await?;
     let (_anvil_container, host_rpc_url, host_ws_url, bridge_rpc_url, bridge_ws_url) =
         anvil_testcontainer().await?;
     let mut rng = rand::thread_rng();
@@ -67,6 +66,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
         &host_ws_url,
+        oprf_test::create_secret_managers(),
         rp_registry_contract,
         account_registry_contract,
     )
@@ -241,7 +241,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
 async fn test_delete_rp_material() -> eyre::Result<()> {
-    let _localstack_container = localstack_testcontainer().await?;
     let (_anvil_container, host_rpc_url, host_ws_url, _, _) = anvil_testcontainer().await?;
 
     println!("Deploying AccountRegistry contract...");
@@ -254,9 +253,11 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
         TACEO_ADMIN_PRIVATE_KEY,
     );
 
+    let secret_managers = oprf_test::create_secret_managers();
     println!("Starting OPRF peers...");
     let oprf_services = oprf_test::start_services(
         &host_ws_url,
+        secret_managers.clone(),
         rp_registry_contract,
         account_registry_contract,
     )
@@ -303,17 +304,13 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
         MOCK_RP_SECRET_KEY.public_key().into()
     );
 
-    // load keys from aws and check that they exist
-    let localstack_client = localstack::client().await;
-
-    let secret_before_delete =
-        localstack::list_secrets(localstack_client.clone(), "oprf/rp").await?;
-    assert_eq!(secret_before_delete.len(), 3);
-    assert!(
-        secret_before_delete
-            .iter()
-            .all(|secret| secret.ends_with(&rp_id.to_string()))
-    );
+    let secret_before_delete0 = secret_managers[0].load_rps();
+    let secret_before_delete1 = secret_managers[0].load_rps();
+    let secret_before_delete2 = secret_managers[0].load_rps();
+    let should_rps = vec![rp_id];
+    assert_eq!(secret_before_delete0, should_rps);
+    assert_eq!(secret_before_delete1, should_rps);
+    assert_eq!(secret_before_delete2, should_rps);
 
     println!("deletion of rp material..");
     rp_registry_scripts::delete_rp_material(
@@ -327,9 +324,13 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
     health_checks::assert_rp_unknown(rp_id, &oprf_services, Duration::from_secs(5)).await?;
     println!("check that shares are not in localstack anymore...");
 
-    let secrets_after_delete = localstack::list_secrets(localstack_client, "oprf/rp").await?;
+    let secrets_after_delete0 = secret_managers[0].load_rps();
+    let secrets_after_delete1 = secret_managers[0].load_rps();
+    let secrets_after_delete2 = secret_managers[0].load_rps();
 
-    assert!(secrets_after_delete.is_empty());
+    assert!(secrets_after_delete0.is_empty());
+    assert!(secrets_after_delete1.is_empty());
+    assert!(secrets_after_delete2.is_empty());
 
     Ok(())
 }

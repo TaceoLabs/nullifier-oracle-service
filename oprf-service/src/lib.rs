@@ -22,13 +22,14 @@ use oprf_zk::{Groth16Material, groth16_serde::Groth16VerificationKey};
 use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 use crate::services::{
     event_handler::ChainEventHandler,
     key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
     merkle_watcher::{MerkleWatcherService, alloy_merkle_watcher::AlloyMerkleWatcher},
     oprf::OprfService,
-    secret_manager::{SecretManager, aws::AwsSecretManager},
+    secret_manager::SecretManagerService,
 };
 
 pub(crate) mod api;
@@ -36,6 +37,12 @@ pub mod config;
 pub mod metrics;
 pub mod rp_registry;
 pub(crate) mod services;
+
+pub use services::rp_material_store::DLogShare;
+pub use services::rp_material_store::RpMaterialStore;
+pub use services::secret_manager::SecretManager;
+pub use services::secret_manager::StoreDLogShare;
+pub use services::secret_manager::aws::AwsSecretManager;
 
 /// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
 pub fn version_info() -> String {
@@ -70,6 +77,28 @@ impl FromRef<AppState> for PartyId {
     }
 }
 
+/// Loads the private key from the provided secret-manager and creates a Private Key for usage with alloy.
+///
+/// The loaded secret will be set to all zeroes and dropped.
+async fn load_wallet_private_key(
+    secret_manager: &SecretManagerService,
+) -> eyre::Result<PrivateKeySigner> {
+    tracing::info!("loading ETH private key from secret-manager..");
+    let mut wallet_private_key_str = secret_manager
+        .load_or_insert_wallet_private_key()
+        .await
+        .context("while loading ETH private key from secret-manager")?;
+
+    tracing::info!("connecting to wallet..");
+    let wallet_private_key = PrivateKeySigner::from_str(wallet_private_key_str.expose_secret())
+        .context("while reading wallet private key")?;
+    let address = wallet_private_key.address();
+    tracing::info!("my wallet address: {address}");
+    // set private key to all zeroes
+    wallet_private_key_str.zeroize();
+    Ok(wallet_private_key)
+}
+
 /// Main entry point for the OPRF service.
 ///
 /// Initializes all services, loads cryptographic material, and starts:
@@ -92,6 +121,7 @@ impl FromRef<AppState> for PartyId {
 /// - Server binding fails
 pub async fn start(
     config: config::OprfPeerConfig,
+    secret_manager: SecretManagerService,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
@@ -104,14 +134,10 @@ pub async fn start(
     let vk: Groth16VerificationKey = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
-    // Load the secret manager. For now we only support AWS.
-    // For local development, we also allow to load secret from file. Still the local secret-manager will assert that we run in Dev environment
-    let secret_manager =
-        Arc::new(AwsSecretManager::init(config.rp_secret_id_prefix, config.environment).await);
+    let private_key = load_wallet_private_key(&secret_manager)
+        .await
+        .context("while loading ETH private key from secret-manager")?;
 
-    tracing::info!("connecting to wallet..");
-    let private_key = PrivateKeySigner::from_str(config.wallet_private_key.expose_secret())
-        .context("while reading wallet private key")?;
     let wallet_address = private_key.address();
     let wallet = EthereumWallet::from(private_key);
 

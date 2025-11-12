@@ -1,7 +1,7 @@
 //! Secret manager interface for OPRF peers.
 //!
 //! This module defines the [`SecretManager`] trait, which is used to
-//! persist and retrieve [`crate::services::rp_material_store::RpMaterial`]s.
+//! persist and retrieve `RpMaterial`.
 //!
 //! Current `SecretManager` implementations:
 //! - AWS (cloud storage)
@@ -10,10 +10,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
+use secrecy::SecretString;
 
 use crate::services::rp_material_store::{DLogShare, RpMaterialStore};
 
-pub mod aws;
+pub(crate) mod aws;
 
 /// Dynamic trait object for secret manager service.
 ///
@@ -24,18 +25,26 @@ pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
 ///
 /// Contains all the information needed to initialize a new RP's
 /// cryptographic material in the secret manager.
-pub(crate) struct StoreDLogShare {
-    pub(crate) rp_id: RpId,
-    pub(crate) public_key: k256::PublicKey,
-    pub(crate) rp_nullifier_key: RpNullifierKey,
-    pub(crate) share: DLogShare,
+pub struct StoreDLogShare {
+    /// The rp id associated with this [`DLogShare`].
+    pub rp_id: RpId,
+    /// The public key of the RP
+    pub public_key: k256::PublicKey,
+    /// The created public part of the nullifier key
+    pub rp_nullifier_key: RpNullifierKey,
+    /// The actual secret-share from the created secret part of the nullifier key
+    pub share: DLogShare,
 }
 
 /// Trait that implementations of secret managers must provide.
 ///
-/// Handles persistence of [`crate::services::rp_material_store::RpMaterial`]s.
+/// Handles persistence of `RpMaterial`.
 #[async_trait]
-pub(crate) trait SecretManager {
+pub trait SecretManager {
+    /// Loads the wallet private key from the secret-manager.
+    ///
+    /// If the secret-manager can't find a secret, it shall create a new one, store it and then return the new one.
+    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<SecretString>;
     /// Loads the DLog secrets and creates a [`RpMaterialStore`].
     async fn load_secrets(&self) -> eyre::Result<RpMaterialStore>;
 
@@ -54,7 +63,6 @@ pub(crate) trait SecretManager {
     ///
     /// Use this method for updating existing shares. For creating a new share,
     /// use [`Self::store_dlog_share`].
-    #[expect(dead_code)]
     async fn update_dlog_share(
         &self,
         rp_id: RpId,

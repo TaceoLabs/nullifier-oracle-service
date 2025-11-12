@@ -65,3 +65,4 @@ eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
 poseidon2 = { workspace = true }
+testcontainers-modules = { version = "0.13", features = ["localstack"] }

@@ -16,6 +16,7 @@ ark-babyjubjub = { workspace = true }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-serialize.workspace = true
+async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 circom-types.workspace = true
@@ -33,14 +34,16 @@ oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
 oprf-zk = { workspace = true }
+parking_lot = { workspace = true }
 poseidon2 = { workspace = true }
 rand.workspace = true
 rand_chacha.workspace = true
 regex.workspace = true
 reqwest = { workspace = true }
+secrecy.workspace = true
 serde_json = { workspace = true }
 testcontainers = { version = "0.25.2", features = ["http_wait_plain", "host-port-exposure"] }
-testcontainers-modules = { version = "0.13", features = ["postgres", "localstack", "anvil"] }
+testcontainers-modules = { version = "0.13", features = ["postgres", "anvil"] }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
 tracing.workspace = true
 world-id-primitives.workspace = true

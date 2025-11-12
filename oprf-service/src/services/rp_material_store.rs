@@ -50,8 +50,8 @@ pub(crate) enum RpMaterialStoreError {
 
 /// Thread-safe storage of all cryptographic material for each relying party:
 /// discrete-log shares **and** the ECDSA public key of the RP.
-#[derive(Clone)]
-pub(crate) struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
+#[derive(Default, Clone)]
+pub struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 
 /// Holds all cryptographic material for a single relying party (RP).
 ///
@@ -62,7 +62,7 @@ pub(crate) struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 /// This struct is typically wrapped in a larger storage type (e.g. `RpMaterialStore`)
 /// to manage multiple RPs.
 #[derive(Clone)]
-pub(crate) struct RpMaterial {
+pub struct RpMaterial {
     pub(crate) shares: HashMap<ShareEpoch, DLogShare>,
     public_key: k256::ecdsa::VerifyingKey,
     nullifier_key: RpNullifierKey,
@@ -75,7 +75,7 @@ pub(crate) struct RpMaterial {
 ///
 #[derive(Clone, Serialize, Deserialize, ZeroizeOnDrop)]
 #[serde(transparent)]
-pub(crate) struct DLogShare(
+pub struct DLogShare(
     #[serde(
         serialize_with = "ark_serde_compat::serialize_babyjubjub_fr",
         deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr"
