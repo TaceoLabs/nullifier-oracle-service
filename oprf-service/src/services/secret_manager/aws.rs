@@ -16,8 +16,6 @@ use k256::ecdsa::SigningKey;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use aws_config::Region;
-use aws_sdk_secretsmanager::config::Credentials;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
 use eyre::{Context, ContextCompat};
 use oprf_types::crypto::RpNullifierKey;
@@ -26,7 +24,6 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::config::Environment;
 use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
 use crate::services::secret_manager::{DLogShare, SecretManager, StoreDLogShare};
 
@@ -44,30 +41,11 @@ impl AwsSecretManager {
     /// Loads AWS configuration from the environment and wraps the client
     /// in a `SecretManagerService`.
     pub async fn init(
+        aws_config: aws_config::SdkConfig,
         rp_secret_id_prefix: &str,
         wallet_private_key_secret_id: &str,
-        environment: Environment,
     ) -> Self {
         // loads the latest defaults for aws
-        tracing::info!("initializing AWS secret manager from env...");
-        let aws_config = match environment {
-            Environment::Prod => aws_config::load_from_env().await,
-            Environment::Dev => {
-                tracing::info!("using localstack config");
-                let region_provider = Region::new("us-east-1");
-                let credentials = Credentials::new("test", "test", None, None, "Static");
-                // use TEST_AWS_ENDPOINT_URL if set in testcontainer
-                aws_config::from_env()
-                    .region(region_provider)
-                    .endpoint_url(
-                        std::env::var("TEST_AWS_ENDPOINT_URL")
-                            .unwrap_or("http://localhost:4566".to_string()),
-                    )
-                    .credentials_provider(credentials)
-                    .load()
-                    .await
-            }
-        };
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
         AwsSecretManager {
             client,
@@ -341,7 +319,7 @@ fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{AwsSecretManager, SecretManager as _, config};
+    use crate::{AwsSecretManager, SecretManager as _};
     use aws_config::Region;
     use aws_sdk_secretsmanager::config::Credentials;
     use secrecy::ExposeSecret;
@@ -352,7 +330,7 @@ pub mod tests {
 
     const WALLET_SECRET_ID: &str = "wallet_secret_id";
     const RP_SECRET_ID_PREFIX: &str = "rp_suffix";
-    async fn localstack_testcontainer() -> eyre::Result<ContainerAsync<LocalStack>> {
+    async fn localstack_testcontainer() -> eyre::Result<(ContainerAsync<LocalStack>, String)> {
         let container = LocalStack::default()
             .with_env_var("SERVICES", "secretsmanager")
             .start()
@@ -360,25 +338,22 @@ pub mod tests {
         let host_ip = container.get_host().await?;
         let host_port = container.get_host_port_ipv4(4566).await?;
         let endpoint_url = format!("http://{host_ip}:{host_port}");
-        unsafe {
-            std::env::set_var("TEST_AWS_ENDPOINT_URL", endpoint_url);
-        }
-        Ok(container)
+        Ok((container, endpoint_url))
     }
 
-    pub async fn localstack_client() -> aws_sdk_secretsmanager::Client {
+    pub async fn localstack_client(
+        url: &str,
+    ) -> (aws_sdk_secretsmanager::Client, aws_config::SdkConfig) {
         let region_provider = Region::new("us-east-1");
         let credentials = Credentials::new("test", "test", None, None, "Static");
         // use TEST_AWS_ENDPOINT_URL if set in testcontainer
         let aws_config = aws_config::from_env()
             .region(region_provider)
-            .endpoint_url(
-                std::env::var("TEST_AWS_ENDPOINT_URL").expect("TEST_AWS_ENDPOINT_URL is set"),
-            )
+            .endpoint_url(url)
             .credentials_provider(credentials)
             .load()
             .await;
-        aws_sdk_secretsmanager::Client::new(&aws_config)
+        (aws_sdk_secretsmanager::Client::new(&aws_config), aws_config)
     }
 
     pub async fn load_secret(
@@ -398,14 +373,10 @@ pub mod tests {
 
     #[tokio::test]
     async fn load_eth_wallet_empty() -> eyre::Result<()> {
-        let _localstack_container = localstack_testcontainer().await?;
-        let secret_manager = AwsSecretManager::init(
-            RP_SECRET_ID_PREFIX,
-            WALLET_SECRET_ID,
-            config::Environment::Dev,
-        )
-        .await;
-        let client = localstack_client().await;
+        let (_localstack_container, localstack_url) = localstack_testcontainer().await?;
+        let (client, config) = localstack_client(&localstack_url).await;
+        let secret_manager =
+            AwsSecretManager::init(config, RP_SECRET_ID_PREFIX, WALLET_SECRET_ID).await;
         let _ = load_secret(client.clone(), WALLET_SECRET_ID)
             .await
             .expect_err("should not be there");
