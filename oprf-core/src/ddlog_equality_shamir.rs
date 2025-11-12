@@ -1,3 +1,18 @@
+//! Shamir Secret Sharing variant of distributed DLogEquality proof combination.
+//!
+//! This module enables threshold (Shamir) secret sharing for the distributed Chaum-Pedersen
+//! discrete log equality proof, allowing threshold sets of parties to collaboratively prove
+//! knowledge of a shared secret without interactive multiplication or setup rounds.
+//!
+//! If each server samples its nonce independently, the set of nonces forms valid Shamir shares,
+//! and accumulations can be performed using Lagrange interpolation. This avoids the need for extra
+//! communication rounds to share randomness among servers.
+//!
+//! Provides extension methods for combining distributed commitments and proof shares using Shamir
+//! Lagrange interpolation instead of simple additive aggregation.
+//!
+//! For additive variant, see the base implementation. This variant is useful when threshold security
+//! is required but no shared random multiplication is needed.
 use crate::ddlog_equality::{
     DLogEqualityCommitments, DLogEqualityProofShare, DLogEqualitySession,
     PartialDLogEqualityCommitments, combine_twononce_randomness,
@@ -98,24 +113,44 @@ impl DLogEqualitySession {
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e_ = crate::dlog_equality::convert_base_to_scalar(e);
-        DLogEqualityProofShare {
-            s: self.d + b * self.e + lagrange_coefficient * e_ * x_share,
-        }
+        DLogEqualityProofShare(self.d + b * self.e + lagrange_coefficient * e_ * x_share)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ddlog_equality::DLogEqualitySession, shamir};
-    use ark_ff::UniformRand;
-    use rand::seq::IteratorRandom;
+    use crate::{
+        ddlog_equality::DLogEqualitySession,
+        shamir::{self, evaluate_poly},
+    };
+    use ark_ff::{PrimeField, UniformRand};
+    use rand::{Rng, seq::IteratorRandom};
+
+    fn share<F: PrimeField, R: Rng>(
+        secret: F,
+        num_shares: usize,
+        degree: usize,
+        rng: &mut R,
+    ) -> Vec<F> {
+        let mut shares = Vec::with_capacity(num_shares);
+        let mut coeffs = Vec::with_capacity(degree + 1);
+        coeffs.push(secret);
+        for _ in 0..degree {
+            coeffs.push(F::rand(rng));
+        }
+        for i in 1..=num_shares {
+            let share = evaluate_poly(&coeffs, F::from(i as u64));
+            shares.push(share);
+        }
+        shares
+    }
 
     fn test_distributed_dlog_equality(num_parties: usize, degree: usize) {
         let mut rng = rand::thread_rng();
 
         let x = ScalarField::rand(&mut rng);
-        let x_shares = shamir::share(x, num_parties, degree, &mut rng);
+        let x_shares = share(x, num_parties, degree, &mut rng);
 
         // Create public keys
         let public_key = (Affine::generator() * x).into_affine();
@@ -123,8 +158,11 @@ mod tests {
             .iter()
             .map(|x| Affine::generator() * x)
             .collect::<Vec<_>>();
-        let public_key_ =
-            shamir::reconstruct_random_pointshares(&public_key_shares, degree, &mut rng);
+        let public_key_ = shamir::test_utils::reconstruct_random_pointshares(
+            &public_key_shares,
+            degree,
+            &mut rng,
+        );
         assert_eq!(public_key, public_key_);
 
         // Crete session and choose the used set of parties
@@ -180,10 +218,7 @@ mod tests {
         // Verify the result and the proof
         let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
-        assert!(
-            proof.verify(public_key, b, c, d),
-            "valid proof should verify"
-        );
+        assert!(proof.verify(public_key, b, c, d).is_ok());
     }
 
     #[test]

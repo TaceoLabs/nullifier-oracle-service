@@ -5033,6 +5033,7 @@ dependencies = [
  "k256",
  "oprf-core",
  "oprf-zk",
+ "ruint",
  "serde",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat",

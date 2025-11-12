@@ -21,7 +21,7 @@ use ark_ff::{BigInt, UniformRand as _};
 use eyre::{Context, ContextCompat};
 use groth16::{CircomReduction, Groth16};
 use itertools::{Itertools as _, izip};
-use oprf_core::keys::keygen::KeyGenPoly;
+use oprf_core::keygen::{self, KeyGenPoly};
 use oprf_types::{
     RpId,
     chain::{
@@ -116,7 +116,7 @@ impl ToxicWasteRound1 {
     /// * `degree` - The degree of the polynomial to be generated (relates to threshold settings).
     /// * `rng` - A mutable reference to a cryptographically secure random number generator.
     fn new<R: Rng + CryptoRng>(degree: usize, rng: &mut R) -> Self {
-        let poly = KeyGenPoly::keygen(rng, degree);
+        let poly = KeyGenPoly::new(rng, degree);
         let sk = PeerPrivateKey::generate(rng);
         Self { poly, sk }
     }
@@ -324,7 +324,7 @@ fn decrypt_key_gen_ciphertexts(
                 commitment,
             } = cipher;
             let their_pk = peers[idx].inner();
-            let share = KeyGenPoly::decrypt_share(sk.inner(), their_pk, cipher, nonce)
+            let share = keygen::decrypt_share(sk.inner(), their_pk, cipher, nonce)
                 .context("cannot decrypt share ciphertext from peer")?;
             // check commitment
             let is_commitment = (ark_babyjubjub::EdwardsAffine::generator() * share).into_affine();
@@ -336,7 +336,7 @@ fn decrypt_key_gen_ciphertexts(
             }
         })
         .collect::<eyre::Result<Vec<_>>>()?;
-    Ok(DLogShare::from(KeyGenPoly::accumulate_shares(&shares)))
+    Ok(DLogShare::from(keygen::accumulate_shares(&shares)))
 }
 
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.

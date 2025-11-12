@@ -4,7 +4,7 @@ use alloy::primitives::U256;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::UniformRand;
 use itertools::Itertools as _;
-use oprf_core::keys::keygen::KeyGenPoly;
+use oprf_core::keygen::KeyGenPoly;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
@@ -23,9 +23,9 @@ fn main() {
 
     let degree = 1_u16;
 
-    let poly0 = KeyGenPoly::keygen(&mut rng, degree as usize);
-    let poly1 = KeyGenPoly::keygen(&mut rng, degree as usize);
-    let poly2 = KeyGenPoly::keygen(&mut rng, degree as usize);
+    let poly0 = KeyGenPoly::new(&mut rng, degree as usize);
+    let poly1 = KeyGenPoly::new(&mut rng, degree as usize);
+    let poly2 = KeyGenPoly::new(&mut rng, degree as usize);
 
     let _should_public_key = poly0.get_pk_share() + poly1.get_pk_share() + poly2.get_pk_share();
 

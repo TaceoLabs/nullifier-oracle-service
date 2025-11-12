@@ -10,6 +10,10 @@ license.workspace = true
 publish.workspace = true
 readme.workspace = true
 
+[features]
+default = ["server"]
+server = []
+
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true }
@@ -21,13 +25,13 @@ eddsa-babyjubjub = { workspace = true }
 itertools = { workspace = true }
 num-bigint.workspace = true
 poseidon2 = { workspace = true }
-rand_chacha.workspace = true
 rand.workspace = true
+rand_chacha.workspace = true
 serde = { workspace = true, features = ["derive"] }
+subtle = "2"
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 zeroize = { workspace = true, features = ["derive"] }
-subtle = "2"
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -35,3 +39,4 @@ criterion = { workspace = true }
 [[bench]]
 name = "oprf"
 harness = false
+required-features = ["server"]
