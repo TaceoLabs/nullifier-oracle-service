@@ -6,8 +6,37 @@
 
 use std::{process::ExitCode, sync::Arc};
 
+use aws_config::Region;
+use aws_sdk_secretsmanager::config::Credentials;
 use clap::Parser;
-use oprf_service::{AwsSecretManager, config::OprfPeerConfig};
+use oprf_service::{
+    AwsSecretManager,
+    config::{self, OprfPeerConfig},
+};
+
+async fn load_aws_config(environment: config::Environment) -> aws_config::SdkConfig {
+    match environment {
+        config::Environment::Prod => {
+            tracing::info!("initializing AWS secret manager from env...");
+            aws_config::load_from_env().await
+        }
+        config::Environment::Dev => {
+            tracing::info!("using localstack config");
+            let region_provider = Region::new("us-east-1");
+            let credentials = Credentials::new("test", "test", None, None, "Static");
+            // in case we don't want the standard url, we can configure it via the environment
+            aws_config::from_env()
+                .region(region_provider)
+                .endpoint_url(
+                    std::env::var("TEST_AWS_ENDPOINT_URL")
+                        .unwrap_or("http://localhost:4566".to_string()),
+                )
+                .credentials_provider(credentials)
+                .load()
+                .await
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> eyre::Result<ExitCode> {
@@ -20,12 +49,15 @@ async fn main() -> eyre::Result<ExitCode> {
         .expect("can install");
 
     let config = OprfPeerConfig::parse();
+
+    let aws_config = load_aws_config(config.environment).await;
+
     // Load the AWS secret manager.
     let secret_manager = Arc::new(
         AwsSecretManager::init(
+            aws_config,
             &config.rp_secret_id_prefix,
             &config.wallet_private_key_secret_id,
-            config.environment,
         )
         .await,
     );
