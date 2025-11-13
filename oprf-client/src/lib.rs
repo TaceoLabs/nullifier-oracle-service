@@ -35,7 +35,7 @@
 
 use oprf_core::ddlog_equality::PartialDLogEqualityCommitments;
 
-use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
+use oprf_core::oprf::{self, BlindedOprfRequest};
 
 use ark_ec::AffineRepr;
 use oprf_core::ddlog_equality::DLogEqualityCommitments;
@@ -132,7 +132,7 @@ pub struct SignedOprfQuery {
     request_id: Uuid,
     oprf_request: OprfRequest<OprfRequestAuth>,
     query: OprfQuery,
-    blinded_request: BlindedOPrfRequest,
+    blinded_request: BlindedOprfRequest,
     query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
 }
@@ -187,7 +187,7 @@ impl OprfSessions {
 pub struct Challenge {
     request_id: Uuid,
     challenge_request: ChallengeRequest,
-    blinded_request: BlindedOPrfRequest,
+    blinded_request: BlindedOprfRequest,
     blinded_response: ark_babyjubjub::EdwardsAffine,
     query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
@@ -362,13 +362,12 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         return Err(Error::InvalidPublicKeyIndex(key_material.pk_index));
     }
 
-    let query_hash = OprfClient::generate_query(
+    let query_hash = oprf::client::generate_query(
         merkle_membership.mt_index.into(),
         query.rp_id.into_inner().into(),
         query.action,
     );
-    let oprf_client = OprfClient::new(key_material.public_key());
-    let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query_hash, rng);
+    let (blinded_request, blinding_factor) = oprf::client::blind_query(query_hash, rng);
     let signature = key_material.sk.sign(blinding_factor.query());
 
     let query_input = QueryProofInput::<TREE_DEPTH> {
@@ -395,12 +394,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     };
 
     tracing::debug!("generate query proof");
-    let query_input_json = serde_json::to_value(&query_input)
-        .expect("can serialize")
-        .as_object()
-        .expect("is object")
-        .to_owned();
-    let witness = query_material.generate_witness(query_input_json)?;
+    let witness = query_material.generate_witness(&query_input)?;
     let (proof, _) = query_material.generate_proof(&witness, rng)?;
 
     Ok(SignedOprfQuery {
@@ -545,17 +539,16 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),
     );
-    if !dlog_proof.verify(
-        challenges.rp_nullifier_key.inner(),
-        challenges.blinded_request.blinded_query(),
-        challenges.blinded_response,
-        ark_babyjubjub::EdwardsAffine::generator(),
-    ) {
-        return Err(Error::InvalidDLogProof);
-    }
+    dlog_proof
+        .verify(
+            challenges.rp_nullifier_key.inner(),
+            challenges.blinded_request.blinded_query(),
+            challenges.blinded_response,
+            ark_babyjubjub::EdwardsAffine::generator(),
+        )
+        .map_err(|_| Error::InvalidDLogProof)?;
 
     let nullifier_input = NullifierProofInput::new(
-        challenges.request_id,
         challenges.query_input,
         dlog_proof,
         challenges.rp_nullifier_key.inner(),
@@ -566,12 +559,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     );
 
     tracing::debug!("generate nullifier proof");
-    let nullifier_input_json = serde_json::to_value(&nullifier_input)
-        .expect("can serialize")
-        .as_object()
-        .expect("is object")
-        .to_owned();
-    let witness = nullifier_material.generate_witness(nullifier_input_json)?;
+    let witness = nullifier_material.generate_witness(&nullifier_input)?;
     let (proof, public) = nullifier_material.generate_proof(&witness, rng)?;
 
     // 2 outputs, 0 is id_commitment, 1 is nullifier

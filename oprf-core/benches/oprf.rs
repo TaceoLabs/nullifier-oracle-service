@@ -6,7 +6,10 @@ use ark_ff::UniformRand;
 use criterion::*;
 use oprf_core::{
     ddlog_equality::{DLogEqualityCommitments, DLogEqualitySession},
-    oprf::{OPrfKey, OPrfService, OprfClient},
+    oprf::{
+        self,
+        server::{OprfKey, OprfServer},
+    },
     shamir,
 };
 use rand::seq::IteratorRandom;
@@ -15,26 +18,20 @@ use uuid::Uuid;
 fn oprf_bench(c: &mut Criterion) {
     c.bench_function("OPRF Client Query", |b| {
         let rng = &mut rand::thread_rng();
-        let request_id = Uuid::new_v4();
-        let pk = ark_babyjubjub::EdwardsAffine::rand(rng);
-        let client = OprfClient::new(pk);
         let query = ark_babyjubjub::Fq::rand(rng);
 
-        b.iter(|| client.blind_query(request_id, query, rng));
+        b.iter(|| oprf::client::blind_query(query, rng));
     });
 
     c.bench_function("OPRF/Server/Response", |b| {
         let rng = &mut rand::thread_rng();
-        let request_id = Uuid::new_v4();
-        let key = OPrfKey::random(rng);
-        let pk = key.public_key().into_affine();
-        let client = OprfClient::new(pk);
-        let server = OPrfService::new(key);
+        let key = OprfKey::random(rng);
+        let server = OprfServer::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
         b.iter_batched(
             || {
-                let (query, _) = client.blind_query(request_id, q, rng);
+                let (query, _) = oprf::client::blind_query(q, rng);
                 query
             },
             |query| server.answer_query(query),
@@ -44,16 +41,13 @@ fn oprf_bench(c: &mut Criterion) {
 
     c.bench_function("OPRF/Server/ResponseWithProof", |b| {
         let rng = &mut rand::thread_rng();
-        let request_id = Uuid::new_v4();
-        let key = OPrfKey::random(rng);
-        let pk = key.public_key().into_affine();
-        let client = OprfClient::new(pk);
-        let server = OPrfService::new(key);
+        let key = OprfKey::random(rng);
+        let server = OprfServer::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
         b.iter_batched(
             || {
-                let (query, _) = client.blind_query(request_id, q, rng);
+                let (query, _) = oprf::client::blind_query(q, rng);
                 query
             },
             |query| server.answer_query_with_proof(query),
@@ -63,48 +57,41 @@ fn oprf_bench(c: &mut Criterion) {
 
     c.bench_function("OPRF/Client/Finalize", |b| {
         let rng = &mut rand::thread_rng();
-        let request_id = Uuid::new_v4();
-        let key = OPrfKey::random(rng);
-        let pk = key.public_key().into_affine();
-        let client = OprfClient::new(pk);
-        let server = OPrfService::new(key);
+        let key = OprfKey::random(rng);
+        let server = OprfServer::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
         b.iter_batched(
             || {
-                let (query, blinding) = client.blind_query(request_id, q, rng);
+                let (query, blinding) = oprf::client::blind_query(q, rng);
                 let blinding = blinding.prepare();
                 let response = server.answer_query(query);
                 (response, blinding)
             },
             |(response, blinding)| {
                 // Call the OPRF evaluate function here
-                client.finalize_query(response, blinding).unwrap()
+                oprf::client::finalize_query(response, blinding)
             },
             BatchSize::SmallInput,
         );
     });
     c.bench_function("OPRF/Client/FinalizeWithProofVerify", |b| {
         let rng = &mut rand::thread_rng();
-        let request_id = Uuid::new_v4();
-        let key = OPrfKey::random(rng);
-        let pk = key.public_key().into_affine();
-        let client = OprfClient::new(pk);
-        let server = OPrfService::new(key);
+        let key = OprfKey::random(rng);
+        let pk = key.public_key();
+        let server = OprfServer::new(key);
         let q = ark_babyjubjub::Fq::rand(rng);
 
         b.iter_batched(
             || {
-                let (query, blinding) = client.blind_query(request_id, q, rng);
+                let (query, blinding) = oprf::client::blind_query(q, rng);
                 let blinding = blinding.prepare();
                 let (response, proof) = server.answer_query_with_proof(query);
                 (response, proof, blinding)
             },
             |(response, proof, blinding)| {
                 // Call the OPRF evaluate function here
-                client
-                    .finalize_query_and_verify_proof(response, proof, blinding)
-                    .unwrap()
+                oprf::client::finalize_query_and_verify_proof(pk, response, proof, blinding)
             },
             BatchSize::SmallInput,
         );

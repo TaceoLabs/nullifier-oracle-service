@@ -17,8 +17,8 @@
 //! - [`QUERY_FINGERPRINT`]
 //! - [`NULLIFIER_FINGERPRINT`]
 
+use crate::proof_input::ProofInput;
 use std::ops::Shr;
-use std::str::FromStr;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use ark_bn254::Bn254;
@@ -33,6 +33,7 @@ use ruint::aliases::U256;
 use crate::groth16_serde::Groth16Proof;
 
 pub mod groth16_serde;
+pub mod proof_input;
 
 pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
 pub const NULLIFIER_GRAPH_BYTES: &[u8] =
@@ -218,23 +219,22 @@ impl Groth16Material {
     /// Computes a witness vector from a circuit graph and inputs.
     pub fn generate_witness(
         &self,
-        inputs: serde_json::Map<String, serde_json::Value>,
+        inputs: &impl ProofInput,
     ) -> Result<Vec<ark_bn254::Fr>, Groth16Error> {
-        let inputs = inputs
-            .into_iter()
-            .map(|(name, value)| (name, parse(value)))
-            .collect();
-        let witness = circom_witness_rs::calculate_witness(inputs, &self.graph, Some(&self.bbfs))
-            .map_err(|err| {
-                tracing::error!("error during calculate_witness: {err:?}");
-                Groth16Error::WitnessGeneration
-            })?
-            .into_iter()
-            .map(|v| ark_bn254::Fr::from(BigInt(v.into_limbs())))
-            .collect::<Vec<_>>();
+        let witness = circom_witness_rs::calculate_witness(
+            inputs.prepare_input(),
+            &self.graph,
+            Some(&self.bbfs),
+        )
+        .map_err(|err| {
+            tracing::error!("error during calculate_witness: {err:?}");
+            Groth16Error::WitnessGeneration
+        })?
+        .into_iter()
+        .map(|v| ark_bn254::Fr::from(BigInt(v.into_limbs())))
+        .collect::<Vec<_>>();
         Ok(witness)
     }
-
     /// Generates a Groth16 proof from a witness and verifies it.
     pub fn generate_proof<R: Rng + CryptoRng>(
         &self,
@@ -341,32 +341,5 @@ fn black_box_functions() -> HashMap<String, BlackBoxFunction> {
             ark_bn254::Fr::new((a.shr(ls_limb as usize) & U256::from(1)).into())
         }),
     );
-    // the call to this function gets removed with circom --O2 optimization and circom-witness-rs can handle the optimized version without a bbf
-    // bbfs.insert(
-    //     "bbf_num_2_bits_neg_helper".to_string(),
-    //     Arc::new(move |args: &[Fr]| -> Fr {
-    //         // function bbf_num_2_bits_neg_helper(in, n) {
-    //         //     return n == 0 ? 0 : 2**n - in;
-    //         // }
-    //         if args[1] == Fr::ZERO {
-    //             Fr::ZERO
-    //         } else {
-    //             let a: U256 = args[1].into();
-    //             let ls_limb = a.as_limbs()[0];
-    //             let tmp: Fr = Fr::new((U256::from(1).shl(ls_limb as usize)).into());
-    //             tmp - args[0]
-    //         }
-    //     }),
-    // );
     bbfs
-}
-
-fn parse(value: serde_json::Value) -> Vec<U256> {
-    match value {
-        serde_json::Value::String(string) => {
-            vec![U256::from_str(&string).expect("can deserialize field element")]
-        }
-        serde_json::Value::Array(values) => values.into_iter().flat_map(parse).collect(),
-        _ => unimplemented!(),
-    }
 }

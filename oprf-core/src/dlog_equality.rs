@@ -1,18 +1,40 @@
+//! This module provides types and functionality for creating and verifying Chaum-Pedersen proofs,
+//! enabling the demonstration that two group elements are related by the same discrete logarithm
+//! (i.e., knowledge of a secret x such that A = x*D and C = x*B), without revealing x itself.
+//!
+//! This is primarily used to prove correctness of OPRF operations over BabyJubJub elliptic curve elements.
+//!
+//! ## Features
+//! - Proof creation given secret
+//! - Proof verification, including group membership and field fit checks
+//! - Uses Poseidon2 for Fiat-Shamir challenge generation
+
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
 use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
+/// A Chaum-Pedersen discrete logarithm equality proof.
+///
+/// Proves in zero-knowledge that two group elements share the same discrete logarithm (i.e., for known base points B and D, prover knows x such that A = x·D and C = x·B), without revealing x. Used to ensure correct OPRF evaluations.
+///
+/// The verifier needs to check that `s` fits in the base field to avoid malleability attacks.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DLogEqualityProof {
+    ///Fiat-Shamir challenge, represented as a field element.
     pub e: BaseField,
-    pub s: ScalarField, // The verifier checks it fits in the base field to prevent malleability attacks.
+    /// Proof response, represented as a scalar. The verifier checks that it fits in the base field to avoid malleability attacks.
+    pub s: ScalarField,
 }
 
 type ScalarField = ark_babyjubjub::Fr;
 type BaseField = ark_babyjubjub::Fq;
 type Affine = ark_babyjubjub::EdwardsAffine;
+
+/// Error indicating that the DLog-Proof could not be verified.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct InvalidProof;
 
 impl DLogEqualityProof {
     const DLOG_DS: &[u8] = b"DLOG Equality Proof";
@@ -39,23 +61,23 @@ impl DLogEqualityProof {
     }
 
     /// Takes the Chaum-Pedersen proof e,s and verifies that A=x*D and C=x*B have the same dlog x, given A,B,C,D.
-    pub fn verify(&self, a: Affine, b: Affine, c: Affine, d: Affine) -> bool {
+    pub fn verify(&self, a: Affine, b: Affine, c: Affine, d: Affine) -> Result<(), InvalidProof> {
         // All points need to be valid curve elements.
         if [a, b, c, d]
             .iter()
             .any(|p| !p.is_on_curve() || !p.is_in_correct_subgroup_assuming_on_curve())
         {
-            return false;
+            return Err(InvalidProof);
         }
         if [a, b, c, d].iter().any(|p| p.is_zero()) {
-            return false;
+            return Err(InvalidProof);
         }
 
         // The following check is required to prevent malleability of the proofs by using different s, such as s + p.
         // In Rust this check is not required since self.s is a ScalarField element already, but we keep it to have the same implementation as in circom (where it is required).
         let s_biguint: BigUint = self.s.into();
         if s_biguint >= ScalarField::MODULUS.into() {
-            return false;
+            return Err(InvalidProof);
         }
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
@@ -63,14 +85,18 @@ impl DLogEqualityProof {
 
         let r_1 = d * self.s - a * e;
         if r_1.is_zero() {
-            return false;
+            return Err(InvalidProof);
         }
         let r_2 = b * self.s - c * e;
         if r_2.is_zero() {
-            return false;
+            return Err(InvalidProof);
         }
         let e = challenge_hash(a, b, c, d, r_1.into_affine(), r_2.into_affine());
-        e == self.e
+        if e == self.e {
+            Ok(())
+        } else {
+            Err(InvalidProof)
+        }
     }
 }
 
@@ -125,12 +151,9 @@ mod tests {
         let c = (b * x).into_affine();
 
         let proof = DLogEqualityProof::proof(b, x, &mut rng);
-        assert!(proof.verify(a, b, c, d), "valid proof should verify");
+        assert!(proof.verify(a, b, c, d).is_ok());
         let b2 = Affine::rand(&mut rng);
         let invalid_proof = DLogEqualityProof::proof(b2, x, &mut rng);
-        assert!(
-            !invalid_proof.verify(a, b, c, d),
-            "invalid proof should not verify"
-        );
+        assert!(invalid_proof.verify(a, b, c, d).is_err());
     }
 }

@@ -108,7 +108,7 @@ impl UserKeyMaterial {
     ///
     /// # Panics
     ///
-    /// Panics if `pk_index` is out of bounds relative to [`oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS`].
+    /// Panics if `pk_index` is out of bounds relative to [`proof_inputs::query::MAX_PUBLIC_KEYS`].
     pub fn public_key(&self) -> ark_babyjubjub::EdwardsAffine {
         self.pk_batch.values[self.pk_index as usize]
     }

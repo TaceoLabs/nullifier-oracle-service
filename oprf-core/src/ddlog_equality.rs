@@ -1,4 +1,20 @@
-use crate::dlog_equality::DLogEqualityProof;
+//! Distributed DLogEquality Proof Commitments for Threshold OPRF
+//!
+//! This module provides types and functions for distributed (threshold) construction of a Chaum-Pedersen
+//! discrete log equality proof. Each party creates commitment shares and proof shares which are
+//! then combined into a full non-interactive zero-knowledge proof that two points share the same discrete logarithm.
+//!
+//! These types and helpers support:
+//! - Partial commitment creation for each party (per-share commitments to random nonce splits and result).
+//! - Aggregation of all parties' commitments for use in the proof challenge hash.
+//! - Creating and combining proof shares into a joint proof.
+//! - Deterministic recombination of nonce shares using a domain-separated hash.
+//!
+//! None of the secret randomness is clonable, and session types are not `Debug` to avoid accidental leakage.
+use crate::{
+    dlog_equality::DLogEqualityProof,
+    oprf::{Affine, Projective, ScalarField},
+};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
@@ -7,6 +23,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
+/// Per-party commitments to the distributed DLogEquality proof protocol.
+///
+/// Each party sends these commitments (split of actual response and two nonce splits for aggregation and creation of the global challenge hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartialDLogEqualityCommitments {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
@@ -30,6 +49,9 @@ pub struct PartialDLogEqualityCommitments {
     pub(crate) e2: Affine,
 }
 
+/// Aggregated commitments for the distributed DLogEquality proof protocol.
+///
+/// This struct aggregates the per-party commitment shares, to be used as the challenge hash input, and to verify against the full proof after all shares are combined.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DLogEqualityCommitments {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
@@ -55,13 +77,16 @@ pub struct DLogEqualityCommitments {
     pub(crate) contributing_parties: Vec<u16>,
 }
 
+/// Individual party's proof share for the DLogEquality protocol.
+/// Carries a response share for the Chaum-Pedersen protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DLogEqualityProofShare {
+#[serde(transparent)]
+pub struct DLogEqualityProofShare(
     // The share of the response s
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fr")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr")]
-    pub(crate) s: ScalarField,
-}
+    pub(crate) ScalarField,
+);
 
 /// The internal storage of a party in a distributed DlogEqualityProof protocol.
 ///
@@ -73,10 +98,6 @@ pub struct DLogEqualitySession {
     pub(crate) e: ScalarField,
     pub(crate) blinded_query: Affine,
 }
-
-type ScalarField = ark_babyjubjub::Fr;
-type Affine = ark_babyjubjub::EdwardsAffine;
-type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualitySession {
     /// Computes C=B·x_share and commitments to two random values d_share and e_share, which will be the shares of the randomness used in the DlogEqualityProof.
@@ -146,13 +167,12 @@ impl DLogEqualitySession {
 
         // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
         let e_ = crate::dlog_equality::convert_base_to_scalar(e);
-        DLogEqualityProofShare {
-            s: self.d + b * self.e + e_ * x_share,
-        }
+        DLogEqualityProofShare(self.d + b * self.e + e_ * x_share)
     }
 }
 
 impl DLogEqualityCommitments {
+    /// Create an aggregated commitment object from component affine points and party IDs.
     pub fn new(
         c: Affine,
         d1: Affine,
@@ -211,6 +231,9 @@ impl DLogEqualityCommitments {
         }
     }
 
+    /// Combine all parties' proof shares into a single Chaum-Pedersen proof object.
+    ///
+    /// Must use the same order of contributing parties as in aggregation
     pub fn combine_proofs(
         self,
         session_id: Uuid,
@@ -221,7 +244,7 @@ impl DLogEqualityCommitments {
     ) -> DLogEqualityProof {
         let mut s = ScalarField::zero();
         for proof in proofs {
-            s += proof.s;
+            s += proof.0;
         }
         let (r1, r2, _) = combine_twononce_randomness(
             session_id,
@@ -358,10 +381,7 @@ mod tests {
         // Verify the result and the proof
         let d = Affine::generator();
         assert_eq!(c, b * x, "Result must be correct");
-        assert!(
-            proof.verify(public_key, b, c, d),
-            "valid proof should verify"
-        );
+        assert!(proof.verify(public_key, b, c, d).is_ok());
     }
 
     #[test]
