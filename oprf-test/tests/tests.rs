@@ -12,8 +12,6 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use eyre::Context as _;
 use groth16::Groth16;
 use oprf_client::{NullifierArgs, OprfQuery};
-use oprf_service::rp_registry::CredentialSchemaIssuerRegistry::Pubkey;
-use oprf_service::rp_registry::Types;
 use oprf_test::{
     EcDsaPubkeyCompressed, MOCK_RP_SECRET_KEY, RpRegistry, TACEO_ADMIN_ADDRESS,
     TACEO_ADMIN_PRIVATE_KEY, anvil_testcontainer, health_checks, indexer_testcontainer,
@@ -104,7 +102,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     )
     .await?;
 
-    // current time stamp before the transactions to anvil to don't get proof from future errors
     let current_time_stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("system time is after unix epoch")
@@ -200,7 +197,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let nullifier_vk = nullifier_material.pk.vk.clone();
 
     let time = Instant::now();
-    let (proof, public, nullifier, id_commitment) = oprf_client::nullifier(
+    let (proof, public, nullifier, _id_commitment) = oprf_client::nullifier(
         oprf_services.as_slice(),
         2,
         &query_material,
@@ -212,30 +209,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     println!("Verifying proof...");
     Groth16::verify(&nullifier_vk, &proof.clone().into(), &public).expect("verifies");
-
-    println!("Verifying proof on chain...");
-    let cred_pk = Pubkey {
-        x: credential_signature.issuer.pk.x.into(),
-        y: credential_signature.issuer.pk.y.into(),
-    };
-
-    let proof = Types::Groth16Proof::from(proof);
-    let result = contract
-        .verifyNullifierProof(
-            nullifier.into(),
-            action.into(),
-            rp_id.into_inner(),
-            id_commitment.into(),
-            nonce.into(),
-            signal_hash.into(),
-            merkle_membership.root.into_inner().into(),
-            current_time_stamp.try_into().unwrap(),
-            cred_pk,
-            proof,
-        )
-        .call()
-        .await?;
-    assert!(result, "on-chain verification failed");
 
     let elapsed = time.elapsed();
     println!("Success! Completed in {elapsed:?}");

@@ -421,11 +421,6 @@
         "internalType": "address"
       },
       {
-        "name": "_nullifierVerifierAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
         "name": "_accumulatorAddress",
         "type": "address",
         "internalType": "address"
@@ -475,19 +470,6 @@
   },
   {
     "type": "function",
-    "name": "nullifierVerifier",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IGroth16VerifierNullifier"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "numPeers",
     "inputs": [],
     "outputs": [
@@ -503,6 +485,25 @@
     "type": "function",
     "name": "owner",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "peerAddresses",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -601,99 +602,6 @@
     ],
     "outputs": [],
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "verifyNullifierProof",
-    "inputs": [
-      {
-        "name": "nullifier",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "nullifierAction",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
-      },
-      {
-        "name": "identityCommitment",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "nonce",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "signalHash",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "authenticatorMerkleRoot",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "proofTimestamp",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "credentialPublicKey",
-        "type": "tuple",
-        "internalType": "struct CredentialSchemaIssuerRegistry.Pubkey",
-        "components": [
-          {
-            "name": "x",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "y",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      },
-      {
-        "name": "proof",
-        "type": "tuple",
-        "internalType": "struct Types.Groth16Proof",
-        "components": [
-          {
-            "name": "pA",
-            "type": "uint256[2]",
-            "internalType": "uint256[2]"
-          },
-          {
-            "name": "pB",
-            "type": "uint256[2][2]",
-            "internalType": "uint256[2][2]"
-          },
-          {
-            "name": "pC",
-            "type": "uint256[2]",
-            "internalType": "uint256[2]"
-          }
-        ]
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "event",
