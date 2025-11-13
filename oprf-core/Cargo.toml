@@ -18,7 +18,7 @@ server = []
 ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
-ark-serde-compat = { workspace = true }
+taceo-ark-serde-compat = { workspace = true, features=["babyjubjub"] }
 ark-serialize = { workspace = true }
 blake3 = { workspace = true }
 eddsa-babyjubjub = { workspace = true }

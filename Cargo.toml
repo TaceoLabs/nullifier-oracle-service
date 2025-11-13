@@ -13,7 +13,7 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.91"
 authors = ["TACEO GmbH <hello@taceo.io>"]
 homepage = "https://www.taceo.io"
 repository = "https:://github.com/TaceoLabs/nullifier-oracle-service"
@@ -32,7 +32,6 @@ ark-ff = "0.5"
 ark-groth16 = "0.5"
 ark-r1cs-std = { version = "0.5" }
 ark-relations = "0.5"
-ark-serde-compat = { package = "taceo-ark-serde-compat", version = "0.1" }
 ark-serialize = "0.5"
 ark-std = "0.5"
 async-trait = "0.1"
@@ -41,7 +40,7 @@ aws-sdk-secretsmanager = "1"
 axum = "0.8"
 axum-test = "18"
 blake3 = "1"
-circom-types = { git = "https://github.com/TaceoLabs/co-snarks.git", default-features = false }
+circom-types = { git = "https://github.com/TaceoLabs/circom-helpers.git", version = "0.1", default-features=false, rev="ef8065310789871ca80fc274fdfc83604e618883" }
 circom-witness-rs = { version = "0.2.1" }
 clap = "4"
 criterion = "0.7"
@@ -80,6 +79,7 @@ rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }
 serde_json = { version = "1" }
+taceo-ark-serde-compat = { git = "https://github.com/TaceoLabs/circom-helpers.git", version = "0.2", default-features=false, rev="ef8065310789871ca80fc274fdfc83604e618883" }
 thiserror = { version = "2" }
 tokio = { version = "1" }
 tokio-util = "0.7"

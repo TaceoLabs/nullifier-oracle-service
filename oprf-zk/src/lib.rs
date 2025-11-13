@@ -23,16 +23,15 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 use ark_bn254::Bn254;
 use ark_ff::{AdditiveGroup as _, BigInt, Field as _, LegendreSymbol, UniformRand as _};
-use circom_types::{groth16::ZKey, traits::CheckElement};
+use circom_types::CheckElement;
+use circom_types::groth16::{Proof as CircomProof, ZKey};
 use circom_witness_rs::{BlackBoxFunction, Graph};
 use groth16::{CircomReduction, ConstraintMatrices, Groth16, Proof, ProvingKey};
 use k256::sha2::Digest as _;
 use rand::{CryptoRng, Rng};
 use ruint::aliases::U256;
 
-use crate::groth16_serde::Groth16Proof;
-
-pub mod groth16_serde;
+// pub mod groth16_serde;
 pub mod proof_input;
 
 pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
@@ -240,7 +239,7 @@ impl Groth16Material {
         &self,
         witness: &[ark_bn254::Fr],
         rng: &mut R,
-    ) -> Result<(Groth16Proof, Vec<ark_babyjubjub::Fq>), Groth16Error> {
+    ) -> Result<(CircomProof<Bn254>, Vec<ark_babyjubjub::Fq>), Groth16Error> {
         let r = ark_bn254::Fr::rand(rng);
         let s = ark_bn254::Fr::rand(rng);
 
@@ -253,7 +252,7 @@ impl Groth16Material {
         let inputs = witness[1..self.matrices.num_instance_variables].to_vec();
         self.verify_proof(&proof, &inputs)?;
 
-        Ok((Groth16Proof::from(proof), inputs))
+        Ok((CircomProof::from(proof), inputs))
     }
 
     pub fn verify_proof(

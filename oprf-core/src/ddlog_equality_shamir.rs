@@ -15,7 +15,7 @@
 //! is required but no shared random multiplication is needed.
 use crate::ddlog_equality::{
     DLogEqualityCommitments, DLogEqualityProofShare, DLogEqualitySession,
-    PartialDLogEqualityCommitments, combine_twononce_randomness,
+    PartialDLogEqualityCommitments, combine_two_nonce_randomness,
 };
 use ark_ec::CurveGroup;
 use ark_ec::{AffineRepr, VariableBaseMSM};
@@ -89,7 +89,7 @@ impl DLogEqualitySession {
         lagrange_coefficient: ScalarField,
     ) -> DLogEqualityProofShare {
         // Recombine the two-nonce randomness shares into the full randomness used in the challenge.
-        let (r1, r2, b) = combine_twononce_randomness(
+        let (r1, r2, b) = combine_two_nonce_randomness(
             session_id,
             a,
             challenge_input.c,
