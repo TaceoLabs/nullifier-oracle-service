@@ -29,16 +29,20 @@ export-contract-abi:
     cd contracts && forge build --silent && jq '.abi' out/RpRegistry.sol/RpRegistry.json > RpRegistry.json
 
 [group: 'build']
-[working-directory: 'circom/main']
+[working-directory: 'circom']
 print-constraints:
     #!/usr/bin/env bash
-    key_gen=$(circom OPRFKeyGenProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
-    nullifier=$(circom OPRFNullifierProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
-    proof=$(circom OPRFQueryProof.circom -l .. --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    key_gen=$(circom main/OPRFKeyGenProof.circom -l . --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    nullifier=$(circom main/OPRFNullifierProof.circom -l . --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    proof=$(circom main/OPRFQueryProof.circom -l . --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    eddsa_poseidon2=$(circom debug/eddsaposeidon2.circom -l . --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
+    verify_dlog=$(circom debug/verify_dlog.circom -l . --r1cs --O2 | grep -oP "non-linear constraints: \K[0-9]+")
     printf "%-20s %s\n" "Circuit" "Constraints"
     printf "%-20s %s\n" "KeyGen(3-1)" "$key_gen"
     printf "%-20s %s\n" "OPRFNullifier" "$nullifier"
     printf "%-20s %s\n" "QueryProof" "$proof"
+    printf "%-20s %s\n" "EdDSA-Poseidon2" "$eddsa_poseidon2"
+    printf "%-20s %s\n" "Verify DLog" "$verify_dlog"
 
 [group: 'test']
 unit-tests:
