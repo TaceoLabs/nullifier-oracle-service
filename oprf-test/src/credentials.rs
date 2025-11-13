@@ -7,7 +7,7 @@ use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
 type BaseField = ark_babyjubjub::Fq;
-const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ+DLBE-v1";
+const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ";
 
 pub fn random_user_keys<R: Rng + CryptoRng>(rng: &mut R) -> UserKeyMaterial {
     let sk = EdDSAPrivateKey::random(rng);
