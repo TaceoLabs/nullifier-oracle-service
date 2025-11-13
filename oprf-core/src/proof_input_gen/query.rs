@@ -47,7 +47,7 @@ pub struct QueryProofInput<const MAX_DEPTH: usize> {
 impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
     pub const MAX_PUBLIC_KEYS: usize = MAX_PUBLIC_KEYS;
     const PK_DS: &[u8] = b"World ID PK";
-    const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ+DLBE-v1";
+    const CRED_DS: &[u8] = b"POSEIDON2+EDDSA-BJJ";
 
     // Returns the domain separator for the hashing of all public keys as a field element
     fn get_pk_ds() -> BaseField {
@@ -260,6 +260,10 @@ impl<const MAX_DEPTH: usize> QueryProofInput<MAX_DEPTH> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use ark_ff::BigInt;
+
     use super::*;
 
     #[test]
@@ -267,5 +271,13 @@ mod tests {
         let seed = array::from_fn(|i| i as u8);
         let input1 = QueryProofInput::<10>::generate_from_seed(&seed).0;
         input1.print();
+    }
+
+    #[test]
+    fn test_v1_domain_separator() {
+        let ds = QueryProofInput::<10>::get_cred_ds();
+        // matches oprf_query.circom
+        let val = BigInt::from_str("1790969822004668215611014194230797064349043274").unwrap();
+        assert_eq!(ds, val.into());
     }
 }
