@@ -3,11 +3,12 @@
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
 use alloy::sol;
+use ark_bn254::Bn254;
+use circom_types::groth16::Proof;
 use k256::EncodedPoint;
 use oprf_types::crypto::{
     PeerPublicKey, RpSecretGenCiphertext, RpSecretGenCiphertexts, RpSecretGenCommitment,
 };
-use oprf_zk::groth16_serde::Groth16Proof;
 
 // Codegen from ABI file to interact with the contract.
 sol!(
@@ -66,16 +67,16 @@ impl From<RpSecretGenCommitment> for Types::Round1Contribution {
     }
 }
 
-impl From<Groth16Proof> for Types::Groth16Proof {
-    fn from(value: Groth16Proof) -> Self {
+impl From<Proof<Bn254>> for Types::Groth16Proof {
+    fn from(value: Proof<Bn254>) -> Self {
         Self {
-            pA: [value.a.x.into(), value.a.y.into()],
+            pA: [value.pi_a.x.into(), value.pi_a.y.into()],
             // This is not a typo - must be c1 and then c0
             pB: [
-                [value.b.x.c1.into(), value.b.x.c0.into()],
-                [value.b.y.c1.into(), value.b.y.c0.into()],
+                [value.pi_b.x.c1.into(), value.pi_b.x.c0.into()],
+                [value.pi_b.y.c1.into(), value.pi_b.y.c0.into()],
             ],
-            pC: [value.c.x.into(), value.c.y.into()],
+            pC: [value.pi_c.x.into(), value.pi_c.y.into()],
         }
     }
 }
