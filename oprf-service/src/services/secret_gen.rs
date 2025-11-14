@@ -17,11 +17,11 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use ark_ec::{AffineRepr as _, CurveGroup as _};
-use ark_ff::{BigInt, UniformRand as _};
+use ark_ff::UniformRand as _;
 use eyre::{Context, ContextCompat};
-use groth16::{CircomReduction, Groth16};
+use groth16_material::circom::CircomGroth16Material;
 use itertools::{Itertools as _, izip};
-use oprf_core::keys::keygen::KeyGenPoly;
+use oprf_core::keygen::{self, KeyGenPoly};
 use oprf_types::{
     RpId,
     chain::{
@@ -32,7 +32,6 @@ use oprf_types::{
         RpSecretGenCiphertexts, RpSecretGenCommitment,
     },
 };
-use oprf_zk::Groth16Material;
 use rand::{CryptoRng, Rng};
 use tracing::instrument;
 use zeroize::ZeroizeOnDrop;
@@ -55,7 +54,7 @@ pub(crate) struct DLogSecretGenService {
     toxic_waste_round1: HashMap<RpId, ToxicWasteRound1>,
     toxic_waste_round2: HashMap<RpId, ToxicWasteRound2>,
     finished_shares: HashMap<RpId, DLogShare>,
-    key_gen_material: Groth16Material,
+    key_gen_material: CircomGroth16Material,
     rp_material_store: RpMaterialStore,
 }
 
@@ -116,7 +115,7 @@ impl ToxicWasteRound1 {
     /// * `degree` - The degree of the polynomial to be generated (relates to threshold settings).
     /// * `rng` - A mutable reference to a cryptographically secure random number generator.
     fn new<R: Rng + CryptoRng>(degree: usize, rng: &mut R) -> Self {
-        let poly = KeyGenPoly::keygen(rng, degree);
+        let poly = KeyGenPoly::new(rng, degree);
         let sk = PeerPrivateKey::generate(rng);
         Self { poly, sk }
     }
@@ -143,7 +142,7 @@ impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
     pub(crate) fn init(
         rp_material_store: RpMaterialStore,
-        key_gen_material: Groth16Material,
+        key_gen_material: CircomGroth16Material,
     ) -> Self {
         Self {
             toxic_waste_round1: HashMap::new(),
@@ -324,7 +323,7 @@ fn decrypt_key_gen_ciphertexts(
                 commitment,
             } = cipher;
             let their_pk = peers[idx].inner();
-            let share = KeyGenPoly::decrypt_share(sk.inner(), their_pk, cipher, nonce)
+            let share = keygen::decrypt_share(sk.inner(), their_pk, cipher, nonce)
                 .context("cannot decrypt share ciphertext from peer")?;
             // check commitment
             let is_commitment = (ark_babyjubjub::EdwardsAffine::generator() * share).into_affine();
@@ -336,7 +335,7 @@ fn decrypt_key_gen_ciphertexts(
             }
         })
         .collect::<eyre::Result<Vec<_>>>()?;
-    Ok(DLogShare::from(KeyGenPoly::accumulate_shares(&shares)))
+    Ok(DLogShare::from(keygen::accumulate_shares(&shares)))
 }
 
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
@@ -349,7 +348,7 @@ fn decrypt_key_gen_ciphertexts(
 ///
 /// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
 fn compute_keygen_proof_max_degree1_parties3(
-    key_gen_material: &Groth16Material,
+    key_gen_material: &CircomGroth16Material,
     toxic_waste: ToxicWasteRound1,
     peers: PeerPublicKeyList,
 ) -> eyre::Result<(RpSecretGenCiphertexts, ToxicWasteRound2)> {
@@ -393,31 +392,9 @@ fn compute_keygen_proof_max_degree1_parties3(
         String::from("nonces"),
         nonces.iter().map(|n| n.into()).collect_vec(),
     );
-
-    let witness = circom_witness_rs::calculate_witness(
-        inputs,
-        &key_gen_material.graph,
-        Some(&key_gen_material.bbfs),
-    )
-    .context("while doing witness extension")?
-    .into_iter()
-    .map(|v| ark_bn254::Fr::from(BigInt(v.into_limbs())))
-    .collect_vec();
-
-    // proof
-    let mut rng = rand::thread_rng();
-    let r = ark_bn254::Fr::rand(&mut rng);
-    let s = ark_bn254::Fr::rand(&mut rng);
-    let proof = Groth16::prove::<CircomReduction>(
-        &key_gen_material.pk,
-        r,
-        s,
-        &key_gen_material.matrices,
-        &witness,
-    )
-    .context("while computing key-gen proof")?;
-
-    let public_inputs = witness[1..key_gen_material.matrices.num_instance_variables].to_vec();
+    let (proof, public_inputs) = key_gen_material
+        .generate_proof(&inputs, &mut rand::thread_rng())
+        .context("while computing key-gen proof")?;
 
     key_gen_material
         .verify_proof(&proof, &public_inputs)

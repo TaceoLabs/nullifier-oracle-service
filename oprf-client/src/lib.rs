@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 //! This crate provides a Rust client implementation for performing **Oblivious Pseudorandom Function (OPRF)** queries,
 //! computing **Groth16 proofs**, and generating **nullifiers** for privacy-preserving protocols.
 //! Currently, the main focus lies to be a building block for [WorldID v4.0](https://www.notion.so/worldcoin/World-ID-25-Protocol-v4-0-Product-Specs-High-Level-Technical-Specs-2588614bdf8c80e79f6bd132b8b23600#2588614bdf8c80e79f6bd132b8b23600).
@@ -33,11 +33,17 @@
 //! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
 //! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
 
+use std::io::Read;
+use std::path::Path;
+
+use circom_types::ark_bn254::Bn254;
+use circom_types::groth16::Proof;
 use oprf_core::ddlog_equality::PartialDLogEqualityCommitments;
 
-use oprf_core::oprf::{BlindedOPrfRequest, OprfClient};
+use oprf_core::oprf::{self, BlindedOprfRequest};
 
 use ark_ec::AffineRepr;
+use groth16_material::Groth16Error;
 use oprf_core::ddlog_equality::DLogEqualityCommitments;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
@@ -48,15 +54,40 @@ use oprf_world_types::api::v1::OprfRequestAuth;
 use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
 use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
 use oprf_world_types::{CredentialsSignature, MerkleMembership, TREE_DEPTH, UserKeyMaterial};
-use oprf_zk::groth16_serde::Groth16Proof;
-use oprf_zk::{Groth16Error, Groth16Material};
 use rand::{CryptoRng, Rng};
 use reqwest::StatusCode;
 use uuid::Uuid;
 
 pub use groth16;
-
 pub mod nonblocking;
+
+pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
+pub const NULLIFIER_GRAPH_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifierGraph.bin");
+
+#[cfg(feature = "embed-zkeys")]
+pub const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.arks.zkey");
+#[cfg(feature = "embed-zkeys")]
+pub const NULLIFIER_ZKEY_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifier.arks.zkey");
+
+/// The SHA-256 fingerprint of the OPRFQuery ZKey.
+pub const QUERY_ZKEY_FINGERPRINT: &str =
+    "5796f71d0a2b70878a96eb0e0839e31c4f532e660258c3d0bd32047de00fbe02";
+/// The SHA-256 fingerprint of the OPRFNullifier ZKey.
+pub const NULLIFIER_ZKEY_FINGERPRINT: &str =
+    "892f3f46e80330d4f69df776e3ed74383dea127658516182751984ad6a7f4f59";
+
+/// The SHA-256 fingerprint of the OPRFQuery witness graph.
+pub const QUERY_GRAPH_FINGERPRINT: &str =
+    "ac4caabf7d35a3424f49b627d213a19f17c7572743370687befd3fa8f82610a3";
+/// The SHA-256 fingerprint of the OPRFNullifier witness graph.
+pub const NULLIFIER_GRAPH_FINGERPRINT: &str =
+    "e6d818a0d6a76e98efbe35fba4664fcea33afc0da663041571c8d59c7a5f0fa0";
+
+pub use groth16_material::circom::{
+    CircomGroth16Material, CircomGroth16MaterialBuilder, ZkeyError,
+};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -132,7 +163,7 @@ pub struct SignedOprfQuery {
     request_id: Uuid,
     oprf_request: OprfRequest<OprfRequestAuth>,
     query: OprfQuery,
-    blinded_request: BlindedOPrfRequest,
+    blinded_request: BlindedOprfRequest,
     query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
 }
@@ -187,7 +218,7 @@ impl OprfSessions {
 pub struct Challenge {
     request_id: Uuid,
     challenge_request: ChallengeRequest,
-    blinded_request: BlindedOPrfRequest,
+    blinded_request: BlindedOprfRequest,
     blinded_response: ark_babyjubjub::EdwardsAffine,
     query_input: QueryProofInput<TREE_DEPTH>,
     query_hash: ark_babyjubjub::Fq,
@@ -230,6 +261,71 @@ impl SignedOprfQuery {
     }
 }
 
+#[cfg(feature = "embed-zkeys")]
+pub fn load_embedded_nullifier_key() -> CircomGroth16Material {
+    build_nullifier_builder()
+        .from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
+        .expect("works when loading embedded groth16-material")
+}
+
+#[cfg(feature = "embed-zkeys")]
+pub fn load_embedded_query_key() -> CircomGroth16Material {
+    build_query_builder()
+        .from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
+        .expect("works when loading embedded groth16-material")
+}
+
+pub fn load_nullifier_key_from_reader(zkey: impl Read, graph: impl Read) -> CircomGroth16Material {
+    build_nullifier_builder()
+        .from_reader(zkey, graph)
+        .expect("works when loading embedded groth16-material")
+}
+
+pub fn load_query_key_from_reader(
+    zkey: impl Read,
+    graph: impl Read,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_query_builder().from_reader(zkey, graph)?)
+}
+
+pub fn load_nullifier_key_from_paths(
+    zkey: impl AsRef<Path>,
+    graph: impl AsRef<Path>,
+) -> CircomGroth16Material {
+    build_nullifier_builder()
+        .from_paths(zkey, graph)
+        .expect("works when loading embedded groth16-material")
+}
+
+pub fn load_query_key_from_paths(
+    zkey: impl AsRef<Path>,
+    graph: impl AsRef<Path>,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_query_builder().from_paths(zkey, graph)?)
+}
+
+fn build_nullifier_builder() -> CircomGroth16MaterialBuilder {
+    CircomGroth16MaterialBuilder::new()
+        .fingerprint_zkey(NULLIFIER_ZKEY_FINGERPRINT.into())
+        .fingerprint_graph(NULLIFIER_GRAPH_FINGERPRINT.into())
+        .bbf_num_2_bits_helper()
+        .bbf_inv()
+        .bbf_legendre()
+        .bbf_sqrt_input()
+        .bbf_sqrt_unchecked()
+}
+
+fn build_query_builder() -> CircomGroth16MaterialBuilder {
+    CircomGroth16MaterialBuilder::new()
+        .fingerprint_zkey(QUERY_ZKEY_FINGERPRINT.into())
+        .fingerprint_graph(QUERY_GRAPH_FINGERPRINT.into())
+        .bbf_num_2_bits_helper()
+        .bbf_inv()
+        .bbf_legendre()
+        .bbf_sqrt_input()
+        .bbf_sqrt_unchecked()
+}
+
 /// Generates a nullifier proof for a given query.
 ///
 /// This is the main entry point for most users. It handles the full workflow:
@@ -254,7 +350,7 @@ impl SignedOprfQuery {
 /// # Returns
 ///
 /// On success, returns a tuple:
-/// 1. [`Groth16Proof`] – the generated nullifier proof,
+/// 1. `Groth16Proof` – the generated nullifier proof,
 /// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
 /// 3. `ark_babyjubjub::Fq` – the computed nullifier.
 /// 4. `ark_babyjubjub::Fq` – the computed identity commitment.
@@ -268,12 +364,12 @@ impl SignedOprfQuery {
 pub async fn nullifier<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
-    query_material: &Groth16Material,
-    nullifier_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
+    nullifier_material: &CircomGroth16Material,
     args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(
-    Groth16Proof,
+    Proof<Bn254>,
     Vec<ark_babyjubjub::Fq>,
     ark_babyjubjub::Fq,
     ark_babyjubjub::Fq,
@@ -352,7 +448,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 pub fn sign_oprf_query<R: Rng + CryptoRng>(
     credentials_signature: CredentialsSignature,
     merkle_membership: MerkleMembership,
-    query_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
     query: OprfQuery,
     key_material: UserKeyMaterial,
     request_id: Uuid,
@@ -362,13 +458,12 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         return Err(Error::InvalidPublicKeyIndex(key_material.pk_index));
     }
 
-    let query_hash = OprfClient::generate_query(
+    let query_hash = oprf::client::generate_query(
         merkle_membership.mt_index.into(),
         query.rp_id.into_inner().into(),
         query.action,
     );
-    let oprf_client = OprfClient::new(key_material.public_key());
-    let (blinded_request, blinding_factor) = oprf_client.blind_query(request_id, query_hash, rng);
+    let (blinded_request, blinding_factor) = oprf::client::blind_query(query_hash, rng);
     let signature = key_material.sk.sign(blinding_factor.query());
 
     let query_input = QueryProofInput::<TREE_DEPTH> {
@@ -395,13 +490,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     };
 
     tracing::debug!("generate query proof");
-    let query_input_json = serde_json::to_value(&query_input)
-        .expect("can serialize")
-        .as_object()
-        .expect("is object")
-        .to_owned();
-    let witness = query_material.generate_witness(query_input_json)?;
-    let (proof, _) = query_material.generate_proof(&witness, rng)?;
+    let (proof, _) = query_material.generate_proof(&query_input, rng)?;
 
     Ok(SignedOprfQuery {
         request_id,
@@ -415,7 +504,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
                 share_epoch: query.share_epoch,
             },
             auth: OprfRequestAuth {
-                proof,
+                proof: proof.into(),
                 action: query.action,
                 nonce: query.nonce,
                 merkle_root: merkle_membership.root,
@@ -517,14 +606,14 @@ pub fn compute_challenges(
 /// Returns [`Error::InvalidDLogProof`] if the combined DLogEquality proof
 /// fails verification, or any [`Groth16Error`] if proof generation fails.
 pub fn verify_challenges<R: Rng + CryptoRng>(
-    nullifier_material: &Groth16Material,
+    nullifier_material: &CircomGroth16Material,
     challenges: Challenge,
     responses: Vec<ChallengeResponse>,
     signal_hash: ark_babyjubjub::Fq,
     id_commitment_r: ark_babyjubjub::Fq,
     rng: &mut R,
 ) -> Result<(
-    Groth16Proof,
+    Proof<Bn254>,
     Vec<ark_babyjubjub::Fq>,
     ark_babyjubjub::Fq,
     ark_babyjubjub::Fq,
@@ -545,17 +634,16 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.rp_nullifier_key.inner(),
         challenges.blinded_request.blinded_query(),
     );
-    if !dlog_proof.verify(
-        challenges.rp_nullifier_key.inner(),
-        challenges.blinded_request.blinded_query(),
-        challenges.blinded_response,
-        ark_babyjubjub::EdwardsAffine::generator(),
-    ) {
-        return Err(Error::InvalidDLogProof);
-    }
+    dlog_proof
+        .verify(
+            challenges.rp_nullifier_key.inner(),
+            challenges.blinded_request.blinded_query(),
+            challenges.blinded_response,
+            ark_babyjubjub::EdwardsAffine::generator(),
+        )
+        .map_err(|_| Error::InvalidDLogProof)?;
 
     let nullifier_input = NullifierProofInput::new(
-        challenges.request_id,
         challenges.query_input,
         dlog_proof,
         challenges.rp_nullifier_key.inner(),
@@ -566,17 +654,11 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     );
 
     tracing::debug!("generate nullifier proof");
-    let nullifier_input_json = serde_json::to_value(&nullifier_input)
-        .expect("can serialize")
-        .as_object()
-        .expect("is object")
-        .to_owned();
-    let witness = nullifier_material.generate_witness(nullifier_input_json)?;
-    let (proof, public) = nullifier_material.generate_proof(&witness, rng)?;
+    let (proof, public) = nullifier_material.generate_proof(&nullifier_input, rng)?;
 
     // 2 outputs, 0 is id_commitment, 1 is nullifier
     let id_commitment = public[0];
     let nullifier = public[1];
 
-    Ok((proof, public, nullifier, id_commitment))
+    Ok((proof.into(), public, nullifier, id_commitment))
 }

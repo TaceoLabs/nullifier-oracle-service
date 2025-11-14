@@ -15,10 +15,12 @@
 use std::{fs::File, future::Future, str::FromStr, sync::Arc};
 
 use alloy::{network::EthereumWallet, primitives::Address, signers::local::PrivateKeySigner};
+use ark_bn254::Bn254;
 use axum::extract::FromRef;
+use circom_types::groth16::VerificationKey;
 use eyre::Context;
+use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::crypto::PartyId;
-use oprf_zk::{Groth16Material, groth16_serde::Groth16VerificationKey};
 use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -131,7 +133,7 @@ pub async fn start(
     );
     let vk = File::open(&config.user_verification_key_path)
         .context("while opening file to verification key")?;
-    let vk: Groth16VerificationKey = serde_json::from_reader(vk)
+    let vk: VerificationKey<Bn254> = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
     let private_key = load_wallet_private_key(&secret_manager)
@@ -190,11 +192,10 @@ pub async fn start(
     );
 
     tracing::info!("spawning chain event handler..");
-    let key_gen_material = Groth16Material::new(
-        &config.key_gen_zkey_path,
-        None,
-        &config.key_gen_witness_graph_path,
-    )?;
+    let key_gen_material = CircomGroth16MaterialBuilder::new()
+        .bbf_inv()
+        .bbf_num_2_bits_helper()
+        .from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
     let event_handler = ChainEventHandler::spawn(
         key_gen_watcher,
         rp_material_store,
@@ -312,7 +313,6 @@ mod tests {
     use oprf_world_types::api::v1::OprfRequestAuth;
     use oprf_world_types::proof_inputs::query::MAX_PUBLIC_KEYS;
     use oprf_world_types::{MerkleMembership, MerkleRoot, TREE_DEPTH};
-    use oprf_zk::{Groth16Material, QUERY_FINGERPRINT, QUERY_GRAPH_BYTES};
     use poseidon2::Poseidon2;
     use rand::Rng as _;
     use uuid::Uuid;
@@ -400,11 +400,7 @@ mod tests {
             msg.extend(current_time_stamp.to_le_bytes());
             let signature = rp_signing_key.sign(&msg);
 
-            let query_material = Groth16Material::from_bytes(
-                &std::fs::read(dir.join("../circom/main/query/OPRFQuery.zkey"))?,
-                QUERY_FINGERPRINT.into(),
-                QUERY_GRAPH_BYTES,
-            )?;
+            let query_material = oprf_client::load_embedded_query_key();
 
             let merkle_membership = MerkleMembership {
                 root: merkle_root,
@@ -467,7 +463,7 @@ mod tests {
             )?);
             let user_verification_key_path = dir.join("../circom/main/query/OPRFQuery.vk.json");
             let vk = File::open(&user_verification_key_path)?;
-            let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+            let vk: VerificationKey<Bn254> = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);
             let session_cleanup_interval = Duration::from_secs(30);
             let current_time_stamp_max_difference = Duration::from_secs(60);
@@ -519,7 +515,7 @@ mod tests {
     async fn test_init_bad_proof() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.auth.proof.a = req.auth.proof.c;
+        req.auth.proof.pi_a = req.auth.proof.pi_c;
         let res = setup
             .server
             .post("/api/v1/init")

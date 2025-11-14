@@ -15,10 +15,12 @@ alloy = { workspace = true }
 ark-babyjubjub = { workspace = true }
 ark-ec.workspace = true
 ark-ff.workspace = true
-ark-serde-compat = { workspace = true }
+circom-types = { workspace = true, features=["groth16", "proof", "bn254"]}
+taceo-ark-serde-compat = { workspace = true, features=["babyjubjub"] }
 eddsa-babyjubjub = { workspace = true }
+groth16-material = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
-oprf-zk = { workspace = true }
+ruint = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

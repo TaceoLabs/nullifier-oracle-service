@@ -17,7 +17,8 @@ ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-groth16.workspace = true
-ark-serde-compat = { workspace = true }
+taceo-ark-serde-compat = { workspace = true }
+circom-types = { workspace = true, features=["groth16", "bn254", "zkey"]}
 async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
@@ -27,6 +28,7 @@ eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
 groth16 = { workspace = true }
+groth16-material = { workspace = true }
 http = { workspace = true }
 humantime = { workspace = true }
 itertools = { workspace = true }
@@ -36,7 +38,6 @@ nodes-telemetry = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
-oprf-zk = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
 rustls = { workspace = true }

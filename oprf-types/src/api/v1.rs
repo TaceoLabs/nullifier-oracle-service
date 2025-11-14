@@ -19,6 +19,7 @@ use crate::{
     RpId, ShareEpoch,
     crypto::{PartyId, RpNullifierKey},
 };
+use taceo_ark_serde_compat::babyjubjub;
 
 /// The public components of the `RpMaterial`.
 ///
@@ -43,8 +44,8 @@ where
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     pub blinded_query: ark_babyjubjub::EdwardsAffine,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,

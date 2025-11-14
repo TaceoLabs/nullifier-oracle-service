@@ -22,6 +22,7 @@ use oprf_types::{
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+use taceo_ark_serde_compat::babyjubjub;
 use tracing::instrument;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
@@ -76,10 +77,8 @@ pub struct RpMaterial {
 #[derive(Clone, Serialize, Deserialize, ZeroizeOnDrop)]
 #[serde(transparent)]
 pub struct DLogShare(
-    #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_fr",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr"
-    )]
+    #[serde(serialize_with = "babyjubjub::serialize_fr")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fr")]
     ark_babyjubjub::Fr,
 );
 

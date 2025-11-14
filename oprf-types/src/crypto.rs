@@ -14,8 +14,9 @@
 
 use std::{fmt, ops::Index};
 
-use oprf_zk::groth16_serde::Groth16Proof;
+use circom_types::{ark_bn254::Bn254, groth16::Proof};
 use serde::{Deserialize, Serialize};
+use taceo_ark_serde_compat::babyjubjub;
 
 /// The party id of the OPRF-Peer.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -27,8 +28,8 @@ pub struct PartyId(pub u16);
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct PeerPublicKey(
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     ark_babyjubjub::EdwardsAffine,
 );
 
@@ -43,8 +44,8 @@ pub struct PeerPublicKeyList(Vec<PeerPublicKey>);
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct RpNullifierKey(
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     ark_babyjubjub::EdwardsAffine,
 );
 
@@ -59,12 +60,12 @@ pub struct RpNullifierKey(
 /// for more information about the OPRF-nullifier generation protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCommitment {
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     /// The commitment to the random value sampled by the peer.
     pub comm_share: ark_babyjubjub::EdwardsAffine,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
+    #[serde(serialize_with = "babyjubjub::serialize_fq")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
     /// The commitment to the polynomial used to hide the sampled secret.
     pub comm_coeffs: ark_babyjubjub::Fq,
     /// The ephemeral public key for this key generation.
@@ -79,7 +80,7 @@ pub struct RpSecretGenCommitment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCiphertexts {
     /// The proof that the ciphertexts were computed correctly
-    pub proof: Groth16Proof,
+    pub proof: Proof<Bn254>,
     /// All ciphers for peers (including peer itself).
     pub ciphers: Vec<RpSecretGenCiphertext>,
 }
@@ -89,16 +90,16 @@ pub struct RpSecretGenCiphertexts {
 /// Contains the [`PeerPublicKey`] of the sender, the ciphertext itself, and a nonce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpSecretGenCiphertext {
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
+    #[serde(serialize_with = "babyjubjub::serialize_fq")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
     /// The nonce used during encryption.
     pub nonce: ark_babyjubjub::Fq,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fq")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq")]
+    #[serde(serialize_with = "babyjubjub::serialize_fq")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
     /// The ciphertext.
     pub cipher: ark_babyjubjub::Fq,
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_affine")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     /// The commitment to the encrypted value. Computed as xG, where x
     /// is the plaintext and G the generator of BabyJubJub.
     pub commitment: ark_babyjubjub::EdwardsAffine,
@@ -217,7 +218,7 @@ impl PeerPublicKeyList {
 
 impl RpSecretGenCiphertexts {
     /// Creates a new instance by wrapping the provided value.
-    pub fn new(proof: Groth16Proof, ciphers: Vec<RpSecretGenCiphertext>) -> Self {
+    pub fn new(proof: Proof<Bn254>, ciphers: Vec<RpSecretGenCiphertext>) -> Self {
         Self { proof, ciphers }
     }
 }
