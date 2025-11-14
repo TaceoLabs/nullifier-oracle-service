@@ -31,7 +31,6 @@ use k256::sha2::Digest as _;
 use rand::{CryptoRng, Rng};
 use ruint::aliases::U256;
 
-// pub mod groth16_serde;
 pub mod proof_input;
 
 pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
