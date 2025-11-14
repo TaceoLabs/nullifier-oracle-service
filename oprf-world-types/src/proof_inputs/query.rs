@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use oprf_zk::proof_input::{self, ProofInput};
+use groth16_material::circom::proof_input::{self, ProofInput};
 use ruint::aliases::U256;
 
 type BaseField = ark_babyjubjub::Fq;

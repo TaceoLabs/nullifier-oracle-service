@@ -1,6 +1,6 @@
 use std::str::FromStr as _;
+use std::time::Instant;
 use std::time::{Duration, SystemTime};
-use std::{path::PathBuf, time::Instant};
 
 use alloy::network::EthereumWallet;
 use alloy::providers::{ProviderBuilder, WsConnect};
@@ -10,7 +10,6 @@ use alloy::signers::local::PrivateKeySigner;
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eyre::Context as _;
-use groth16::Groth16;
 use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_test::{
     EcDsaPubkeyCompressed, MOCK_RP_SECRET_KEY, RpRegistry, TACEO_ADMIN_ADDRESS,
@@ -26,11 +25,6 @@ use oprf_types::ShareEpoch;
 use oprf_types::crypto::RpNullifierKey;
 
 use eddsa_babyjubjub::EdDSAPrivateKey;
-
-use oprf_zk::{
-    Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
-    QUERY_GRAPH_BYTES,
-};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
@@ -126,17 +120,8 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     println!();
     println!("Loading zkeys and matrices...");
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let query_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/main/query/OPRFQuery.zkey"))?,
-        QUERY_FINGERPRINT.into(),
-        QUERY_GRAPH_BYTES,
-    )?;
-    let nullifier_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/main/nullifier/OPRFNullifier.zkey"))?,
-        NULLIFIER_FINGERPRINT.into(),
-        NULLIFIER_GRAPH_BYTES,
-    )?;
+    let query_material = oprf_client::load_embedded_query_key();
+    let nullifier_material = oprf_client::load_embedded_nullifier_key();
 
     println!("Generating a random query...");
     let action = ark_babyjubjub::Fq::rand(&mut rng);
@@ -192,7 +177,6 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         signal_hash,
         id_commitment_r,
     };
-    let nullifier_vk = nullifier_material.pk.vk.clone();
 
     let time = Instant::now();
     let (proof, public, nullifier, _id_commitment) = oprf_client::nullifier(
@@ -206,7 +190,9 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     .await?;
 
     println!("Verifying proof...");
-    Groth16::verify(&nullifier_vk, &proof.clone().into(), &public).expect("verifies");
+    nullifier_material
+        .verify_proof(&proof.clone().into(), &public)
+        .expect("verifies");
 
     let elapsed = time.elapsed();
     println!("Success! Completed in {elapsed:?}");
