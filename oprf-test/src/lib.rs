@@ -73,7 +73,7 @@ async fn start_service(
         account_registry_contract,
         chain_ws_rpc_url: chain_ws_rpc_url.into(),
         key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
-        key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.zkey"),
+        key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
         wallet_private_key_secret_id: "wallet/privatekey".to_string(),
     };
     let never = async { futures::future::pending::<()>().await };

@@ -28,6 +28,7 @@ eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
 groth16 = { workspace = true }
+groth16-material = { workspace = true }
 http = { workspace = true }
 humantime = { workspace = true }
 itertools = { workspace = true }
@@ -37,7 +38,6 @@ nodes-telemetry = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
-oprf-zk = { workspace = true }
 parking_lot = { workspace = true }
 rand.workspace = true
 rustls = { workspace = true }

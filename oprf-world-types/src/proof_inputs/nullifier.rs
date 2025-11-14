@@ -1,8 +1,8 @@
+use groth16_material::circom::proof_input::{self, ProofInput};
 use oprf_core::{
     dlog_equality::DLogEqualityProof,
     oprf::{BlindedOprfResponse, BlindingFactor},
 };
-use oprf_zk::proof_input::{self, ProofInput};
 
 use crate::proof_inputs::query::QueryProofInput;
 
