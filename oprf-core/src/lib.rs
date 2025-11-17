@@ -1,4 +1,4 @@
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 //! This crate implements privacy-preserving protocols for verifiable, threshold, and distributed Oblivious Pseudorandom Functions (OPRF) using elliptic curves.
 //!
 //! Modules include:
