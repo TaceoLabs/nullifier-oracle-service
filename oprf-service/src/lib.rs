@@ -194,7 +194,7 @@ pub async fn start(
     let key_gen_material = CircomGroth16MaterialBuilder::new()
         .bbf_inv()
         .bbf_num_2_bits_helper()
-        .from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
+        .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
     let event_handler = ChainEventHandler::spawn(
         key_gen_watcher,
         rp_material_store,

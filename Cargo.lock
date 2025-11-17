@@ -2237,7 +2237,7 @@ dependencies = [
 [[package]]
 name = "circom-types"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571#7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571"
+source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -2262,6 +2262,28 @@ name = "circom-witness-rs"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4ffb423ecdfea516ad77c12a0a4b6e7a52b42656fe5b31df151ca2abc44545f"
+dependencies = [
+ "ark-bn254",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "byteorder",
+ "cxx",
+ "cxx-build",
+ "eyre",
+ "hex",
+ "num-bigint",
+ "num-traits",
+ "postcard",
+ "rand 0.8.5",
+ "ruint",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "circom-witness-rs"
+version = "0.2.1"
+source = "git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=ee9a648dcc54048ad9ba3a8ab2c8843f359ff024#ee9a648dcc54048ad9ba3a8ab2c8843f359ff024"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.5.0",
@@ -3440,7 +3462,7 @@ dependencies = [
 [[package]]
 name = "groth16-material"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571#7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571"
+source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -3449,7 +3471,7 @@ dependencies = [
  "ark-relations",
  "ark-serialize 0.5.0",
  "circom-types",
- "circom-witness-rs",
+ "circom-witness-rs 0.2.1 (git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=ee9a648dcc54048ad9ba3a8ab2c8843f359ff024)",
  "eyre",
  "groth16",
  "hex",
@@ -4950,7 +4972,7 @@ dependencies = [
  "axum",
  "axum-test",
  "circom-types",
- "circom-witness-rs",
+ "circom-witness-rs 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap",
  "eyre",
  "futures",
@@ -6966,7 +6988,7 @@ dependencies = [
 [[package]]
 name = "taceo-ark-serde-compat"
 version = "0.2.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571#7a3a569fdeda048b62c0cac7e8ba4f5bd7ef2571"
+source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
 dependencies = [
  "ark-bn254",
  "ark-ec",

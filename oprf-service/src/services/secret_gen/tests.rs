@@ -77,7 +77,7 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .validate(Validate::No)
         .bbf_inv()
         .bbf_num_2_bits_helper()
-        .from_bytes(&key_gen_zkey, &graph)?;
+        .build_from_bytes(&key_gen_zkey, &graph)?;
 
     let mut dlog_secret_gen0 = dlog_secret_gen(key_gen_material.clone()).await?;
     let mut dlog_secret_gen1 = dlog_secret_gen(key_gen_material.clone()).await?;

@@ -59,14 +59,14 @@ use uuid::Uuid;
 pub use groth16;
 pub mod nonblocking;
 
-pub const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
-pub const NULLIFIER_GRAPH_BYTES: &[u8] =
+const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
+const NULLIFIER_GRAPH_BYTES: &[u8] =
     include_bytes!("../../circom/main/nullifier/OPRFNullifierGraph.bin");
 
 #[cfg(feature = "embed-zkeys")]
-pub const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.arks.zkey");
+const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.arks.zkey");
 #[cfg(feature = "embed-zkeys")]
-pub const NULLIFIER_ZKEY_BYTES: &[u8] =
+const NULLIFIER_ZKEY_BYTES: &[u8] =
     include_bytes!("../../circom/main/nullifier/OPRFNullifier.arks.zkey");
 
 /// The SHA-256 fingerprint of the OPRFQuery ZKey.
@@ -259,47 +259,54 @@ impl SignedOprfQuery {
     }
 }
 
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the embedded keys in the binary.
 #[cfg(feature = "embed-zkeys")]
 pub fn load_embedded_nullifier_key() -> CircomGroth16Material {
     build_nullifier_builder()
-        .from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
+        .build_from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
         .expect("works when loading embedded groth16-material")
 }
 
+/// Loads the [`CircomGroth16Material`] for the query proof from the embedded keys in the binary.
 #[cfg(feature = "embed-zkeys")]
 pub fn load_embedded_query_key() -> CircomGroth16Material {
     build_query_builder()
-        .from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
+        .build_from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
         .expect("works when loading embedded groth16-material")
 }
 
-pub fn load_nullifier_key_from_reader(zkey: impl Read, graph: impl Read) -> CircomGroth16Material {
-    build_nullifier_builder()
-        .from_reader(zkey, graph)
-        .expect("works when loading embedded groth16-material")
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided reader.
+pub fn load_nullifier_key_from_reader(
+    zkey: impl Read,
+    graph: impl Read,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_nullifier_builder().build_from_reader(zkey, graph)?)
 }
 
+/// Loads the [`CircomGroth16Material`] for the query proof from the provided reader.
 pub fn load_query_key_from_reader(
     zkey: impl Read,
     graph: impl Read,
 ) -> eyre::Result<CircomGroth16Material> {
-    Ok(build_query_builder().from_reader(zkey, graph)?)
+    Ok(build_query_builder().build_from_reader(zkey, graph)?)
 }
 
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
 pub fn load_nullifier_key_from_paths(
     zkey: impl AsRef<Path>,
     graph: impl AsRef<Path>,
 ) -> CircomGroth16Material {
     build_nullifier_builder()
-        .from_paths(zkey, graph)
+        .build_from_paths(zkey, graph)
         .expect("works when loading embedded groth16-material")
 }
 
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
 pub fn load_query_key_from_paths(
     zkey: impl AsRef<Path>,
     graph: impl AsRef<Path>,
 ) -> eyre::Result<CircomGroth16Material> {
-    Ok(build_query_builder().from_paths(zkey, graph)?)
+    Ok(build_query_builder().build_from_paths(zkey, graph)?)
 }
 
 fn build_nullifier_builder() -> CircomGroth16MaterialBuilder {
