@@ -29,19 +29,17 @@ interface IBabyJubJub {
 contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     using Types for Types.BabyJubJubElement;
     using Types for Types.EcDsaPubkeyCompressed;
+    using Types for Types.Groth16Proof;
     using Types for Types.OprfPeer;
     using Types for Types.Round1Contribution;
     using Types for Types.RpMaterial;
     using Types for Types.RpNullifierGenState;
-    using Types for Types.Groth16Proof;
     // Gets set to ready state once OPRF participants are registered
 
     bool public isContractReady;
 
-    // Admin to start KeyGens
-    //**IMPORTANT** If this key gets lost or the entity controlling this key
-    // goes offline then effectively the system halts...
-    address public keygenAdmin;
+    // Admins to start KeyGens
+    mapping(address => bool) public keygenAdmins;
     IGroth16VerifierKeyGen13 public keyGenVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
@@ -76,7 +74,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     }
 
     function _onlyAdmin() internal view {
-        if (keygenAdmin != msg.sender) revert OnlyAdmin();
+        if (!keygenAdmins[msg.sender]) revert OnlyAdmin();
     }
 
     modifier onlyInitialized() {
@@ -122,7 +120,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
-        keygenAdmin = _keygenAdmin;
+        keygenAdmins[_keygenAdmin] = true;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
         // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
@@ -134,6 +132,20 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // ==================================
     //         ADMIN FUNCTIONS
     // ==================================
+
+    /// @notice Revokes the access of an admin (in case of key-loss or similar). In the long run we still want that this function is only callable with a threshold authentication, but for now we stick with admins being able to call this (this of course means one admin can block all others).
+    /// @param _keygenAdmin The admin address we want to revoke
+    function revokeKeyGenAdmin(address _keygenAdmin) external virtual onlyProxy onlyInitialized onlyAdmin {
+        delete keygenAdmins[_keygenAdmin];
+        emit Types.KeyGenAdminRevoke(_keygenAdmin);
+    }
+
+    /// @notice Adds another admin address that is allowed to init/stop key-generations. In the long run we still want that this function is only callable with a threshold authentication, but for now we stick with admins being able to call this.
+    /// @param _keygenAdmin The admin address we want to revoke
+    function addKeyGenAdmin(address _keygenAdmin) external virtual onlyProxy onlyInitialized onlyAdmin {
+        keygenAdmins[_keygenAdmin] = true;
+        emit Types.KeyGenAdminRegistered(_keygenAdmin);
+    }
 
     /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
     /// @param _peerAddresses An array of addresses of the OPRF peers.

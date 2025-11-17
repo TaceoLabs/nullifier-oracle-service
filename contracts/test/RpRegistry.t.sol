@@ -97,7 +97,7 @@ contract RpRegistryTest is Test {
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         RpRegistry rpRegistryTest = RpRegistry(address(proxyTest));
 
-        assertEq(rpRegistryTest.keygenAdmin(), taceoAdmin);
+        assert(rpRegistryTest.keygenAdmins(taceoAdmin));
         assertEq(address(rpRegistryTest.keyGenVerifier()), address(verifierKeyGen));
         assertEq(rpRegistryTest.threshold(), 2);
         assertEq(rpRegistryTest.numPeers(), 3);
@@ -227,6 +227,29 @@ contract RpRegistryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
         rpRegistryTest.registerOprfPeers(peerAddressesWrong);
+    }
+
+    function testInitKeyGenRevokeRegisterAdmin() public {
+        vm.startPrank(taceoAdmin);
+        // register another admin
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyGenAdminRegistered(alice);
+        rpRegistry.addKeyGenAdmin(alice);
+        
+        // revoke taceo
+        vm.expectEmit(true, true, true, true);
+        emit Types.KeyGenAdminRevoke(taceoAdmin);
+        rpRegistry.revokeKeyGenAdmin(taceoAdmin);
+
+        // try start key-gen as taceo
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyAdmin.selector));
+        rpRegistry.initKeyGen(0, ecdsaPubKey);
+        vm.stopPrank();
+
+        // start key-gen as alice
+        vm.prank(alice);
+        rpRegistry.initKeyGen(0, ecdsaPubKey);
+        vm.stopPrank();
     }
 
     function testInitKeyGenResubmit() public {
