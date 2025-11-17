@@ -1,4 +1,24 @@
-use crate::dlog_equality::DLogEqualityProof;
+//! Distributed DLogEquality Proof Commitments for Threshold OPRF
+//!
+//! This module defines the core types and helpers for constructing distributed (threshold) Chaum-Pedersen
+//! discrete log equality proofs. Each participating party generates commitment shares and proof shares that
+//! are then aggregated to produce a non-interactive zero-knowledge proof demonstrating that two points share
+//! the same discrete logarithm.
+//!
+//! The primitives defined here are agnostic to the underlying threshold sharing scheme and are used by both
+//! additive and Shamir variants, which are implemented in their respective submodules `additive` and `shamir`.
+//!
+//! This module provides:
+//! - Per-party commitment structures for partial commitment (nonce splits and result share).
+//! - Aggregation mechanisms to combine commitments from all parties, forming the input to the proof challenge hash.
+//! - Proof share creation and combination into a joint (aggregated) proof.
+//! - Deterministic nonce recombination using a domain-separated hash function.
+//!
+//! Secret randomness is never clonable, and session types deliberately do not implement `Debug` to avoid accidental leakage.
+use crate::{
+    dlog_equality::DLogEqualityProof,
+    oprf::{Affine, ScalarField},
+};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
@@ -7,6 +27,15 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
+#[cfg(feature = "additive")]
+pub mod additive;
+pub mod shamir;
+
+const FROST_2_NONCE_COMBINER_LABEL: &[u8] = b"FROST_2_NONCE_COMBINER";
+
+/// Per-party commitments to the distributed DLogEquality proof protocol.
+///
+/// Each party sends these commitments, which consist of a split of the actual response and two nonce splits, for aggregation and creation of the global challenge hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartialDLogEqualityCommitments {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
@@ -30,6 +59,9 @@ pub struct PartialDLogEqualityCommitments {
     pub(crate) e2: Affine,
 }
 
+/// Aggregated commitments for the distributed DLogEquality proof protocol.
+///
+/// This struct aggregates the per-party commitment shares, to be used as the challenge hash input, and to verify against the full proof after all shares are combined.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DLogEqualityCommitments {
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine")]
@@ -55,13 +87,16 @@ pub struct DLogEqualityCommitments {
     pub(crate) contributing_parties: Vec<u16>,
 }
 
+/// Individual party's proof share for the DLogEquality protocol.
+/// Carries a response share for the Chaum-Pedersen protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DLogEqualityProofShare {
+#[serde(transparent)]
+pub(crate) struct DLogEqualityProofShare(
     // The share of the response s
     #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_fr")]
     #[serde(deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr")]
-    pub(crate) s: ScalarField,
-}
+    pub(crate) ScalarField,
+);
 
 /// The internal storage of a party in a distributed DlogEqualityProof protocol.
 ///
@@ -73,10 +108,6 @@ pub struct DLogEqualitySession {
     pub(crate) e: ScalarField,
     pub(crate) blinded_query: Affine,
 }
-
-type ScalarField = ark_babyjubjub::Fr;
-type Affine = ark_babyjubjub::EdwardsAffine;
-type Projective = ark_babyjubjub::EdwardsProjective;
 
 impl DLogEqualitySession {
     /// Computes C=B·x_share and commitments to two random values d_share and e_share, which will be the shares of the randomness used in the DlogEqualityProof.
@@ -110,118 +141,23 @@ impl DLogEqualitySession {
 
         (session, comm)
     }
-
-    /// Finalizes a proof share for a given challenge hash and session.
-    /// The session and information therein is consumed to prevent reuse of the randomness.
-    pub fn challenge(
-        self,
-        session_id: Uuid,
-        contributing_parties: &[u16],
-        x_share: ScalarField,
-        a: Affine,
-        challenge_input: DLogEqualityCommitments,
-    ) -> DLogEqualityProofShare {
-        // Recombine the two-nonce randomness shares into the full randomness used in the challenge.
-        let (r1, r2, b) = combine_twononce_randomness(
-            session_id,
-            a,
-            challenge_input.c,
-            challenge_input.d1,
-            challenge_input.d2,
-            challenge_input.e1,
-            challenge_input.e2,
-            contributing_parties,
-        );
-
-        // Recompute the challenge hash to ensure the challenge is well-formed.
-        let d = Affine::generator();
-        let e = crate::dlog_equality::challenge_hash(
-            a,
-            self.blinded_query,
-            challenge_input.c,
-            d,
-            r1,
-            r2,
-        );
-
-        // The following modular reduction in convert_base_to_scalar is required in rust to perform the scalar multiplications. Using all 254 bits of the base field in a double/add ladder would apply this reduction implicitly. We show in the docs of convert_base_to_scalar why this does not introduce a bias when applied to a uniform element of the base field.
-        let e_ = crate::dlog_equality::convert_base_to_scalar(e);
-        DLogEqualityProofShare {
-            s: self.d + b * self.e + e_ * x_share,
-        }
-    }
 }
 
 impl DLogEqualityCommitments {
-    pub fn new(
-        c: Affine,
-        d1: Affine,
-        d2: Affine,
-        e1: Affine,
-        e2: Affine,
-        parties: Vec<u16>,
-    ) -> Self {
-        DLogEqualityCommitments {
-            c,
-            d1,
-            d2,
-            e1,
-            e2,
-            contributing_parties: parties,
-        }
-    }
-
-    /// Returns the parties that contributed to this commitment.
-    pub fn get_contributing_parties(&self) -> &[u16] {
-        &self.contributing_parties
-    }
-
-    /// The accumulating party (e.g., the verifier) combines all the shares of all parties.
-    /// The returned points are the combined commitments C, R1, R2.
-    pub fn combine_commitments(commitments: &[(u16, PartialDLogEqualityCommitments)]) -> Self {
-        let mut c = Projective::zero();
-        let mut d1 = Projective::zero();
-        let mut d2 = Projective::zero();
-        let mut e1 = Projective::zero();
-        let mut e2 = Projective::zero();
-        let mut contributing_parties = Vec::with_capacity(commitments.len());
-
-        for (party_id, comm) in commitments {
-            c += comm.c;
-            d1 += comm.d1;
-            d2 += comm.d2;
-            e1 += comm.e1;
-            e2 += comm.e2;
-            contributing_parties.push(*party_id);
-        }
-
-        let c = c.into_affine();
-        let d1 = d1.into_affine();
-        let d2 = d2.into_affine();
-        let e1 = e1.into_affine();
-        let e2 = e2.into_affine();
-
-        DLogEqualityCommitments {
-            c,
-            d1,
-            d2,
-            e1,
-            e2,
-            contributing_parties,
-        }
-    }
-
-    pub fn combine_proofs(
+    /// Combine all parties' proof shares into a single Chaum-Pedersen proof object.
+    ///
+    /// Must use the same order of contributing parties as in aggregation
+    pub(crate) fn combine_proofs<'a>(
         self,
         session_id: Uuid,
         contributing_parties: &[u16],
-        proofs: &[DLogEqualityProofShare],
+        proofs: impl Iterator<Item = &'a DLogEqualityProofShare>,
         a: Affine,
         b: Affine,
     ) -> DLogEqualityProof {
         let mut s = ScalarField::zero();
         for proof in proofs {
-            s += proof.s;
+            s += proof.0;
         }
         let (r1, r2, _) = combine_twononce_randomness(
             session_id,
@@ -239,14 +175,7 @@ impl DLogEqualityCommitments {
 
         DLogEqualityProof { e, s }
     }
-
-    /// Returns the combined blinded response C=B*x.
-    pub fn blinded_response(&self) -> Affine {
-        self.c
-    }
 }
-
-const FROST_2_NONCE_COMBINER_LABEL: &[u8] = b"FROST_2_NONCE_COMBINER";
 
 #[allow(clippy::too_many_arguments)]
 /// Combines the two-nonce randomness shares into the full randomness used in the challenge.
@@ -294,83 +223,4 @@ pub(crate) fn combine_twononce_randomness(
     let r1 = d1 + e1 * b;
     let r2 = d2 + e2 * b;
     (r1.into_affine(), r2.into_affine(), b)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_distributed_dlog_equality(num_parties: usize) {
-        let mut rng = rand::thread_rng();
-
-        // Random x shares
-        let x_shares = (0..num_parties)
-            .map(|_| ScalarField::rand(&mut rng))
-            .collect::<Vec<_>>();
-
-        // Combine x shares
-        let x = x_shares.iter().fold(ScalarField::zero(), |acc, x| acc + x);
-
-        // Create public keys
-        let public_key = (Affine::generator() * x).into_affine();
-        let public_key_ = x_shares
-            .iter()
-            .map(|x| (Affine::generator() * x).into_affine())
-            .fold(Projective::zero(), |acc, x| acc + x)
-            .into_affine();
-        assert_eq!(public_key, public_key_);
-
-        // Crete session
-        let session_id = Uuid::new_v4();
-        let b = Affine::rand(&mut rng);
-
-        // 1) Client requests commitments from all servers
-        let mut sessions = Vec::with_capacity(num_parties);
-        let mut commitments = Vec::with_capacity(num_parties);
-        for (id, &x_) in x_shares.iter().enumerate() {
-            let (session, comm) = DLogEqualitySession::partial_commitments(b, x_, &mut rng);
-            sessions.push(session);
-            commitments.push((id as u16 + 1, comm));
-        }
-
-        // 2) Client accumulates commitments and creates challenge
-        let challenge = DLogEqualityCommitments::combine_commitments(&commitments);
-        let c = challenge.blinded_response();
-
-        // 3) Client challenges all servers
-        let contributing_parties = (1u16..=(num_parties as u16)).collect::<Vec<_>>();
-        let mut proofs = Vec::with_capacity(num_parties);
-        for (session, x_) in sessions.into_iter().zip(x_shares.iter().cloned()) {
-            let proof = session.challenge(
-                session_id,
-                &contributing_parties,
-                x_,
-                public_key,
-                challenge.to_owned(),
-            );
-            proofs.push(proof);
-        }
-
-        // 4) Client combines all proofs
-        let proof =
-            challenge.combine_proofs(session_id, &contributing_parties, &proofs, public_key, b);
-
-        // Verify the result and the proof
-        let d = Affine::generator();
-        assert_eq!(c, b * x, "Result must be correct");
-        assert!(
-            proof.verify(public_key, b, c, d),
-            "valid proof should verify"
-        );
-    }
-
-    #[test]
-    fn test_distributed_dlog_equality_3_parties() {
-        test_distributed_dlog_equality(3);
-    }
-
-    #[test]
-    fn test_distributed_dlog_equality_30_parties() {
-        test_distributed_dlog_equality(30);
-    }
 }

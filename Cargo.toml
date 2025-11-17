@@ -60,7 +60,7 @@ nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", re
 num-bigint = "0.4"
 num-traits = "0.2"
 oprf-client = { path = "oprf-client" }
-oprf-core = { path = "oprf-core" }
+oprf-core = { path = "oprf-core", default-features = false }
 oprf-service = { path = "oprf-service" }
 oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }

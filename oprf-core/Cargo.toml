@@ -1,14 +1,19 @@
 [package]
 name = "oprf-core"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 publish.workspace = true
-readme.workspace = true
+
+[[bench]]
+harness = false
+name = "oprf"
+required-features = ["additive", "server"]
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
@@ -21,17 +26,18 @@ eddsa-babyjubjub = { workspace = true }
 itertools = { workspace = true }
 num-bigint.workspace = true
 poseidon2 = { workspace = true }
-rand_chacha.workspace = true
 rand.workspace = true
+rand_chacha.workspace = true
 serde = { workspace = true, features = ["derive"] }
+subtle = "2"
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 zeroize = { workspace = true, features = ["derive"] }
-subtle = "2"
 
 [dev-dependencies]
 criterion = { workspace = true }
 
-[[bench]]
-name = "oprf"
-harness = false
+[features]
+default = ["server"]
+additive = []
+server = []

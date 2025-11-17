@@ -20,5 +20,6 @@ eddsa-babyjubjub = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 oprf-zk = { workspace = true }
+ruint = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

@@ -25,10 +25,8 @@ use oprf_test::{
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::RpNullifierKey;
 
-pub use circom_types;
-pub use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
-pub use groth16;
-pub use oprf_core::proof_input_gen::query::MAX_PUBLIC_KEYS;
+use eddsa_babyjubjub::EdDSAPrivateKey;
+
 use oprf_zk::{
     Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
     QUERY_GRAPH_BYTES,

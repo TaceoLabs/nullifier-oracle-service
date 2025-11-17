@@ -13,6 +13,7 @@
 use alloy::hex;
 use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
 use k256::ecdsa::SigningKey;
+use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -25,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
-use crate::services::secret_manager::{DLogShare, SecretManager, StoreDLogShare};
+use crate::services::secret_manager::{SecretManager, StoreDLogShare};
 
 /// AWS Secret Manager client wrapper.
 #[derive(Debug, Clone)]
@@ -73,7 +74,7 @@ struct AwsRpSecret {
 #[derive(Clone, Serialize, Deserialize)]
 struct EpochSecret {
     epoch: ShareEpoch,
-    secret: DLogShare,
+    secret: DLogShareShamir,
 }
 
 impl AwsRpSecret {
@@ -84,7 +85,7 @@ impl AwsRpSecret {
         rp_id: RpId,
         rp_public: k256::PublicKey,
         rp_nullifier_key: RpNullifierKey,
-        secret: DLogShare,
+        secret: DLogShareShamir,
     ) -> Self {
         Self {
             rp_id,
@@ -268,7 +269,7 @@ impl SecretManager for AwsSecretManager {
         &self,
         rp_id: RpId,
         epoch: ShareEpoch,
-        share: DLogShare,
+        share: DLogShareShamir,
     ) -> eyre::Result<()> {
         // Load old secret to preserve previous epoch
         let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);

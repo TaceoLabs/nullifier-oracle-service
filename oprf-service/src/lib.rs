@@ -38,7 +38,6 @@ pub mod metrics;
 pub mod rp_registry;
 pub(crate) mod services;
 
-pub use services::rp_material_store::DLogShare;
 pub use services::rp_material_store::RpMaterialStore;
 pub use services::secret_manager::SecretManager;
 pub use services::secret_manager::StoreDLogShare;
@@ -305,7 +304,7 @@ mod tests {
     use axum_test::TestServer;
     use k256::ecdsa::signature::SignerMut;
     use oprf_client::OprfQuery;
-    use oprf_core::ddlog_equality::DLogEqualityCommitments;
+    use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
     use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
     use oprf_types::crypto::RpNullifierKey;
     use oprf_types::{RpId, ShareEpoch};
@@ -318,7 +317,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::services::merkle_watcher::test::TestMerkleWatcher;
-    use crate::services::rp_material_store::{DLogShare, RpMaterial, RpMaterialStore};
+    use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
 
     use super::*;
 
@@ -437,7 +436,7 @@ mod tests {
             let oprf_req = signed_query.get_request();
             let challenge_req = ChallengeRequest {
                 request_id,
-                challenge: DLogEqualityCommitments::new(
+                challenge: DLogCommitmentsShamir::new(
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
@@ -453,7 +452,7 @@ mod tests {
                 RpMaterial::new(
                     HashMap::from([(
                         ShareEpoch::default(),
-                        DLogShare::from(ark_babyjubjub::Fr::rand(&mut rng)),
+                        DLogShareShamir::from(ark_babyjubjub::Fr::rand(&mut rng)),
                     )]),
                     rp_public_key.into(),
                     RpNullifierKey::new(rng.r#gen()),
