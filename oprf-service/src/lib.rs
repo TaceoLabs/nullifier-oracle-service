@@ -15,10 +15,12 @@
 use std::{fs::File, future::Future, str::FromStr, sync::Arc};
 
 use alloy::{network::EthereumWallet, primitives::Address, signers::local::PrivateKeySigner};
+use ark_bn254::Bn254;
 use axum::extract::FromRef;
+use circom_types::groth16::VerificationKey;
 use eyre::Context;
 use oprf_types::crypto::PartyId;
-use oprf_zk::{Groth16Material, groth16_serde::Groth16VerificationKey};
+use oprf_zk::Groth16Material;
 use secrecy::ExposeSecret;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -130,7 +132,7 @@ pub async fn start(
     );
     let vk = File::open(&config.user_verification_key_path)
         .context("while opening file to verification key")?;
-    let vk: Groth16VerificationKey = serde_json::from_reader(vk)
+    let vk: VerificationKey<Bn254> = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
     let private_key = load_wallet_private_key(&secret_manager)
@@ -466,7 +468,7 @@ mod tests {
             )?);
             let user_verification_key_path = dir.join("../circom/main/query/OPRFQuery.vk.json");
             let vk = File::open(&user_verification_key_path)?;
-            let vk: Groth16VerificationKey = serde_json::from_reader(vk)?;
+            let vk: VerificationKey<Bn254> = serde_json::from_reader(vk)?;
             let request_lifetime = Duration::from_secs(5 * 60);
             let session_cleanup_interval = Duration::from_secs(30);
             let current_time_stamp_max_difference = Duration::from_secs(60);
@@ -518,7 +520,7 @@ mod tests {
     async fn test_init_bad_proof() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
         let mut req = setup.oprf_req;
-        req.auth.proof.a = req.auth.proof.c;
+        req.auth.proof.pi_a = req.auth.proof.pi_c;
         let res = setup
             .server
             .post("/api/v1/init")

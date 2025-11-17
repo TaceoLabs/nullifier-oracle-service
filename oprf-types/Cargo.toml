@@ -1,21 +1,21 @@
 [package]
 name = "oprf-types"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 publish.workspace = true
-readme.workspace = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
-ark-serde-compat = { workspace = true }
+circom-types = { workspace = true, features = ["bn254", "groth16", "zkey"] }
 eyre = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
-oprf-zk = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+taceo-ark-serde-compat = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }

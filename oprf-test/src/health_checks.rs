@@ -31,12 +31,12 @@ pub async fn services_health_check(
 
 async fn load_public_rp_material(rp_material_url: String) -> PublicRpMaterial {
     loop {
-        if let Ok(response) = reqwest::get(&rp_material_url).await {
-            if let Ok(response) = response.error_for_status() {
-                if let Ok(material) = response.json::<PublicRpMaterial>().await {
-                    return material;
-                }
-            }
+        if let Ok(response) = reqwest::get(&rp_material_url)
+            .await
+            .and_then(|response| response.error_for_status())
+            && let Ok(material) = response.json::<PublicRpMaterial>().await
+        {
+            return material;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
@@ -68,12 +68,12 @@ pub async fn rp_material_from_services(
 }
 async fn rp_material_not_known_check(health_url: String) {
     loop {
-        if let Ok(response) = reqwest::get(&health_url).await {
-            if let Err(err) = response.error_for_status() {
-                if err.status() == Some(StatusCode::NOT_FOUND) {
-                    break;
-                }
-            }
+        if let Err(err) = reqwest::get(&health_url)
+            .await
+            .and_then(|response| response.error_for_status())
+            && err.status() == Some(StatusCode::NOT_FOUND)
+        {
+            break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

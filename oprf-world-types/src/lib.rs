@@ -4,6 +4,7 @@ use alloy::primitives::U256;
 use ark_ff::PrimeField;
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 use serde::{Deserialize, Serialize};
+use taceo_ark_serde_compat::babyjubjub;
 
 pub mod api;
 pub mod proof_inputs;
@@ -17,10 +18,8 @@ pub const TREE_DEPTH: usize = 30;
 )]
 #[serde(transparent)]
 pub struct MerkleRoot(
-    #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_fq",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fq"
-    )]
+    #[serde(serialize_with = "babyjubjub::serialize_fq")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
     ark_babyjubjub::Fq,
 );
 
@@ -73,8 +72,8 @@ impl fmt::Display for MerkleRoot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPublicKeyBatch {
     /// Values of the the public key (always len 7)
-    #[serde(serialize_with = "ark_serde_compat::serialize_babyjubjub_affine_sequence")]
-    #[serde(deserialize_with = "ark_serde_compat::deserialize_user_key_batch")]
+    #[serde(serialize_with = "babyjubjub::serialize_affine_seq")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_affine_array")]
     pub values: [ark_babyjubjub::EdwardsAffine; 7],
 }
 
