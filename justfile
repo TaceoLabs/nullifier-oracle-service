@@ -193,6 +193,26 @@ create-account-auth-tree *args:
 create-account-auth-tree-dry-run *args:
     forge script CreateAccount.s.sol -vvvvv {{ args }}
 
+[group('deploy')]
+[working-directory('contracts/script')]
+revoke-key-gen-admin-dry-run *args:
+    forge script RevokeKeyGenAdmin.s.sol -vvvvv {{ args }}
+
+[group('deploy')]
+[working-directory('contracts/script')]
+revoke-key-gen-admin *args:
+    forge script RevokeKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }}
+
+[group('deploy')]
+[working-directory('contracts/script')]
+register-key-gen-admin-dry-run *args:
+    forge script RegisterKeyGenAdmin.s.sol -vvvvv {{ args }}
+
+[group('deploy')]
+[working-directory('contracts/script')]
+register-key-gen-admin *args:
+    forge script RegisterKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }}
+
 [group('anvil')]
 [working-directory('contracts/script/deploy')]
 deploy-rp-registry-with-deps-anvil:
@@ -212,6 +232,16 @@ deploy-account-registry-anvil:
 [working-directory('contracts/script/deploy')]
 register-participants-anvil:
     ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+[group('anvil')]
+[working-directory('contracts/script')]
+revoke-key-gen-admin-anvil:
+    forge script RevokeKeyGenAdmin.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+[group('anvil')]
+[working-directory('contracts/script')]
+register-key-gen-admin-anvil:
+    forge script RegisterKeyGenAdmin.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group('anvil')]
 [working-directory('contracts/script/test')]
