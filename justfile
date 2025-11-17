@@ -151,7 +151,7 @@ deploy-rp-registry-with-deps-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-rp-registry-with-deps *args:
-    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }}
+    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
@@ -161,7 +161,7 @@ deploy-rp-registry-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-rp-registry *args:
-    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }}
+    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/test')]
@@ -171,12 +171,12 @@ deploy-account-registry-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/test')]
 deploy-account-registry *args:
-    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }}
+    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 register-participants *args:
-    forge script RegisterParticipants.s.sol --broadcast --interactives 1 -vvvvv {{ args }}
+    forge script RegisterParticipants.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
@@ -186,7 +186,7 @@ register-participants-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/test')]
 create-account-auth-tree *args:
-    forge script CreateAccount.s.sol --broadcast --interactives 1 -vvvvv {{ args }}
+    forge script CreateAccount.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/test')]
@@ -201,7 +201,7 @@ revoke-key-gen-admin-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script')]
 revoke-key-gen-admin *args:
-    forge script RevokeKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }}
+    forge script RevokeKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script')]
@@ -211,7 +211,7 @@ register-key-gen-admin-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script')]
 register-key-gen-admin *args:
-    forge script RegisterKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }}
+    forge script RegisterKeyGenAdmin.s.sol -vvvvv --broadcast --interactives 1 {{ args }} --rpc-url $RPC_URL
 
 [group('anvil')]
 [working-directory('contracts/script/deploy')]
