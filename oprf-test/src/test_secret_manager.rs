@@ -2,7 +2,8 @@ use std::{collections::HashSet, sync::Arc};
 
 use async_trait::async_trait;
 use itertools::Itertools;
-use oprf_service::{DLogShare, RpMaterialStore, SecretManager, StoreDLogShare};
+use oprf_core::ddlog_equality::shamir::DLogShareShamir;
+use oprf_service::{RpMaterialStore, SecretManager, StoreDLogShare};
 use oprf_types::{RpId, ShareEpoch};
 use parking_lot::Mutex;
 use secrecy::SecretString;
@@ -53,7 +54,12 @@ impl SecretManager for TestSecretManager {
         Ok(())
     }
 
-    async fn update_dlog_share(&self, _: RpId, _: ShareEpoch, _: DLogShare) -> eyre::Result<()> {
+    async fn update_dlog_share(
+        &self,
+        _: RpId,
+        _: ShareEpoch,
+        _: DLogShareShamir,
+    ) -> eyre::Result<()> {
         unreachable!()
     }
 }

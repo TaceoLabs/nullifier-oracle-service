@@ -21,7 +21,7 @@ use std::{
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
 use eyre::Context;
-use oprf_core::ddlog_equality::{DLogEqualityProofShare, PartialDLogEqualityCommitments};
+use oprf_core::ddlog_equality::shamir::{DLogProofShareShamir, PartialDLogCommitmentsShamir};
 use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
 use oprf_types::crypto::PartyId;
 use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
@@ -119,12 +119,12 @@ impl OprfService {
     /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`RpMaterialStore`].
     /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     ///
-    /// Returns the compressed Base64-encoded [`PartialDLogEqualityCommitments`] if successful.
+    /// Returns the compressed Base64-encoded [`PartialDLogCommitmentsShamir`] if successful.
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) async fn init_oprf_session(
         &self,
         request: OprfRequest<OprfRequestAuth>,
-    ) -> Result<PartialDLogEqualityCommitments, OprfServiceError> {
+    ) -> Result<PartialDLogCommitmentsShamir, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
         let rp_id = request.rp_identifier.rp_id;
 
@@ -200,7 +200,7 @@ impl OprfService {
         &self,
         my_party_id: PartyId,
         request: ChallengeRequest,
-    ) -> Result<DLogEqualityProofShare, OprfServiceError> {
+    ) -> Result<DLogProofShareShamir, OprfServiceError> {
         tracing::debug!("handling challenge request: {}", request.request_id);
         // Retrieve the randomness from the previous step. If the request is not known, we return an error
         let session = self

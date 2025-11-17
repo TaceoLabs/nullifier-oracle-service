@@ -72,6 +72,9 @@ pub fn accumulate_shares(shares: &[ScalarField]) -> ScalarField {
 ///
 /// # Returns
 /// Accumulated (reconstructed) secret or key share.
+///
+/// # Panics
+/// This method panics if the len of `shares` is lower than the len of `lagrange`. This method expects this check at callsite.
 pub fn accumulate_lagrange_shares(shares: &[ScalarField], lagrange: &[ScalarField]) -> ScalarField {
     assert!(shares.len() >= lagrange.len());
     let shares = &shares[0..lagrange.len()];
@@ -139,6 +142,9 @@ pub fn decrypt_share(
 ///
 /// # Returns
 /// The accumulated public key (as an affine point).
+///
+/// # Panics
+/// This method panics if the len of `shares` is lower than the len of `lagrange`. This method expects this check at callsite.
 pub fn accumulate_lagrange_pks(pks: &[Affine], lagrange: &[ScalarField]) -> Affine {
     assert!(pks.len() >= lagrange.len());
     let pks = &pks[0..lagrange.len()];

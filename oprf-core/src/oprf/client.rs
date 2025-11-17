@@ -71,6 +71,7 @@ pub fn blind_query<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> (BlindedOprfRequest, BlindingFactor) {
     // Generate a random blinding factor
+    // The blinding factor shall not be zero. As the chance of getting a zero is negligible, we don't perform a check here.
     let blinding_factor = ScalarField::rand(rng);
     let encoded_input = mappings::encode_to_curve(query);
     let blinded_query = (encoded_input * blinding_factor).into_affine();

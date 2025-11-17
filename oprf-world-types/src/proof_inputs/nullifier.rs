@@ -43,12 +43,8 @@ impl<const MAX_DEPTH: usize> NullifierProofInput<MAX_DEPTH> {
         blinded_response: Affine,
         signal_hash: BaseField,
         id_commitment_r: BaseField,
-        query: BaseField,
+        blinding_factor: BlindingFactor,
     ) -> Self {
-        let blinding_factor = BlindingFactor {
-            factor: query_input.beta,
-            query,
-        };
         let blinding_factor_prepared = blinding_factor.prepare();
 
         let oprf_blinded_response = BlindedOprfResponse::new(blinded_response);

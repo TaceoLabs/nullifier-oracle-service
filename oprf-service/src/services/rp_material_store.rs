@@ -8,9 +8,9 @@
 use ark_ff::{BigInteger as _, PrimeField as _};
 use k256::ecdsa::signature::Verifier;
 use oprf_core::{
-    ddlog_equality::{
-        DLogEqualityCommitments, DLogEqualityProofShare, DLogEqualitySession,
-        PartialDLogEqualityCommitments,
+    ddlog_equality::shamir::{
+        DLogCommitmentsShamir, DLogProofShareShamir, DLogSessionShamir, DLogShareShamir,
+        PartialDLogCommitmentsShamir,
     },
     shamir,
 };
@@ -20,11 +20,9 @@ use oprf_types::{
     crypto::{PartyId, RpNullifierKey},
 };
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use uuid::Uuid;
-use zeroize::ZeroizeOnDrop;
 
 type RpMaterialStoreResult<T> = std::result::Result<T, RpMaterialStoreError>;
 
@@ -56,50 +54,23 @@ pub struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
 /// Holds all cryptographic material for a single relying party (RP).
 ///
 /// Stores:
-/// * A mapping of [`ShareEpoch`] → [`DLogShare`]
+/// * A mapping of [`ShareEpoch`] → [`DLogShareShamir`]
 /// * The RP's ECDSA `VerifyingKey` used for nonce-signature verification.
 ///
 /// This struct is typically wrapped in a larger storage type (e.g. `RpMaterialStore`)
 /// to manage multiple RPs.
 #[derive(Clone)]
 pub struct RpMaterial {
-    pub(crate) shares: HashMap<ShareEpoch, DLogShare>,
+    pub(crate) shares: HashMap<ShareEpoch, DLogShareShamir>,
     public_key: k256::ecdsa::VerifyingKey,
     nullifier_key: RpNullifierKey,
-}
-
-/// Secret-share of an OPRF nullifier secret.
-///
-/// Serializable so it can be persisted via a secret manager.
-/// Not `Debug`/`Display` to avoid accidental leaks.
-///
-#[derive(Clone, Serialize, Deserialize, ZeroizeOnDrop)]
-#[serde(transparent)]
-pub struct DLogShare(
-    #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_fr",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr"
-    )]
-    ark_babyjubjub::Fr,
-);
-
-impl From<ark_babyjubjub::Fr> for DLogShare {
-    fn from(value: ark_babyjubjub::Fr) -> Self {
-        Self(value)
-    }
-}
-
-impl From<DLogShare> for ark_babyjubjub::Fr {
-    fn from(value: DLogShare) -> Self {
-        value.0
-    }
 }
 
 impl RpMaterial {
     /// Creates a new [`RpMaterial`] from the provided shares and ECDSA public key.
     #[allow(dead_code)]
     pub(crate) fn new(
-        shares: HashMap<ShareEpoch, DLogShare>,
+        shares: HashMap<ShareEpoch, DLogShareShamir>,
         public_key: k256::ecdsa::VerifyingKey,
         nullifier_key: RpNullifierKey,
     ) -> Self {
@@ -110,8 +81,8 @@ impl RpMaterial {
         }
     }
 
-    /// Returns the [`DLogShare`] for the given epoch, or `None` if not found.
-    fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShare> {
+    /// Returns the [`DLogShareShamir`] for the given epoch, or `None` if not found.
+    fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShareShamir> {
         self.shares.get(&epoch).cloned()
     }
 
@@ -172,12 +143,12 @@ impl RpMaterialStore {
         &self,
         point_b: ark_babyjubjub::EdwardsAffine,
         share_identifier: &NullifierShareIdentifier,
-    ) -> RpMaterialStoreResult<(DLogEqualitySession, PartialDLogEqualityCommitments)> {
+    ) -> RpMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
         tracing::debug!("computing partial commitment");
         let share = self.get(share_identifier).ok_or_else(|| {
             RpMaterialStoreError::UnknownRpShareEpoch(share_identifier.to_owned())
         })?;
-        Ok(DLogEqualitySession::partial_commitments(
+        Ok(DLogSessionShamir::partial_commitments(
             point_b,
             share,
             &mut rand::thread_rng(),
@@ -194,10 +165,10 @@ impl RpMaterialStore {
         &self,
         session_id: Uuid,
         my_party_id: PartyId,
-        session: DLogEqualitySession,
-        challenge: DLogEqualityCommitments,
+        session: DLogSessionShamir,
+        challenge: DLogCommitmentsShamir,
         share_identifier: &NullifierShareIdentifier,
-    ) -> RpMaterialStoreResult<DLogEqualityProofShare> {
+    ) -> RpMaterialStoreResult<DLogProofShareShamir> {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
             .get_rp_nullifier_key(share_identifier.rp_id)
@@ -209,7 +180,7 @@ impl RpMaterialStore {
             my_party_id.into_inner() + 1,
             challenge.get_contributing_parties(),
         );
-        Ok(session.challenge_shamir(
+        Ok(session.challenge(
             session_id,
             share,
             rp_nullifier_key.inner(),
@@ -220,12 +191,11 @@ impl RpMaterialStore {
     /// Retrieves the secret share for the given [`NullifierShareIdentifier`].
     ///
     /// Returns `None` if the RP or share epoch is not found.
-    fn get(&self, key_identifier: &NullifierShareIdentifier) -> Option<ark_babyjubjub::Fr> {
+    fn get(&self, key_identifier: &NullifierShareIdentifier) -> Option<DLogShareShamir> {
         self.0
             .read()
             .get(&key_identifier.rp_id)?
             .get_share(key_identifier.share_epoch)
-            .map(|share| share.0)
     }
 
     /// Returns the ECDSA `VerifyingKey` of the specified RP, if registered.
@@ -247,7 +217,7 @@ impl RpMaterialStore {
         rp_id: RpId,
         public_key: k256::ecdsa::VerifyingKey,
         nullifier_key: RpNullifierKey,
-        dlog_share: DLogShare,
+        dlog_share: DLogShareShamir,
     ) {
         let mut shares = HashMap::new();
         shares.insert(ShareEpoch::default(), dlog_share);

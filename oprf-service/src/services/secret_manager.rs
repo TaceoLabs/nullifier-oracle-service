@@ -9,10 +9,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
 use secrecy::SecretString;
 
-use crate::services::rp_material_store::{DLogShare, RpMaterialStore};
+use crate::services::rp_material_store::RpMaterialStore;
 
 pub(crate) mod aws;
 
@@ -26,14 +27,14 @@ pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
 /// Contains all the information needed to initialize a new RP's
 /// cryptographic material in the secret manager.
 pub struct StoreDLogShare {
-    /// The rp id associated with this [`DLogShare`].
+    /// The rp id associated with this [`DLogShareShamir`].
     pub rp_id: RpId,
     /// The public key of the RP
     pub public_key: k256::PublicKey,
     /// The created public part of the nullifier key
     pub rp_nullifier_key: RpNullifierKey,
     /// The actual secret-share from the created secret part of the nullifier key
-    pub share: DLogShare,
+    pub share: DLogShareShamir,
 }
 
 /// Trait that implementations of secret managers must provide.
@@ -48,7 +49,7 @@ pub trait SecretManager {
     /// Loads the DLog secrets and creates a [`RpMaterialStore`].
     async fn load_secrets(&self) -> eyre::Result<RpMaterialStore>;
 
-    /// Stores the provided [`DLogShare`], the RP's ECDSA public key for the given [`RpId`] at epoch 0 and the computed [`RpNullifierKey`].
+    /// Stores the provided [`DLogShareShamir`], the RP's ECDSA public key for the given [`RpId`] at epoch 0 and the computed [`RpNullifierKey`].
     ///
     /// This method is intended **only** for initializing a new RP. For updating
     /// existing shares, use [`Self::update_dlog_share`].
@@ -59,7 +60,7 @@ pub trait SecretManager {
     /// Certain secret-managers might not be able to immediately delete the secret. In that case it shall mark the secret for deletion.
     async fn remove_dlog_share(&self, rp_id: RpId) -> eyre::Result<()>;
 
-    /// Updates the [`DLogShare`] of an existing [`RpId`] to a new epoch.
+    /// Updates the [`DLogShareShamir`] of an existing [`RpId`] to a new epoch.
     ///
     /// Use this method for updating existing shares. For creating a new share,
     /// use [`Self::store_dlog_share`].
@@ -67,6 +68,6 @@ pub trait SecretManager {
         &self,
         rp_id: RpId,
         epoch: ShareEpoch,
-        share: DLogShare,
+        share: DLogShareShamir,
     ) -> eyre::Result<()>;
 }

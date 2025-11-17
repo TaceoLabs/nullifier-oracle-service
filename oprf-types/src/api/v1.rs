@@ -9,8 +9,8 @@
 //! they can be sent over the wire.
 use std::fmt;
 
-use oprf_core::ddlog_equality::{
-    DLogEqualityCommitments, DLogEqualityProofShare, PartialDLogEqualityCommitments,
+use oprf_core::ddlog_equality::shamir::{
+    DLogCommitmentsShamir, DLogProofShareShamir, PartialDLogCommitmentsShamir,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
@@ -67,7 +67,7 @@ pub struct OprfResponse {
     /// ID of the request being answered.
     pub request_id: Uuid,
     /// Server’s partial commitments for the discrete log equality proof.
-    pub commitments: PartialDLogEqualityCommitments,
+    pub commitments: PartialDLogCommitmentsShamir,
     /// The party ID of the peer
     pub party_id: PartyId,
 }
@@ -78,7 +78,7 @@ pub struct ChallengeRequest {
     /// ID of the original OPRF request.
     pub request_id: Uuid,
     /// The challenge to respond to.
-    pub challenge: DLogEqualityCommitments,
+    pub challenge: DLogCommitmentsShamir,
     /// Identifies the relying party’s and the epoch of the used share
     pub rp_identifier: NullifierShareIdentifier,
 }
@@ -89,7 +89,7 @@ pub struct ChallengeResponse {
     /// ID of the request being answered.
     pub request_id: Uuid,
     /// Server’s proof share for the discrete log equality proof.
-    pub proof_share: DLogEqualityProofShare,
+    pub proof_share: DLogProofShareShamir,
 }
 
 impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth>

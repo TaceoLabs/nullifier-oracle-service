@@ -1,7 +1,7 @@
 //! Session Store
 //!
 //! This module provides an in-memory session store for the OPRF service.
-//! Each session holds a [`DLogEqualitySession`] and is identified by a UUID.
+//! Each session holds a [`DLogSessionShamir`] and is identified by a UUID.
 //!
 //! Sessions are automatically cleaned up after a configured lifetime. The store
 //! exposes methods to store and retrieve sessions while updating metrics for
@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oprf_core::ddlog_equality::DLogEqualitySession;
+use oprf_core::ddlog_equality::shamir::DLogSessionShamir;
 use parking_lot::Mutex;
 use tracing::instrument;
 use uuid::Uuid;
@@ -28,12 +28,12 @@ type SessionsMap = Arc<Mutex<HashMap<Uuid, Session>>>;
 /// If the timestamp exceeds a defined amount, the session will be removed
 /// from the store.
 struct Session {
-    randomness: DLogEqualitySession,
+    randomness: DLogSessionShamir,
     creation: Instant,
 }
 
-impl From<DLogEqualitySession> for Session {
-    fn from(randomness: DLogEqualitySession) -> Self {
+impl From<DLogSessionShamir> for Session {
+    fn from(randomness: DLogSessionShamir) -> Self {
         Self {
             randomness,
             creation: Instant::now(),
@@ -44,7 +44,7 @@ impl From<DLogEqualitySession> for Session {
 /// The Session Store of the OPRF service.
 ///
 /// Provides an interface to manage currently open sessions. Each session
-/// holds a [`DLogEqualitySession`] and a creation timestamp.  
+/// holds a [`DLogSessionShamir`] and a creation timestamp.  
 /// Old sessions are periodically removed by a background cleanup task.
 #[derive(Clone)]
 pub(crate) struct SessionStore {
@@ -70,9 +70,9 @@ impl SessionStore {
     ///
     /// # Arguments
     /// * `request_id` - Unique ID of the session.
-    /// * `session` - The [`DLogEqualitySession`] to store.
+    /// * `session` - The [`DLogSessionShamir`] to store.
     #[instrument(level = "debug", skip(self, session))]
-    pub(crate) fn insert(&self, request_id: Uuid, session: DLogEqualitySession) {
+    pub(crate) fn insert(&self, request_id: Uuid, session: DLogSessionShamir) {
         tracing::debug!("storing session for {request_id}");
         tracing::trace!("trying to get lock...");
         let inc = {
@@ -99,9 +99,9 @@ impl SessionStore {
     /// * `request_id` - Unique ID of the session.
     ///
     /// # Returns
-    /// Optionally returns the [`DLogEqualitySession`] if it exists.
+    /// Optionally returns the [`DLogSessionShamir`] if it exists.
     #[instrument(level = "debug", skip(self))]
-    pub(crate) fn remove(&self, request_id: Uuid) -> Option<DLogEqualitySession> {
+    pub(crate) fn remove(&self, request_id: Uuid) -> Option<DLogSessionShamir> {
         tracing::debug!("retrieving session {request_id}");
         tracing::trace!("trying to get lock...");
         let session = {

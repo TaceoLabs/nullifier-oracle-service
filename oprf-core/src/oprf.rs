@@ -44,9 +44,9 @@ impl BlindedOprfRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlindingFactor {
     /// The scalar blinding factor used to blind the query.
-    pub factor: ScalarField,
+    factor: ScalarField,
     /// The original (unblinded) query field element.
-    pub query: BaseField,
+    query: BaseField,
 }
 
 impl BlindingFactor {
@@ -79,7 +79,7 @@ impl BlindingFactor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedBlindingFactor {
     /// The inverse of the blinding factor used for unblinding.
-    pub factor: ScalarField,
+    factor: ScalarField,
     /// The original query value.
     query: BaseField,
 }

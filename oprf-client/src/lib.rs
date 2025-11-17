@@ -33,12 +33,10 @@
 //! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
 //! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
 
-use oprf_core::ddlog_equality::PartialDLogEqualityCommitments;
-
-use oprf_core::oprf::{self, BlindedOprfRequest};
+use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, PartialDLogCommitmentsShamir};
+use oprf_core::oprf::{self, BlindedOprfRequest, BlindingFactor};
 
 use ark_ec::AffineRepr;
-use oprf_core::ddlog_equality::DLogEqualityCommitments;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
@@ -134,7 +132,7 @@ pub struct SignedOprfQuery {
     query: OprfQuery,
     blinded_request: BlindedOprfRequest,
     query_input: QueryProofInput<TREE_DEPTH>,
-    query_hash: ark_babyjubjub::Fq,
+    blinding_factor: BlindingFactor,
 }
 
 /// Holds information about active OPRF sessions with multiple peers.
@@ -144,7 +142,7 @@ pub struct SignedOprfQuery {
 pub struct OprfSessions {
     services: Vec<String>,
     party_ids: Vec<PartyId>,
-    commitments: Vec<PartialDLogEqualityCommitments>,
+    commitments: Vec<PartialDLogCommitmentsShamir>,
 }
 
 impl OprfSessions {
@@ -190,7 +188,7 @@ pub struct Challenge {
     blinded_request: BlindedOprfRequest,
     blinded_response: ark_babyjubjub::EdwardsAffine,
     query_input: QueryProofInput<TREE_DEPTH>,
-    query_hash: ark_babyjubjub::Fq,
+    blinding_factor: BlindingFactor,
     rp_nullifier_key: RpNullifierKey,
 }
 
@@ -399,7 +397,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
 
     Ok(SignedOprfQuery {
         request_id,
-        query_hash,
+        blinding_factor,
         query_input,
         oprf_request: OprfRequest {
             request_id,
@@ -455,14 +453,12 @@ pub fn compute_challenges(
         .map(|id| id.into_inner() + 1)
         .collect::<Vec<_>>();
     // Combine commitments from all sessions and create a single challenge
-    let challenge = DLogEqualityCommitments::combine_commitments_shamir(
-        &sessions.commitments,
-        contributing_parties,
-    );
+    let challenge =
+        DLogCommitmentsShamir::combine_commitments(&sessions.commitments, contributing_parties);
     let blinded_response = challenge.blinded_response();
     Ok(Challenge {
         query_input: query.query_input,
-        query_hash: query.query_hash,
+        blinding_factor: query.blinding_factor,
         request_id: query.request_id,
         blinded_request: query.blinded_request,
         blinded_response,
@@ -555,7 +551,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.blinded_response,
         signal_hash,
         id_commitment_r,
-        challenges.query_hash,
+        challenges.blinding_factor,
     );
 
     tracing::debug!("generate nullifier proof");
