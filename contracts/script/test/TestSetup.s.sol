@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import {Script, console} from "forge-std/Script.sol";
 import {RpRegistry} from "../../src/RpRegistry.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
-import {Groth16Verifier as Groth16VerifierNullifier} from "../../src/Groth16VerifierNullifier.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
 import {Types} from "../../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -23,12 +22,6 @@ contract TestSetupScript is Script {
         return address(verifier);
     }
 
-    function deployGroth16VerifierNullifier() public returns (address) {
-        Groth16VerifierNullifier verifier = new Groth16VerifierNullifier();
-        console.log("Groth16VerifierNullifier deployed to:", address(verifier));
-        return address(verifier);
-    }
-
     function deployAccumulator() public returns (address) {
         BabyJubJub acc = new BabyJubJub();
         console.log("Accumulator deployed to:", address(acc));
@@ -40,7 +33,6 @@ contract TestSetupScript is Script {
 
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
-        address nullifierVerifierAddress = deployGroth16VerifierNullifier();
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
 
         address aliceAddress = vm.envAddress("ALICE_ADDRESS");
@@ -51,11 +43,7 @@ contract TestSetupScript is Script {
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector,
-            taceoAdminAddress,
-            keyGenVerifierAddress,
-            nullifierVerifierAddress,
-            accumulatorAddress
+            RpRegistry.initialize.selector, taceoAdminAddress, keyGenVerifierAddress, accumulatorAddress
         );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);

@@ -5,7 +5,6 @@ import {Test} from "forge-std/Test.sol";
 import {RpRegistry} from "../src/RpRegistry.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
-import {Groth16Verifier as Groth16VerifierNullifier} from "../src/Groth16VerifierNullifier.sol";
 import {Types} from "../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {aliceRound2Contribution, bobRound2Contribution, carolRound2Contribution} from "./RpRegistry.t.sol";
@@ -43,7 +42,6 @@ contract RpRegistryUpgradeTest is Test {
     RpRegistry public rpRegistry;
     BabyJubJub public accumulator;
     Groth16VerifierKeyGen13 public verifierKeyGen;
-    Groth16VerifierNullifier public verifierNullifier;
     ERC1967Proxy public proxy;
 
     address alice = address(0x1);
@@ -96,13 +94,11 @@ contract RpRegistryUpgradeTest is Test {
     function setUp() public {
         accumulator = new BabyJubJub();
         verifierKeyGen = new Groth16VerifierKeyGen13();
-        verifierNullifier = new Groth16VerifierNullifier();
         // Deploy implementation
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
-        bytes memory initData = abi.encodeWithSelector(
-            RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, verifierNullifier, accumulator
-        );
+        bytes memory initData =
+            abi.encodeWithSelector(RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
         rpRegistry = RpRegistry(address(proxy));

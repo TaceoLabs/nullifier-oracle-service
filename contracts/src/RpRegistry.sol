@@ -20,15 +20,6 @@ interface IGroth16VerifierKeyGen13 {
     ) external view returns (bool);
 }
 
-interface IGroth16VerifierNullifier {
-    function verifyProof(
-        uint256[2] calldata _pA,
-        uint256[2][2] calldata _pB,
-        uint256[2] calldata _pC,
-        uint256[PUBLIC_INPUT_LENGTH_NULLIFIER] calldata _pubSignals
-    ) external view returns (bool);
-}
-
 interface IBabyJubJub {
     function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external view returns (uint256 x3, uint256 y3);
 
@@ -52,7 +43,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // goes offline then effectively the system halts...
     address public keygenAdmin;
     IGroth16VerifierKeyGen13 public keyGenVerifier;
-    IGroth16VerifierNullifier public nullifierVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
     uint256 public numPeers;
@@ -124,19 +114,16 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
     /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
     /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
-    /// @param _nullifierVerifierAddress The address of the Groth16 verifier contract for nullifier verification.
     /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
-    function initialize(
-        address _keygenAdmin,
-        address _keyGenVerifierAddress,
-        address _nullifierVerifierAddress,
-        address _accumulatorAddress
-    ) public virtual initializer {
+    function initialize(address _keygenAdmin, address _keyGenVerifierAddress, address _accumulatorAddress)
+        public
+        virtual
+        initializer
+    {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
         keygenAdmin = _keygenAdmin;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
-        nullifierVerifier = IGroth16VerifierNullifier(_nullifierVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
         // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
         threshold = 2;
@@ -229,80 +216,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         if (needToEmitEvent) {
             emit Types.KeyDeletion(rpId);
         }
-    }
-
-    // ==================================
-    //        Public FUNCTIONS
-    // ==================================
-
-    /// @notice Verifies a nullifier proof. Retrieves the RP-specific information and uses is in the verification process.
-    /// @param nullifier The nullifier to be verified.
-    /// @param nullifierAction The action associated with the nullifier.
-    /// @param rpId The unique identifier for the RP.
-    /// @param identityCommitment The identity commitment of the user.
-    /// @param nonce A nonce value for the proof.
-    /// @param signalHash The signalHash associated with the proof.
-    /// @param authenticatorMerkleRoot The Merkle root of the authenticator tree, already validated by the caller.
-    /// @param proofTimestamp The timestamp when the proof was generated.
-    /// @param credentialPublicKey The public key of the credential schema issuer, already validated by the caller.
-    /// @param proof The Groth16 proof to be verified.
-    /// @return A boolean indicating whether the proof is valid.
-    function verifyNullifierProof(
-        uint256 nullifier,
-        uint256 nullifierAction,
-        uint128 rpId,
-        uint256 identityCommitment,
-        uint256 nonce,
-        uint256 signalHash,
-        uint256 authenticatorMerkleRoot,
-        uint256 proofTimestamp,
-        CredentialSchemaIssuerRegistry.Pubkey calldata credentialPublicKey,
-        Types.Groth16Proof calldata proof
-    ) external view virtual onlyProxy isReady returns (bool) {
-        // do not allow proofs from the future
-        if (proofTimestamp > block.timestamp) {
-            revert OutdatedNullifier();
-        }
-        // do not allow proofs older than 5 hours
-        if (proofTimestamp + 5 hours < block.timestamp) {
-            revert OutdatedNullifier();
-        }
-
-        // check if we have a valid rp id and get the rp material if so
-        Types.BabyJubJubElement memory rpKey = getRpNullifierKey(rpId);
-
-        // for this specific proof, we have 13 public signals
-        // [0]: identity commitment
-        // [1]: nullifier
-        // [2]: credential public key x coordinate
-        // [3]: credential public key y coordinate
-        // [4]: current time stamp
-        // [5]: Authenticator merkle tree root hash
-        // [6]: Current depth of the Authenticator merkle tree
-        // [7]: RP ID
-        // [8]: Nullifier action
-        // [9]: RP OPRF public key x coordinate
-        // [10]: RP OPRF public key y coordinate
-        // [11]: signal hash
-        // [12]: nonce for the RP signature
-        // use calldata since we set it once
-        uint256[13] memory pubSignals;
-
-        pubSignals[0] = identityCommitment;
-        pubSignals[1] = nullifier;
-        pubSignals[2] = credentialPublicKey.x;
-        pubSignals[3] = credentialPublicKey.y;
-        pubSignals[4] = proofTimestamp;
-        pubSignals[5] = authenticatorMerkleRoot;
-        pubSignals[6] = AUTHENTICATOR_MERKLE_TREE_DEPTH;
-        pubSignals[7] = uint256(rpId);
-        pubSignals[8] = nullifierAction;
-        pubSignals[9] = rpKey.x;
-        pubSignals[10] = rpKey.y;
-        pubSignals[11] = signalHash;
-        pubSignals[12] = nonce;
-
-        return nullifierVerifier.verifyProof(proof.pA, proof.pB, proof.pC, pubSignals);
     }
 
     // ==================================
