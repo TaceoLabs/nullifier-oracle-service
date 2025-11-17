@@ -235,7 +235,7 @@ contract RpRegistryTest is Test {
         vm.expectEmit(true, true, true, true);
         emit Types.KeyGenAdminRegistered(alice);
         rpRegistry.addKeyGenAdmin(alice);
-        
+
         // revoke taceo
         vm.expectEmit(true, true, true, true);
         emit Types.KeyGenAdminRevoke(taceoAdmin);

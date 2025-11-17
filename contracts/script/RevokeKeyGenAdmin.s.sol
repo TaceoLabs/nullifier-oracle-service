@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
@@ -13,7 +12,7 @@ contract RevokeKeyGenAdminScript is Script {
     }
 
     function run() public {
-        address admin  = vm.envAddress("ADMIN_ADDRESS_REVOKE");
+        address admin = vm.envAddress("ADMIN_ADDRESS_REVOKE");
         vm.startBroadcast();
         rpRegistry.revokeKeyGenAdmin(admin);
         vm.stopBroadcast();
