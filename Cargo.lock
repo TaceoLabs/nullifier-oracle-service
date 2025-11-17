@@ -2236,8 +2236,8 @@ dependencies = [
 
 [[package]]
 name = "circom-types"
-version = "0.9.0"
-source = "git+https://github.com/TaceoLabs/co-snarks.git#33609690dff2b6738f7bce5cd0482c4b8d3c68a3"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=ef8065310789871ca80fc274fdfc83604e618883#ef8065310789871ca80fc274fdfc83604e618883"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -2249,9 +2249,9 @@ dependencies = [
  "ark-std 0.5.0",
  "byteorder",
  "num-traits",
- "rayon",
  "serde",
  "serde_json",
+ "taceo-ark-serde-compat 0.2.0",
  "thiserror 2.0.17",
  "tracing",
 ]
@@ -4843,6 +4843,7 @@ name = "oprf-client"
 version = "0.1.0"
 dependencies = [
  "ark-ec",
+ "circom-types",
  "eyre",
  "futures",
  "groth16",
@@ -4853,7 +4854,6 @@ dependencies = [
  "oprf-zk",
  "rand 0.8.5",
  "reqwest",
- "serde_json",
  "taceo-ark-babyjubjub",
  "thiserror 2.0.17",
  "tokio",
@@ -4873,14 +4873,11 @@ dependencies = [
  "itertools 0.14.0",
  "num-bigint",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
  "serde",
  "subtle",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
- "taceo-eddsa-babyjubjub",
+ "taceo-ark-serde-compat 0.2.0",
  "taceo-poseidon2",
- "thiserror 2.0.17",
  "uuid",
  "zeroize",
 ]
@@ -4928,6 +4925,7 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
+ "circom-types",
  "circom-witness-rs",
  "clap",
  "eyre",
@@ -4953,7 +4951,6 @@ dependencies = [
  "serde",
  "serde_json",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
  "taceo-eddsa-babyjubjub",
  "taceo-poseidon2",
  "testcontainers-modules",
@@ -4975,16 +4972,11 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "async-trait",
- "aws-config",
- "aws-sdk-secretsmanager",
- "circom-types",
- "clap",
  "eyre",
  "futures",
  "groth16",
  "itertools 0.14.0",
  "k256",
- "nodes-telemetry",
  "oprf-client",
  "oprf-core",
  "oprf-service",
@@ -5013,13 +5005,13 @@ dependencies = [
 name = "oprf-types"
 version = "0.1.0"
 dependencies = [
+ "circom-types",
  "eyre",
  "k256",
  "oprf-core",
- "oprf-zk",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
+ "taceo-ark-serde-compat 0.2.0",
  "uuid",
 ]
 
@@ -5028,17 +5020,16 @@ name = "oprf-world-types"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "ark-ec",
  "ark-ff 0.5.0",
+ "circom-types",
  "k256",
  "oprf-core",
  "oprf-zk",
  "ruint",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
+ "taceo-ark-serde-compat 0.2.0",
  "taceo-eddsa-babyjubjub",
- "uuid",
 ]
 
 [[package]]
@@ -5060,7 +5051,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
+ "taceo-ark-serde-compat 0.2.0",
  "thiserror 2.0.17",
  "tracing",
 ]
@@ -6974,6 +6965,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "taceo-ark-serde-compat"
+version = "0.2.0"
+source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=ef8065310789871ca80fc274fdfc83604e618883#ef8065310789871ca80fc274fdfc83604e618883"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "serde",
+ "taceo-ark-babyjubjub",
+]
+
+[[package]]
 name = "taceo-eddsa-babyjubjub"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6988,7 +6991,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat",
+ "taceo-ark-serde-compat 0.1.0",
  "taceo-poseidon2",
  "zeroize",
 ]

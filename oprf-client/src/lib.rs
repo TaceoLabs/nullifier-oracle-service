@@ -33,6 +33,8 @@
 //! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
 //! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
 
+use circom_types::ark_bn254::Bn254;
+use circom_types::groth16::Proof;
 use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, PartialDLogCommitmentsShamir};
 use oprf_core::oprf::{self, BlindedOprfRequest, BlindingFactor};
 
@@ -46,7 +48,6 @@ use oprf_world_types::api::v1::OprfRequestAuth;
 use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
 use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
 use oprf_world_types::{CredentialsSignature, MerkleMembership, TREE_DEPTH, UserKeyMaterial};
-use oprf_zk::groth16_serde::Groth16Proof;
 use oprf_zk::{Groth16Error, Groth16Material};
 use rand::{CryptoRng, Rng};
 use reqwest::StatusCode;
@@ -252,7 +253,7 @@ impl SignedOprfQuery {
 /// # Returns
 ///
 /// On success, returns a tuple:
-/// 1. [`Groth16Proof`] – the generated nullifier proof,
+/// 1. `Groth16Proof` – the generated nullifier proof,
 /// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
 /// 3. `ark_babyjubjub::Fq` – the computed nullifier.
 /// 4. `ark_babyjubjub::Fq` – the computed identity commitment.
@@ -271,7 +272,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(
-    Groth16Proof,
+    Proof<Bn254>,
     Vec<ark_babyjubjub::Fq>,
     ark_babyjubjub::Fq,
     ark_babyjubjub::Fq,
@@ -514,7 +515,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     id_commitment_r: ark_babyjubjub::Fq,
     rng: &mut R,
 ) -> Result<(
-    Groth16Proof,
+    Proof<Bn254>,
     Vec<ark_babyjubjub::Fq>,
     ark_babyjubjub::Fq,
     ark_babyjubjub::Fq,

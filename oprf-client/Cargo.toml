@@ -1,18 +1,24 @@
 [package]
 name = "oprf-client"
 version = "0.1.0"
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
+readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 publish.workspace = true
-readme.workspace = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true }
+circom-types = { workspace = true, features = [
+  "bn254",
+  "groth16",
+  "proof",
+  "verification-key"
+] }
 eyre.workspace = true
 futures.workspace = true
 groth16 = { workspace = true }
@@ -23,13 +29,19 @@ oprf-world-types = { workspace = true }
 oprf-zk = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true }
-serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, optional = true, features = ["net", "rt-multi-thread", "signal", "sync", "time", "tokio-macros"] }
+tokio = { workspace = true, features = [
+  "net",
+  "rt-multi-thread",
+  "signal",
+  "sync",
+  "time",
+  "tokio-macros"
+], optional = true }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 
 [features]
 default = ["tokio"]
-tokio = ["dep:tokio"]
 embed-zkeys = []
+tokio = ["dep:tokio"]

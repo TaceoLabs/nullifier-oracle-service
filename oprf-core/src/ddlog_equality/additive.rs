@@ -28,6 +28,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::Zero;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
+use taceo_ark_serde_compat::babyjubjub;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 
@@ -39,10 +40,8 @@ use zeroize::ZeroizeOnDrop;
 #[derive(Clone, Serialize, Deserialize, ZeroizeOnDrop)]
 #[serde(transparent)]
 pub struct DLogShareAdditive(
-    #[serde(
-        serialize_with = "ark_serde_compat::serialize_babyjubjub_fr",
-        deserialize_with = "ark_serde_compat::deserialize_babyjubjub_fr"
-    )]
+    #[serde(serialize_with = "babyjubjub::serialize_fr")]
+    #[serde(deserialize_with = "babyjubjub::deserialize_fr")]
     ScalarField,
 );
 
@@ -199,7 +198,7 @@ impl DLogSessionAdditive {
         DLogCommitmentsAdditive(challenge_input): DLogCommitmentsAdditive,
     ) -> DLogProofShareAdditive {
         // Recombine the two-nonce randomness shares into the full randomness used in the challenge.
-        let (r1, r2, b) = super::combine_twononce_randomness(
+        let (r1, r2, b) = super::combine_two_nonce_randomness(
             session_id,
             a,
             challenge_input.c,

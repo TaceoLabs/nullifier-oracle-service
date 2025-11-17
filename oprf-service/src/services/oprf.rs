@@ -20,12 +20,12 @@ use std::{
 
 use ark_bn254::Bn254;
 use ark_groth16::Groth16;
+use circom_types::groth16::Proof;
 use eyre::Context;
 use oprf_core::ddlog_equality::shamir::{DLogProofShareShamir, PartialDLogCommitmentsShamir};
 use oprf_types::api::v1::{ChallengeRequest, OprfRequest};
 use oprf_types::crypto::PartyId;
 use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
-use oprf_zk::groth16_serde::Groth16Proof;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -226,7 +226,7 @@ impl OprfService {
     #[instrument(level = "debug", skip_all)]
     fn verify_user_proof(
         &self,
-        proof: Groth16Proof,
+        proof: Proof<Bn254>,
         public: &[ark_babyjubjub::Fq],
     ) -> Result<(), OprfServiceError> {
         tracing::debug!("verifying user proof...");
