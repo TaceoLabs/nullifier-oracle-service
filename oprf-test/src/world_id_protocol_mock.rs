@@ -11,7 +11,7 @@ use alloy::{
     uint,
 };
 use ark_ff::AdditiveGroup as _;
-use ark_serialize::{CanonicalDeserialize as _, CanonicalSerialize as _};
+use ark_serialize::CanonicalSerialize as _;
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey};
 use oprf_world_types::{
     MerkleMembership, MerkleRoot, TREE_DEPTH, UserKeyMaterial, UserPublicKeyBatch,
@@ -157,11 +157,6 @@ pub async fn fetch_inclusion_proof(
     let response = reqwest::get(url).await?;
     let response = response.json::<AccountInclusionProof<TREE_DEPTH>>().await?;
 
-    let mut pubkey_batch = [ark_babyjubjub::EdwardsAffine::default(); 7];
-
-    for (i, pk) in response.authenticator_pubkeys.into_iter().enumerate() {
-        pubkey_batch[i] = ark_babyjubjub::EdwardsAffine::deserialize_compressed(pk.as_le_slice())?;
-    }
     let merkle_membership = MerkleMembership {
         root: MerkleRoot::from(*response.proof.root),
         mt_index: response.proof.leaf_index,
