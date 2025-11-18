@@ -870,17 +870,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-babyjubjub"
-version = "0.5.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
-]
-
-[[package]]
 name = "ark-bn254"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1134,20 +1123,6 @@ dependencies = [
  "ark-std 0.5.0",
  "tracing",
  "tracing-subscriber 0.2.25",
-]
-
-[[package]]
-name = "ark-serde-compat"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
-dependencies = [
- "ark-babyjubjub",
- "ark-bn254",
- "ark-ec",
- "ark-groth16",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2942,25 +2917,6 @@ dependencies = [
  "serde",
  "sha2",
  "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "eddsa-babyjubjub"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
-dependencies = [
- "ark-babyjubjub",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-serde-compat",
- "ark-serialize 0.5.0",
- "blake3",
- "eyre",
- "num-bigint",
- "poseidon2",
- "rand 0.8.5",
- "serde",
  "zeroize",
 ]
 
@@ -5427,18 +5383,6 @@ name = "portable-atomic"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
-
-[[package]]
-name = "poseidon2"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nullifier-oracle-service?rev=698f03f#698f03f92c5879f3328ce854a2e1deeff2069664"
-dependencies = [
- "ark-bn254",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
- "num-bigint",
- "num-traits",
-]
 
 [[package]]
 name = "postcard"
@@ -8375,21 +8319,22 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 [[package]]
 name = "world-id-primitives"
 version = "0.1.0"
-source = "git+https://github.com/worldcoin/world-id-protocol?rev=a1bd07e#a1bd07ec6dc111e8ccf73140a2672f6e70c8a4e0"
+source = "git+https://github.com/worldcoin/world-id-protocol?rev=9cdaf09#9cdaf09a70a08613ebf2a453986852e3c0359838"
 dependencies = [
  "alloy-primitives",
- "ark-babyjubjub",
  "ark-bn254",
  "ark-ff 0.5.0",
  "ark-groth16",
- "ark-serde-compat",
  "ark-serialize 0.5.0",
- "eddsa-babyjubjub",
+ "arrayvec",
  "hex",
  "k256",
  "ruint",
  "serde",
  "serde_json",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat 0.1.0",
+ "taceo-eddsa-babyjubjub",
  "thiserror 1.0.69",
 ]
 
