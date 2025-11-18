@@ -16,7 +16,7 @@ edition = "2024"
 rust-version = "1.91"
 readme = "./README.md"
 homepage = "https://www.taceo.io"
-repository = "https:://github.com/TaceoLabs/nullifier-oracle-service"
+repository = "https://github.com/TaceoLabs/nullifier-oracle-service"
 license = "MIT OR Apache-2.0"
 publish = false
 
