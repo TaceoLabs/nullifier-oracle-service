@@ -152,6 +152,114 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         }
     }
 
+       /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
+    /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
+    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
+    function initialize(address _keygenAdmin, address _keyGenVerifierAddress, address _accumulatorAddress)
+        public
+        virtual
+        initializer
+    {
+        __Ownable_init(msg.sender);
+        __Ownable2Step_init();
+        keygenAdmin = _keygenAdmin;
+        keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
+        accumulator = IBabyJubJub(_accumulatorAddress);
+        // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
+        threshold = 2;
+        numPeers = 3;
+        isContractReady = false;
+    }
+
+    // ==================================
+    //         ADMIN FUNCTIONS
+    // ==================================
+
+    /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
+    /// @param _peerAddresses An array of addresses of the OPRF peers.
+    function registerOprfPeers(address[] calldata _peerAddresses) external virtual onlyProxy onlyInitialized onlyOwner {
+        if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
+        // delete the old participants
+        for (uint256 i = 0; i < peerAddresses.length; ++i) {
+            delete addressToPeer[peerAddresses[i]];
+        }
+        // set the new ones
+        for (uint256 i = 0; i < _peerAddresses.length; i++) {
+            addressToPeer[_peerAddresses[i]] = Types.OprfPeer({isParticipant: true, partyId: i});
+        }
+        peerAddresses = _peerAddresses;
+        isContractReady = true;
+    }
+
+    /// @notice Initializes the key generation process for a new RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @param ecdsaPubKey The compressed ECDSA public key for the RP.
+    function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
+        external
+        virtual
+        onlyProxy
+        isReady
+        onlyAdmin
+    {
+        // Check that this rpId was not used already
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        if (st.exists) revert AlreadySubmitted();
+        // We store the ecdsa key in compressed form - therefore we need to enforce
+        // that the parity bit is set to 2 or 3 (as produced by to_sec1_bytes in rust)
+        if (ecdsaPubKey.yParity != 2 && ecdsaPubKey.yParity != 3) revert BadContribution();
+
+        st.ecdsaPubKey = ecdsaPubKey;
+        st.round1 = new Types.Round1Contribution[](numPeers);
+        st.round2 = new Types.SecretGenCiphertext[][](numPeers);
+        for (uint256 i = 0; i < numPeers; i++) {
+            st.round2[i] = new Types.SecretGenCiphertext[](numPeers);
+        }
+        st.round2Done = new bool[](numPeers);
+        st.round3Done = new bool[](numPeers);
+        st.exists = true;
+
+        // Emit Round1 event for everyone
+        emit Types.SecretGenRound1(rpId, threshold);
+    }
+
+    /// @notice Deletes the RP and its associated material. Works if during key-gen or afterwards.
+    /// @param rpId The unique identifier for the RP.
+    function deleteRpMaterial(uint128 rpId) external virtual onlyProxy isReady onlyAdmin {
+        // try to delete the runningKeyGen data
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        bool needToEmitEvent = false;
+        if (st.exists) {
+            // delete all the material and set to deleted
+            delete st.ecdsaPubKey;
+            delete st.round1;
+            delete st.round2;
+            delete st.keyAggregate;
+            delete st.round2Done;
+            delete st.round3Done;
+            delete st.round2EventEmitted;
+            delete st.round3EventEmitted;
+            delete st.finalizeEventEmitted;
+            // mark the rp as deleted
+            // we need this to prevent race conditions during the key-gen
+            st.deleted = true;
+            needToEmitEvent = true;
+        }
+
+        Types.RpMaterial storage material = rpRegistry[rpId];
+        if (!_isEmpty(material.nullifierKey)) {
+            // delete the created key and the ecdsa key
+            delete material.ecdsaKey;
+            delete material.nullifierKey;
+            needToEmitEvent = true;
+        }
+
+        if (needToEmitEvent) {
+            emit Types.KeyDeletion(rpId);
+        }
+    }
+
+
     // =============================================
     //           ERC-4337 Implementation
     // =============================================
@@ -467,6 +575,90 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     //           Helper Functions
     // =============================================
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID.
+    /// @return The party ID of the caller if they are a registered participant.
+    function checkIsParticipantAndReturnPartyId() external view virtual isReady onlyProxy returns (uint256) {
+        return _internParticipantCheck();
+    }
+
+    function _internParticipantCheck() internal view virtual returns (uint256) {
+        Types.OprfPeer memory peer = addressToPeer[msg.sender];
+        if (!peer.isParticipant) revert NotAParticipant();
+        return peer.partyId;
+    }
+
+    /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided rp id.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The ephemeral public keys generated in round 1
+    function checkIsParticipantAndReturnEphemeralPublicKeys(uint128 rpId)
+        external
+        view
+        virtual
+        isReady
+        onlyProxy
+        returns (Types.BabyJubJubElement[] memory)
+    {
+        // check if a participant
+        Types.OprfPeer memory peer = addressToPeer[msg.sender];
+        if (!peer.isParticipant) revert NotAParticipant();
+        // check if there exists this key-gen
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
+        if (st.deleted) revert DeletedId(rpId);
+        return _loadPeerPublicKeys(st);
+    }
+
+
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return An array of Round 2 ciphertexts belonging to the caller.
+    function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
+        external
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.SecretGenCiphertext[] memory)
+    {
+        // check if a participant
+        Types.OprfPeer memory peer = addressToPeer[msg.sender];
+        if (!peer.isParticipant) revert NotAParticipant();
+        // check if there exists this a key-gen
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
+        if (st.deleted) revert DeletedId(rpId);
+        // check that round2 ciphers are finished
+        if (!allRound2Submitted(st)) revert NotReady();
+        return st.round2[peer.partyId];
+    }
+
+    /// @notice Retrieves the nullifier public key for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The BabyJubJub element representing the nullifier public key for the specified RP.
+    function getRpNullifierKey(uint128 rpId)
+        public
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.BabyJubJubElement memory)
+    {
+        Types.RpMaterial storage material = rpRegistry[rpId];
+        if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
+        return rpRegistry[rpId].nullifierKey;
+    }
+
+    /// @notice Retrieves the RP material (ECDSA public key and nullifier key) for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The RpMaterial struct containing the ECDSA public key and nullifier key for the specified RP.
+    function getRpMaterial(uint128 rpId) external view virtual onlyProxy isReady returns (Types.RpMaterial memory) {
+        Types.RpMaterial storage material = rpRegistry[rpId];
+        if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
+        return rpRegistry[rpId];
+    }
+
     /**
      * @notice Ensures call is from EntryPoint
      */
@@ -545,6 +737,91 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         return ecrecover(hash, v, r, s);
     }
 
+    function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
+        for (uint256 i = 0; i < numPeers; ++i) {
+            // we don't allow commitments to be zero, therefore if one
+            // commitments is still 0, not all contributed.
+            if (st.round1[i].commCoeffs == 0) return false;
+        }
+        return true;
+    }
+
+    function allRound2Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
+        for (uint256 i = 0; i < numPeers; ++i) {
+            if (!st.round2Done[i]) return false;
+        }
+        return true;
+    }
+
+    function allRound3Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
+        for (uint256 i = 0; i < numPeers; ++i) {
+            if (!st.round3Done[i]) return false;
+        }
+        return true;
+    }
+
+    function _loadPeerPublicKeys(Types.RpNullifierGenState storage st)
+        internal
+        view
+        returns (Types.BabyJubJubElement[] memory)
+    {
+        if (!st.round2EventEmitted) revert WrongRound();
+        Types.BabyJubJubElement[] memory pubKeyList = new Types.BabyJubJubElement[](numPeers);
+        for (uint256 i = 0; i < numPeers; ++i) {
+            pubKeyList[i] = st.round1[i].ephPubKey;
+        }
+        return pubKeyList;
+    }
+
+    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
+        if (st.round2EventEmitted) return;
+        if (!allRound1Submitted(st)) return;
+
+        st.round2EventEmitted = true;
+        emit Types.SecretGenRound2(rpId);
+    }
+
+    function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
+        if (st.round3EventEmitted) return;
+        if (!allRound2Submitted(st)) return;
+
+        st.round3EventEmitted = true;
+        emit Types.SecretGenRound3(rpId);
+    }
+
+    function _addToAggregate(
+        Types.RpNullifierGenState storage st,
+        uint256 newPointX,
+        uint256 newPointY
+    ) internal virtual {
+        if (accumulator.isOnCurve(newPointX, newPointY) == false) {
+            revert BadContribution();
+        }
+
+        if (_isEmpty(st.keyAggregate)) {
+            st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
+            return;
+        }
+
+        (uint256 resultX, uint256 resultY) = accumulator.add(
+            st.keyAggregate.x,
+            st.keyAggregate.y,
+            newPointX,
+            newPointY
+        );
+
+        st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
+    }
+
+    function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
+        return element.x == 0 && element.y == 1;
+    }
+
+    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
+        return element.x == 0 && element.y == 0;
+    }
+
+
     // =============================================
     //         Modifiers
     // =============================================
@@ -576,49 +853,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         if (_getInitializedVersion() == 0) {
             revert ImplementationNotInitialized();
         }
-    }
-
-    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
-        return element.x == 0 && element.y == 0;
-    }
-
-    function _addToAggregate(
-        Types.RpNullifierGenState storage st,
-        uint256 newPointX,
-        uint256 newPointY
-    ) internal virtual {
-        if (accumulator.isOnCurve(newPointX, newPointY) == false) {
-            revert BadContribution();
-        }
-
-        if (_isEmpty(st.keyAggregate)) {
-            st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
-            return;
-        }
-
-        (uint256 resultX, uint256 resultY) = accumulator.add(
-            st.keyAggregate.x,
-            st.keyAggregate.y,
-            newPointX,
-            newPointY
-        );
-
-        st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
-    }
-
-    function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
-        if (st.round2EventEmitted) return;
-        if (!allRound1Submitted(st)) return;
-
-        st.round2EventEmitted = true;
-        emit Types.SecretGenRound2(rpId);
-    }
-
-    function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
-        for (uint256 i = 0; i < numPeers; ++i) {
-            if (st.round1[i].commCoeffs == 0) return false;
-        }
-        return true;
     }
 
     // =============================================
