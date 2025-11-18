@@ -1,25 +1,24 @@
 [workspace]
-members = [
-    "oprf-client",
-    "oprf-core",
-    "oprf-dev-client",
-    "oprf-service",
-    "oprf-test",
-    "oprf-types",
-    "oprf-world-types",
-    "oprf-zk",
-]
 resolver = "3"
+members = [
+  "oprf-client",
+  "oprf-core",
+  "oprf-dev-client",
+  "oprf-service",
+  "oprf-test",
+  "oprf-types",
+  "oprf-world-types"
+]
 
 [workspace.package]
+authors = ["TACEO GmbH <hello@taceo.io>"]
 edition = "2024"
 rust-version = "1.91"
-authors = ["TACEO GmbH <hello@taceo.io>"]
+readme = "./README.md"
 homepage = "https://www.taceo.io"
-repository = "https:://github.com/TaceoLabs/nullifier-oracle-service"
+repository = "https://github.com/TaceoLabs/nullifier-oracle-service"
 license = "MIT OR Apache-2.0"
 publish = false
-readme = "./README.md"
 
 [workspace.dependencies]
 alloy = { version = "1", default-features = false }
@@ -40,7 +39,7 @@ aws-sdk-secretsmanager = "1"
 axum = "0.8"
 axum-test = "18"
 blake3 = "1"
-circom-types = { git = "https://github.com/TaceoLabs/circom-helpers.git", version = "0.1", default-features=false, rev="ef8065310789871ca80fc274fdfc83604e618883" }
+circom-types = { git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "6e12729dc3a35425c152e474e8e9b48f73da75b5", version = "0.1", default-features = false }
 circom-witness-rs = { version = "0.2.1" }
 clap = "4"
 criterion = "0.7"
@@ -49,6 +48,9 @@ eyre = { version = "0.6" }
 futures = "0.3"
 git-version = "0.3"
 groth16 = { git = "https://github.com/TaceoLabs/groth16.git" }
+groth16-material = { git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "6e12729dc3a35425c152e474e8e9b48f73da75b5", default-features = false, features = [
+  "circom"
+] }
 hex = "0.4"
 http = "1"
 humantime = "2"
@@ -64,22 +66,21 @@ oprf-service = { path = "oprf-service" }
 oprf-test = { path = "oprf-test" }
 oprf-types = { path = "oprf-types" }
 oprf-world-types = { path = "oprf-world-types" }
-oprf-zk = { path = "oprf-zk" }
 parking_lot = "0.12"
 poseidon2 = { package = "taceo-poseidon2", version = "0.1" }
 rand = { version = "0.8" }
 rand_chacha = { version = "0.3" }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
-    "json",
+  "json",
+  "rustls-tls",
 ] }
 ruint = "1.17"
 rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }
 serde_json = { version = "1" }
-taceo-ark-serde-compat = { git = "https://github.com/TaceoLabs/circom-helpers.git", version = "0.2", default-features=false, rev="ef8065310789871ca80fc274fdfc83604e618883" }
+taceo-ark-serde-compat = { git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "6e12729dc3a35425c152e474e8e9b48f73da75b5", version = "0.2", default-features = false }
 thiserror = { version = "2" }
 tokio = { version = "1" }
 tokio-util = "0.7"
@@ -87,17 +88,17 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "a1bd07e"} # if this gets updated, also update indexer docker tags
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "a1bd07e" }  # if this gets updated, also update indexer docker tags
 zeroize = "1"
-
-[profile.profiling]
-inherits = "bench"
-debug = true
-lto = "thin"
 
 # This profile can be used for CI in pull requests.
 [profile.ci-dev]
 inherits = "dev"
 opt-level = 1
-incremental = false
 debug = true
+incremental = false
+
+[profile.profiling]
+inherits = "bench"
+debug = true
+lto = "thin"

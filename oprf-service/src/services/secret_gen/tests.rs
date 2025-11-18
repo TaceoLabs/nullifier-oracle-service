@@ -7,13 +7,17 @@
 use std::path::PathBuf;
 
 use ark_ec::{CurveGroup as _, PrimeGroup};
+use groth16_material::circom::{CircomGroth16Material, Validate};
 use itertools::Itertools;
+use oprf_client::CircomGroth16MaterialBuilder;
 use oprf_types::crypto::{PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertexts};
 use rand::Rng;
 
 use super::*;
 
-async fn dlog_secret_gen(key_gen_material: Groth16Material) -> eyre::Result<DLogSecretGenService> {
+async fn dlog_secret_gen(
+    key_gen_material: CircomGroth16Material,
+) -> eyre::Result<DLogSecretGenService> {
     let rp_material = RpMaterialStore::new(HashMap::new());
     let dlog_secret_gen = DLogSecretGenService::init(rp_material, key_gen_material);
     Ok(dlog_secret_gen)
@@ -67,16 +71,17 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin");
     let graph = std::fs::read(graph)?;
     let key_gen_zkey = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-        .join("../circom/main/key-gen/OPRFKeyGen.13.zkey");
+        .join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey");
     let key_gen_zkey = std::fs::read(key_gen_zkey)?;
-    let key_gen_material = Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?;
+    let key_gen_material = CircomGroth16MaterialBuilder::new()
+        .validate(Validate::No)
+        .bbf_inv()
+        .bbf_num_2_bits_helper()
+        .build_from_bytes(&key_gen_zkey, &graph)?;
 
-    let mut dlog_secret_gen0 =
-        dlog_secret_gen(Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?).await?;
-    let mut dlog_secret_gen1 =
-        dlog_secret_gen(Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?).await?;
-    let mut dlog_secret_gen2 =
-        dlog_secret_gen(Groth16Material::from_bytes(&key_gen_zkey, None, &graph)?).await?;
+    let mut dlog_secret_gen0 = dlog_secret_gen(key_gen_material.clone()).await?;
+    let mut dlog_secret_gen1 = dlog_secret_gen(key_gen_material.clone()).await?;
+    let mut dlog_secret_gen2 = dlog_secret_gen(key_gen_material.clone()).await?;
 
     let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, threshold);
     let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, threshold);

@@ -22,11 +22,11 @@ circom-types = { workspace = true, features = [
 eyre.workspace = true
 futures.workspace = true
 groth16 = { workspace = true }
+groth16-material = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
-oprf-zk = { workspace = true }
 rand.workspace = true
 reqwest = { workspace = true }
 thiserror.workspace = true
@@ -42,6 +42,6 @@ tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 
 [features]
-default = ["tokio"]
+default = ["embed-zkeys", "tokio"]
 embed-zkeys = []
 tokio = ["dep:tokio"]

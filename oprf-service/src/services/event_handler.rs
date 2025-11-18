@@ -17,13 +17,13 @@
 //! - On error, triggers cancellation for graceful exit.
 
 use eyre::Context as _;
+use groth16_material::circom::CircomGroth16Material;
 use oprf_types::chain::ChainEvent;
 use oprf_types::chain::ChainEventResult;
 use oprf_types::chain::SecretGenFinalizeEvent;
 use oprf_types::chain::SecretGenRound1Event;
 use oprf_types::chain::SecretGenRound2Event;
 use oprf_types::chain::SecretGenRound3Event;
-use oprf_zk::Groth16Material;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -56,7 +56,7 @@ impl ChainEventHandler {
         rp_material_store: RpMaterialStore,
         secret_manager: SecretManagerService,
         cancellation_token: CancellationToken,
-        key_gen_material: Groth16Material,
+        key_gen_material: CircomGroth16Material,
     ) -> ChainEventHandler {
         let dlog_secret_gen_service =
             DLogSecretGenService::init(rp_material_store, key_gen_material);

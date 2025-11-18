@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
     str::FromStr as _,
     time::{Duration, Instant, SystemTime},
 };
@@ -16,17 +15,13 @@ use clap::{Parser, Subcommand};
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
-use oprf_client::{NullifierArgs, OprfQuery, SignedOprfQuery, groth16::Groth16};
+use oprf_client::{CircomGroth16Material, NullifierArgs, OprfQuery, SignedOprfQuery};
 use oprf_service::rp_registry::Types;
 use oprf_test::{
     MOCK_RP_SECRET_KEY, RpRegistry, health_checks, rp_registry_scripts, world_id_protocol_mock,
 };
 use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
-use oprf_zk::{
-    Groth16Material, NULLIFIER_FINGERPRINT, NULLIFIER_GRAPH_BYTES, QUERY_FINGERPRINT,
-    QUERY_GRAPH_BYTES,
-};
 use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
@@ -228,8 +223,8 @@ async fn run_nullifier(
     rp_nullifier_key: RpNullifierKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
-    query_material: &Groth16Material,
-    nullifier_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
+    nullifier_material: &CircomGroth16Material,
 ) -> eyre::Result<()> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
@@ -240,7 +235,6 @@ async fn run_nullifier(
         key_material,
         &mut rng,
     )?;
-    let nullifier_vk = nullifier_material.pk.vk.clone();
 
     let (proof, public, _nullifier, _id_commitment) = oprf_client::nullifier(
         services,
@@ -251,8 +245,10 @@ async fn run_nullifier(
         &mut rng,
     )
     .await?;
+    nullifier_material
+        .verify_proof(&proof.into(), &public)
+        .expect("verifies");
 
-    Groth16::verify(&nullifier_vk, &proof.into(), &public).expect("verifies");
     Ok(())
 }
 
@@ -260,7 +256,7 @@ fn prepare_nullifier_stress_test_oprf_request(
     rp_id: RpId,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
-    query_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
 ) -> eyre::Result<(SignedOprfQuery, OprfRequest<OprfRequestAuth>)> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
@@ -324,14 +320,12 @@ async fn stress_test(
     rp_nullifier_key: RpNullifierKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
-    query_material: &Groth16Material,
-    nullifier_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
+    nullifier_material: &CircomGroth16Material,
 ) -> eyre::Result<()> {
     tracing::info!("preparing requests..");
     let mut oprf_queries = HashMap::with_capacity(cmd.nullifier_num);
     let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
-
-    let nullifier_vk = nullifier_material.pk.vk.clone();
 
     for idx in 0..cmd.nullifier_num {
         let (query, req) = prepare_nullifier_stress_test_oprf_request(
@@ -443,7 +437,7 @@ async fn stress_test(
                         ark_babyjubjub::Fq::rand(&mut rng),
                         &mut rng,
                     )?;
-                    Groth16::verify(&nullifier_vk, &proof.into(), &public)?;
+                    nullifier_material.verify_proof(&proof.into(), &public)?;
                 }
                 durations.push(duration);
             }
@@ -471,17 +465,8 @@ async fn main() -> eyre::Result<()> {
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let query_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/main/query/OPRFQuery.zkey"))?,
-        QUERY_FINGERPRINT.into(),
-        QUERY_GRAPH_BYTES,
-    )?;
-    let nullifier_material = Groth16Material::from_bytes(
-        &std::fs::read(dir.join("../circom/main/nullifier/OPRFNullifier.zkey"))?,
-        NULLIFIER_FINGERPRINT.into(),
-        NULLIFIER_GRAPH_BYTES,
-    )?;
+    let query_material = oprf_client::load_embedded_query_material();
+    let nullifier_material = oprf_client::load_embedded_nullifier_material();
 
     tracing::info!("health check for all peers...");
     health_checks::services_health_check(&config.services, Duration::from_secs(5))

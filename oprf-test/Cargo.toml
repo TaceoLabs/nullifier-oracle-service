@@ -28,7 +28,6 @@ oprf-core = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
-oprf-zk = { workspace = true }
 parking_lot = { workspace = true }
 poseidon2 = { workspace = true }
 rand.workspace = true

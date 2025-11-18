@@ -33,12 +33,16 @@
 //! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
 //! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
 
+use std::io::Read;
+use std::path::Path;
+
 use circom_types::ark_bn254::Bn254;
 use circom_types::groth16::Proof;
 use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, PartialDLogCommitmentsShamir};
 use oprf_core::oprf::{self, BlindedOprfRequest, BlindingFactor};
 
 use ark_ec::AffineRepr;
+use groth16_material::Groth16Error;
 use oprf_types::api::v1::{
     ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
 };
@@ -48,14 +52,40 @@ use oprf_world_types::api::v1::OprfRequestAuth;
 use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
 use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
 use oprf_world_types::{CredentialsSignature, MerkleMembership, TREE_DEPTH, UserKeyMaterial};
-use oprf_zk::{Groth16Error, Groth16Material};
 use rand::{CryptoRng, Rng};
 use reqwest::StatusCode;
 use uuid::Uuid;
 
 pub use groth16;
-
 pub mod nonblocking;
+
+const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
+const NULLIFIER_GRAPH_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifierGraph.bin");
+
+#[cfg(feature = "embed-zkeys")]
+const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.arks.zkey");
+#[cfg(feature = "embed-zkeys")]
+const NULLIFIER_ZKEY_BYTES: &[u8] =
+    include_bytes!("../../circom/main/nullifier/OPRFNullifier.arks.zkey");
+
+/// The SHA-256 fingerprint of the OPRFQuery ZKey.
+pub const QUERY_ZKEY_FINGERPRINT: &str =
+    "5796f71d0a2b70878a96eb0e0839e31c4f532e660258c3d0bd32047de00fbe02";
+/// The SHA-256 fingerprint of the OPRFNullifier ZKey.
+pub const NULLIFIER_ZKEY_FINGERPRINT: &str =
+    "892f3f46e80330d4f69df776e3ed74383dea127658516182751984ad6a7f4f59";
+
+/// The SHA-256 fingerprint of the OPRFQuery witness graph.
+pub const QUERY_GRAPH_FINGERPRINT: &str =
+    "ac4caabf7d35a3424f49b627d213a19f17c7572743370687befd3fa8f82610a3";
+/// The SHA-256 fingerprint of the OPRFNullifier witness graph.
+pub const NULLIFIER_GRAPH_FINGERPRINT: &str =
+    "e6d818a0d6a76e98efbe35fba4664fcea33afc0da663041571c8d59c7a5f0fa0";
+
+pub use groth16_material::circom::{
+    CircomGroth16Material, CircomGroth16MaterialBuilder, ZkeyError,
+};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -229,6 +259,78 @@ impl SignedOprfQuery {
     }
 }
 
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the embedded keys in the binary.
+#[cfg(feature = "embed-zkeys")]
+pub fn load_embedded_nullifier_material() -> CircomGroth16Material {
+    build_nullifier_builder()
+        .build_from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
+        .expect("works when loading embedded groth16-material")
+}
+
+/// Loads the [`CircomGroth16Material`] for the query proof from the embedded keys in the binary.
+#[cfg(feature = "embed-zkeys")]
+pub fn load_embedded_query_material() -> CircomGroth16Material {
+    build_query_builder()
+        .build_from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
+        .expect("works when loading embedded groth16-material")
+}
+
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided reader.
+pub fn load_nullifier_material_from_reader(
+    zkey: impl Read,
+    graph: impl Read,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_nullifier_builder().build_from_reader(zkey, graph)?)
+}
+
+/// Loads the [`CircomGroth16Material`] for the query proof from the provided reader.
+pub fn load_query_material_from_reader(
+    zkey: impl Read,
+    graph: impl Read,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_query_builder().build_from_reader(zkey, graph)?)
+}
+
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
+pub fn load_nullifier_material_from_paths(
+    zkey: impl AsRef<Path>,
+    graph: impl AsRef<Path>,
+) -> CircomGroth16Material {
+    build_nullifier_builder()
+        .build_from_paths(zkey, graph)
+        .expect("works when loading embedded groth16-material")
+}
+
+/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
+pub fn load_query_material_from_paths(
+    zkey: impl AsRef<Path>,
+    graph: impl AsRef<Path>,
+) -> eyre::Result<CircomGroth16Material> {
+    Ok(build_query_builder().build_from_paths(zkey, graph)?)
+}
+
+fn build_nullifier_builder() -> CircomGroth16MaterialBuilder {
+    CircomGroth16MaterialBuilder::new()
+        .fingerprint_zkey(NULLIFIER_ZKEY_FINGERPRINT.into())
+        .fingerprint_graph(NULLIFIER_GRAPH_FINGERPRINT.into())
+        .bbf_num_2_bits_helper()
+        .bbf_inv()
+        .bbf_legendre()
+        .bbf_sqrt_input()
+        .bbf_sqrt_unchecked()
+}
+
+fn build_query_builder() -> CircomGroth16MaterialBuilder {
+    CircomGroth16MaterialBuilder::new()
+        .fingerprint_zkey(QUERY_ZKEY_FINGERPRINT.into())
+        .fingerprint_graph(QUERY_GRAPH_FINGERPRINT.into())
+        .bbf_num_2_bits_helper()
+        .bbf_inv()
+        .bbf_legendre()
+        .bbf_sqrt_input()
+        .bbf_sqrt_unchecked()
+}
+
 /// Generates a nullifier proof for a given query.
 ///
 /// This is the main entry point for most users. It handles the full workflow:
@@ -267,8 +369,8 @@ impl SignedOprfQuery {
 pub async fn nullifier<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
-    query_material: &Groth16Material,
-    nullifier_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
+    nullifier_material: &CircomGroth16Material,
     args: NullifierArgs,
     rng: &mut R,
 ) -> Result<(
@@ -351,7 +453,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
 pub fn sign_oprf_query<R: Rng + CryptoRng>(
     credentials_signature: CredentialsSignature,
     merkle_membership: MerkleMembership,
-    query_material: &Groth16Material,
+    query_material: &CircomGroth16Material,
     query: OprfQuery,
     key_material: UserKeyMaterial,
     request_id: Uuid,
@@ -393,8 +495,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
     };
 
     tracing::debug!("generate query proof");
-    let witness = query_material.generate_witness(&query_input)?;
-    let (proof, _) = query_material.generate_proof(&witness, rng)?;
+    let (proof, _) = query_material.generate_proof(&query_input, rng)?;
 
     Ok(SignedOprfQuery {
         request_id,
@@ -408,7 +509,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
                 share_epoch: query.share_epoch,
             },
             auth: OprfRequestAuth {
-                proof,
+                proof: proof.into(),
                 action: query.action,
                 nonce: query.nonce,
                 merkle_root: merkle_membership.root,
@@ -508,7 +609,7 @@ pub fn compute_challenges(
 /// Returns [`Error::InvalidDLogProof`] if the combined DLogEquality proof
 /// fails verification, or any [`Groth16Error`] if proof generation fails.
 pub fn verify_challenges<R: Rng + CryptoRng>(
-    nullifier_material: &Groth16Material,
+    nullifier_material: &CircomGroth16Material,
     challenges: Challenge,
     responses: Vec<ChallengeResponse>,
     signal_hash: ark_babyjubjub::Fq,
@@ -556,12 +657,11 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     );
 
     tracing::debug!("generate nullifier proof");
-    let witness = nullifier_material.generate_witness(&nullifier_input)?;
-    let (proof, public) = nullifier_material.generate_proof(&witness, rng)?;
+    let (proof, public) = nullifier_material.generate_proof(&nullifier_input, rng)?;
 
     // 2 outputs, 0 is id_commitment, 1 is nullifier
     let id_commitment = public[0];
     let nullifier = public[1];
 
-    Ok((proof, public, nullifier, id_commitment))
+    Ok((proof.into(), public, nullifier, id_commitment))
 }
