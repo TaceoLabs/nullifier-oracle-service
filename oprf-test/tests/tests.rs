@@ -120,8 +120,8 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
     println!();
     println!("Loading zkeys and matrices...");
-    let query_material = oprf_client::load_embedded_query_key();
-    let nullifier_material = oprf_client::load_embedded_nullifier_key();
+    let query_material = oprf_client::load_embedded_query_material();
+    let nullifier_material = oprf_client::load_embedded_nullifier_material();
 
     println!("Generating a random query...");
     let action = ark_babyjubjub::Fq::rand(&mut rng);

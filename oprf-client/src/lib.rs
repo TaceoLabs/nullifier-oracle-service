@@ -261,7 +261,7 @@ impl SignedOprfQuery {
 
 /// Loads the [`CircomGroth16Material`] for the nullifier proof from the embedded keys in the binary.
 #[cfg(feature = "embed-zkeys")]
-pub fn load_embedded_nullifier_key() -> CircomGroth16Material {
+pub fn load_embedded_nullifier_material() -> CircomGroth16Material {
     build_nullifier_builder()
         .build_from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
         .expect("works when loading embedded groth16-material")
@@ -269,14 +269,14 @@ pub fn load_embedded_nullifier_key() -> CircomGroth16Material {
 
 /// Loads the [`CircomGroth16Material`] for the query proof from the embedded keys in the binary.
 #[cfg(feature = "embed-zkeys")]
-pub fn load_embedded_query_key() -> CircomGroth16Material {
+pub fn load_embedded_query_material() -> CircomGroth16Material {
     build_query_builder()
         .build_from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
         .expect("works when loading embedded groth16-material")
 }
 
 /// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided reader.
-pub fn load_nullifier_key_from_reader(
+pub fn load_nullifier_material_from_reader(
     zkey: impl Read,
     graph: impl Read,
 ) -> eyre::Result<CircomGroth16Material> {
@@ -284,7 +284,7 @@ pub fn load_nullifier_key_from_reader(
 }
 
 /// Loads the [`CircomGroth16Material`] for the query proof from the provided reader.
-pub fn load_query_key_from_reader(
+pub fn load_query_material_from_reader(
     zkey: impl Read,
     graph: impl Read,
 ) -> eyre::Result<CircomGroth16Material> {
@@ -292,7 +292,7 @@ pub fn load_query_key_from_reader(
 }
 
 /// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
-pub fn load_nullifier_key_from_paths(
+pub fn load_nullifier_material_from_paths(
     zkey: impl AsRef<Path>,
     graph: impl AsRef<Path>,
 ) -> CircomGroth16Material {
@@ -302,7 +302,7 @@ pub fn load_nullifier_key_from_paths(
 }
 
 /// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
-pub fn load_query_key_from_paths(
+pub fn load_query_material_from_paths(
     zkey: impl AsRef<Path>,
     graph: impl AsRef<Path>,
 ) -> eyre::Result<CircomGroth16Material> {

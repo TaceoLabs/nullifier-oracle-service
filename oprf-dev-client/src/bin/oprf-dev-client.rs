@@ -465,8 +465,8 @@ async fn main() -> eyre::Result<()> {
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 
-    let query_material = oprf_client::load_embedded_query_key();
-    let nullifier_material = oprf_client::load_embedded_nullifier_key();
+    let query_material = oprf_client::load_embedded_query_material();
+    let nullifier_material = oprf_client::load_embedded_nullifier_material();
 
     tracing::info!("health check for all peers...");
     health_checks::services_health_check(&config.services, Duration::from_secs(5))

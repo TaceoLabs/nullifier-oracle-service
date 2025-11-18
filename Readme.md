@@ -5,20 +5,16 @@
 
 This is a monorepo containing:
 
-* `ark-babyjubjub`: An implementation of the BabyJubJub elliptic curve using the arkworks ecosystem. It is compatible with EIP-2494, in contrast to `ark-ed-on-bn254`.
-* `ark-serde-compat`: A compatibility layer between `ark-serialize` and `serde`.
 * `circom`: A collection of Circom circuits and test vectors for them.
 * `contracts`: An implementation of the required smart contracts.
 * `docs`: A typst document serving as a writeup of the overall scheme.
-* `eddsa-babyjubjub`: An implementation of EdDSA on the BabyJubJub curve.
 * `noir`: A collection of Noir circuits.
 * `oprf-client`: A crate implementing a client for the REST API service.
 * `oprf-core`: A crate implementing a verifiable OPRF based on the TwoHashDH OPRF construction + a threshold variant of it.
 * `oprf-dev-client`: A crate implementing a dev client binary.
 * `oprf-service`: A crate implementing a REST API service that answers OPRF requests.
 * `oprf-test`: A crate implementing integration tests and required mocks.
-* `oprf-types`: A crate implementing types that are shared between client and service.
-* `poseidon2`: A crate implementing the Poseidon2 hash function for various parameter sets, compatible with the Circom and Noir implementations thereof.
+* `oprf-types`: A crate implementing types that are shared between client,  service, and the blockchain.
 
 ## Dev Dependencies
 

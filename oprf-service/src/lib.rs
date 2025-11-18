@@ -399,7 +399,7 @@ mod tests {
             msg.extend(current_time_stamp.to_le_bytes());
             let signature = rp_signing_key.sign(&msg);
 
-            let query_material = oprf_client::load_embedded_query_key();
+            let query_material = oprf_client::load_embedded_query_material();
 
             let merkle_membership = MerkleMembership {
                 root: merkle_root,
