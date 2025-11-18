@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:0.1.72-rust-1.90.0-bookworm AS chef
+FROM lukemathwalker/cargo-chef:0.1.72-rust-1.91.0-bookworm AS chef
 WORKDIR /app
 
 
@@ -18,7 +18,7 @@ COPY . .
 RUN cargo build --release --bin oprf-service
 
 # Build healthcheck
-FROM rust:1.90-bookworm AS healthcheck-builder
+FROM rust:1.91-bookworm AS healthcheck-builder
 RUN cargo install simple-web-healthcheck
 
 
