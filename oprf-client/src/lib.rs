@@ -71,17 +71,17 @@ const NULLIFIER_ZKEY_BYTES: &[u8] =
 
 /// The SHA-256 fingerprint of the OPRFQuery ZKey.
 pub const QUERY_ZKEY_FINGERPRINT: &str =
-    "5796f71d0a2b70878a96eb0e0839e31c4f532e660258c3d0bd32047de00fbe02";
+    "50386ea28e3c8cd01fe59ab68e7ecd0a6b8b07d3b8ad6460c04a430ef5c2121f";
 /// The SHA-256 fingerprint of the OPRFNullifier ZKey.
 pub const NULLIFIER_ZKEY_FINGERPRINT: &str =
-    "892f3f46e80330d4f69df776e3ed74383dea127658516182751984ad6a7f4f59";
+    "bb1301f25cbe8d624a227c5f0875fa5dec9501c09357d82b49f59ee73505e94d";
 
 /// The SHA-256 fingerprint of the OPRFQuery witness graph.
 pub const QUERY_GRAPH_FINGERPRINT: &str =
-    "ac4caabf7d35a3424f49b627d213a19f17c7572743370687befd3fa8f82610a3";
+    "1016fc75f79a872a33ec0537c074857c6750c21f7e2e4e2a34acbbad5d0997b3";
 /// The SHA-256 fingerprint of the OPRFNullifier witness graph.
 pub const NULLIFIER_GRAPH_FINGERPRINT: &str =
-    "e6d818a0d6a76e98efbe35fba4664fcea33afc0da663041571c8d59c7a5f0fa0";
+    "87756ce49e17f89e28b963d53e1fd55e17f9a2b413b7630632241a9a03af663a";
 
 pub use groth16_material::circom::{
     CircomGroth16Material, CircomGroth16MaterialBuilder, ZkeyError,
