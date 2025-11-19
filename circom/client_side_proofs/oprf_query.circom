@@ -73,7 +73,7 @@ template CheckCredentialSignature() {
 
     // Calculate the message hash
     component hash = Poseidon2(8);
-    hash.in[0] <== 33037561950257263916064606852876458089761913554974635334680016433; // Domain separator in capacity element b"POSEIDON2+EDDSA-BJJ+DLBE-v1"
+    hash.in[0] <== 1790969822004668215611014194230797064349043274; // Domain separator in capacity element b"POSEIDON2+EDDSA-BJJ"
     hash.in[1] <== credential_type_id;
     hash.in[2] <== user_id;
     hash.in[3] <== genesis_issued_at;
