@@ -145,7 +145,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         if (keygenAdmins[_keygenAdmin]) {
             if (amountKeygenAdmins == 1) {
                 // we don't allow the last admin to remove themselves
-                revert OnlyAdmin();
+                revert LastAdmin();
             }
             delete keygenAdmins[_keygenAdmin];
             amountKeygenAdmins -= 1;

@@ -257,7 +257,7 @@ contract RpRegistryTest is Test {
     function testRevokeLastAdmin() public {
         vm.startPrank(taceoAdmin);
         // register another admin
-        vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyAdmin.selector));
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.LastAdmin.selector));
         rpRegistry.revokeKeyGenAdmin(taceoAdmin);
         assertEq(1, rpRegistry.amountKeygenAdmins());
         vm.stopPrank();
