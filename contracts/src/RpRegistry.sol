@@ -40,6 +40,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
     // Admins to start KeyGens
     mapping(address => bool) public keygenAdmins;
+    uint256 public amountKeygenAdmins;
+
     IGroth16VerifierKeyGen13 public keyGenVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
@@ -91,18 +93,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // =============================================
     //                Errors
     // =============================================
+    error AlreadySubmitted();
+    error BadContribution();
+    error DeletedId(uint128 id);
     error ImplementationNotInitialized();
-    error OnlyAdmin();
+    error InvalidProof();
+    error LastAdmin();
     error NotAParticipant();
     error NotReady();
-    error WrongRound();
-    error AlreadySubmitted();
-    error UnexpectedAmountPeers(uint256 expectedParties);
-    error BadContribution();
-    error InvalidProof();
+    error OnlyAdmin();
     error OutdatedNullifier();
+    error UnexpectedAmountPeers(uint256 expectedParties);
     error UnknownId(uint128 id);
-    error DeletedId(uint128 id);
+    error WrongRound();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -121,6 +124,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
         keygenAdmins[_keygenAdmin] = true;
+        amountKeygenAdmins += 1;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
         // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
@@ -134,17 +138,30 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     // ==================================
 
     /// @notice Revokes the access of an admin (in case of key-loss or similar). In the long run we still want that this function is only callable with a threshold authentication, but for now we stick with admins being able to call this (this of course means one admin can block all others).
+    //
     /// @param _keygenAdmin The admin address we want to revoke
     function revokeKeyGenAdmin(address _keygenAdmin) external virtual onlyProxy onlyInitialized onlyAdmin {
-        delete keygenAdmins[_keygenAdmin];
-        emit Types.KeyGenAdminRevoke(_keygenAdmin);
+        // if the _keygenAdmin is an admin, we remove them
+        if (keygenAdmins[_keygenAdmin]) {
+            if (amountKeygenAdmins == 1) {
+                // we don't allow the last admin to remove themselves
+                revert OnlyAdmin();
+            }
+            delete keygenAdmins[_keygenAdmin];
+            amountKeygenAdmins -= 1;
+            emit Types.KeyGenAdminRevoked(_keygenAdmin);
+        }
     }
 
     /// @notice Adds another admin address that is allowed to init/stop key-generations. In the long run we still want that this function is only callable with a threshold authentication, but for now we stick with admins being able to call this.
     /// @param _keygenAdmin The admin address we want to revoke
     function addKeyGenAdmin(address _keygenAdmin) external virtual onlyProxy onlyInitialized onlyAdmin {
-        keygenAdmins[_keygenAdmin] = true;
-        emit Types.KeyGenAdminRegistered(_keygenAdmin);
+        // if the _keygenAdmin is not yet an admin, we add them
+        if (!keygenAdmins[_keygenAdmin]) {
+            keygenAdmins[_keygenAdmin] = true;
+            amountKeygenAdmins += 1;
+            emit Types.KeyGenAdminRegistered(_keygenAdmin);
+        }
     }
 
     /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.

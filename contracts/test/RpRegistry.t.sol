@@ -238,7 +238,7 @@ contract RpRegistryTest is Test {
 
         // revoke taceo
         vm.expectEmit(true, true, true, true);
-        emit Types.KeyGenAdminRevoke(taceoAdmin);
+        emit Types.KeyGenAdminRevoked(taceoAdmin);
         rpRegistry.revokeKeyGenAdmin(taceoAdmin);
 
         // try start key-gen as taceo
@@ -250,6 +250,30 @@ contract RpRegistryTest is Test {
         vm.prank(alice);
         rpRegistry.initKeyGen(0, ecdsaPubKey);
         vm.stopPrank();
+    }
+
+    function testRevokeLastAdmin() public {
+        vm.startPrank(taceoAdmin);
+        // register another admin
+        vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyAdmin.selector));
+        rpRegistry.revokeKeyGenAdmin(taceoAdmin);
+        vm.stopPrank();
+    }
+
+    function testRevokeAdminThatIsNoAdmin() public {
+        vm.startPrank(taceoAdmin);
+        vm.recordLogs();
+        rpRegistry.revokeKeyGenAdmin(alice);
+        vm.stopPrank();
+        assertEq(0, vm.getRecordedLogs().length);
+    }
+
+    function testRegisterAdminTwice() public {
+        vm.startPrank(taceoAdmin);
+        vm.recordLogs();
+        rpRegistry.addKeyGenAdmin(taceoAdmin);
+        vm.stopPrank();
+        assertEq(0, vm.getRecordedLogs().length);
     }
 
     function testInitKeyGenResubmit() public {
