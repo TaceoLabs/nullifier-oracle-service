@@ -235,11 +235,13 @@ contract RpRegistryTest is Test {
         vm.expectEmit(true, true, true, true);
         emit Types.KeyGenAdminRegistered(alice);
         rpRegistry.addKeyGenAdmin(alice);
+        assertEq(2, rpRegistry.amountKeygenAdmins());
 
         // revoke taceo
         vm.expectEmit(true, true, true, true);
         emit Types.KeyGenAdminRevoked(taceoAdmin);
         rpRegistry.revokeKeyGenAdmin(taceoAdmin);
+        assertEq(1, rpRegistry.amountKeygenAdmins());
 
         // try start key-gen as taceo
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyAdmin.selector));
@@ -257,6 +259,7 @@ contract RpRegistryTest is Test {
         // register another admin
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.OnlyAdmin.selector));
         rpRegistry.revokeKeyGenAdmin(taceoAdmin);
+        assertEq(1, rpRegistry.amountKeygenAdmins());
         vm.stopPrank();
     }
 
@@ -264,6 +267,7 @@ contract RpRegistryTest is Test {
         vm.startPrank(taceoAdmin);
         vm.recordLogs();
         rpRegistry.revokeKeyGenAdmin(alice);
+        assertEq(1, rpRegistry.amountKeygenAdmins());
         vm.stopPrank();
         assertEq(0, vm.getRecordedLogs().length);
     }
@@ -272,6 +276,7 @@ contract RpRegistryTest is Test {
         vm.startPrank(taceoAdmin);
         vm.recordLogs();
         rpRegistry.addKeyGenAdmin(taceoAdmin);
+        assertEq(1, rpRegistry.amountKeygenAdmins());
         vm.stopPrank();
         assertEq(0, vm.getRecordedLogs().length);
     }
