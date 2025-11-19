@@ -71,4 +71,7 @@ library Types {
     event SecretGenFinalize(uint128 indexed rpId);
     // event to delete created key
     event KeyDeletion(uint128 indexed rpId);
+    // admin events
+    event KeyGenAdminRevoked(address indexed admin);
+    event KeyGenAdminRegistered(address indexed admin);
 }

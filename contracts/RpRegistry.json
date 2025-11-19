@@ -39,6 +39,19 @@
   },
   {
     "type": "function",
+    "name": "addKeyGenAdmin",
+    "inputs": [
+      {
+        "name": "_keygenAdmin",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "addRound1Contribution",
     "inputs": [
       {
@@ -184,6 +197,19 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "amountKeygenAdmins",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -457,13 +483,19 @@
   },
   {
     "type": "function",
-    "name": "keygenAdmin",
-    "inputs": [],
-    "outputs": [
+    "name": "keygenAdmins",
+    "inputs": [
       {
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -561,6 +593,19 @@
   },
   {
     "type": "function",
+    "name": "revokeKeyGenAdmin",
+    "inputs": [
+      {
+        "name": "_keygenAdmin",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "threshold",
     "inputs": [],
     "outputs": [
@@ -625,6 +670,32 @@
         "type": "uint128",
         "indexed": true,
         "internalType": "uint128"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeyGenAdminRegistered",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeyGenAdminRevoked",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -804,6 +875,11 @@
   {
     "type": "error",
     "name": "InvalidProof",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LastAdmin",
     "inputs": []
   },
   {
