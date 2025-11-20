@@ -12,7 +12,7 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 /**
  * @title OprfPeerAccount
  * @notice Simplified Smart Contract Account for OPRF peers to interact with RpRegistry via ERC-4337
- * @dev This account handles AA complexity so RpRegistry doesn't need to
+ * @dev This account handles AA complexity so RpRegistry doesn't need to...
  */
 contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     using ECDSA for bytes32;
