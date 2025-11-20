@@ -127,10 +127,10 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         _disableInitializers();
     }
 
-    /// @notice Initializer function to set up the RpRegistry contract
-    /// @param _keygenAdmin The address of the key generation administrator
-    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract
-    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract
+    /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
+    /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
+    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
     function initialize(
         address _keygenAdmin,
         address _keyGenVerifierAddress,
@@ -141,6 +141,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         keygenAdmin = _keygenAdmin;
         keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
+        // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
         threshold = 2;
         numPeers = 3;
         isContractReady = false;
@@ -150,6 +151,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     //         ADMIN FUNCTIONS
     // ==================================
 
+    /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
+    /// @param _peerAddresses An array of addresses of the OPRF peers.
+    /// @param _smartAccounts An array of addresses of the associated smart accounts.
     function registerOprfPeers(
         address[] calldata _peerAddresses,
         address[] calldata _smartAccounts
@@ -202,9 +206,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         authorizedPaymasters[paymaster] = authorized;
     }
 
-    /// @notice Initializes the key generation process for a new RP
-    /// @param rpId The unique identifier for the RP
-    /// @param ecdsaPubKey The compressed ECDSA public key for the RP
+    /// @notice Initializes the key generation process for a new RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @param ecdsaPubKey The compressed ECDSA public key for the RP.
     function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
         external
         virtual
@@ -212,8 +216,11 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         isReady
         onlyAdmin
     {
+        // Check that this rpId was not used already
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (st.exists) revert AlreadySubmitted();
+        // We store the ecdsa key in compressed form - therefore we need to enforce
+        // that the parity bit is set to 2 or 3 (as produced by to_sec1_bytes in rust)
 
         if (ecdsaPubKey.yParity != 2 && ecdsaPubKey.yParity != 3) revert BadContribution();
 
@@ -230,13 +237,15 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         emit Types.SecretGenRound1(rpId, threshold);
     }
 
-    /// @notice Deletes the RP and its associated material
-    /// @param rpId The unique identifier for the RP
+    /// @notice Deletes the RP and its associated material. Works if during key-gen or afterwards.
+    /// @param rpId The unique identifier for the RP.
     function deleteRpMaterial(uint128 rpId) external virtual onlyProxy isReady onlyAdmin {
+        // try to delete the runningKeyGen data
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         bool needToEmitEvent = false;
 
         if (st.exists) {
+            // delete all the material and set to deleted
             delete st.ecdsaPubKey;
             delete st.round1;
             delete st.round2;
@@ -246,12 +255,15 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
             delete st.round2EventEmitted;
             delete st.round3EventEmitted;
             delete st.finalizeEventEmitted;
+            // mark the rp as deleted
+            // we need this to prevent race conditions during the key-gen
             st.deleted = true;
             needToEmitEvent = true;
         }
 
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (!_isEmpty(material.nullifierKey)) {
+            // delete the created key and the ecdsa key
             delete material.ecdsaKey;
             delete material.nullifierKey;
             needToEmitEvent = true;
@@ -264,18 +276,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
     // ==================================
     //      OPRF Peer FUNCTIONS
+    //
     // ==================================
 
-    /// @notice Adds a Round 1 contribution - works with both EOAs and smart accounts
-    /// @param rpId The unique identifier for the RP
-    /// @param data The Round 1 contribution data
+    /// @notice Adds a Round 1 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers. - works with both EOAs and smart accounts
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
     function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
         external
         virtual
         onlyProxy
         isReady
     {
-        // Validation checks
+        // check that commitments are not zero
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
         if (_isEmpty(data.ephPubKey)) revert BadContribution();
