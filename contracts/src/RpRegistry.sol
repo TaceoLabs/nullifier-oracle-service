@@ -442,7 +442,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return _internParticipantCheck();
     }
 
-    /// @notice Returns ephemeral public keys
+    /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided rp id.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The ephemeral public keys generated in round 1
     function checkIsParticipantAndReturnEphemeralPublicKeys(uint128 rpId)
         external
         view
@@ -453,13 +455,17 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     {
         _internParticipantCheck(); // Will revert if not participant
 
+        // check if there exists this key-gen
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
         if (st.deleted) revert DeletedId(rpId);
         return _loadPeerPublicKeys(st);
     }
 
-    /// @notice Returns Round 2 ciphers
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
@@ -471,14 +477,19 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         uint256 partyId = _internParticipantCheck();
 
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
+        // check if there exists this a key-gen
         if (!st.exists) revert UnknownId(rpId);
+        // check if the key-gen was deleted
         if (st.deleted) revert DeletedId(rpId);
+        // check that round2 ciphers are finished
         if (!allRound2Submitted(st)) revert NotReady();
 
         return st.round2[partyId];
     }
 
-    /// @notice Retrieves the nullifier public key for a specific RP
+    /// @notice Retrieves the nullifier public key for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The BabyJubJub element representing the nullifier public key for the specified RP.
     function getRpNullifierKey(uint128 rpId)
         public
         view
@@ -492,7 +503,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return rpRegistry[rpId].nullifierKey;
     }
 
-    /// @notice Retrieves the RP material for a specific RP
+    /// @notice Retrieves the RP material (ECDSA public key and nullifier key) for a specific RP.
+    /// @param rpId The unique identifier for the RP.
+    /// @return The RpMaterial struct containing the ECDSA public key and nullifier key for the specified RP.
     function getRpMaterial(uint128 rpId)
         external
         view
@@ -512,6 +525,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
 
     function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
+            // we don't allow commitments to be zero, therefore if one
+            // commitments is still 0, not all contributed.
             if (st.round1[i].commCoeffs == 0) return false;
         }
         return true;
@@ -547,6 +562,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
+
         st.round2EventEmitted = true;
         emit Types.SecretGenRound2(rpId);
     }
@@ -554,50 +570,43 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round3EventEmitted) return;
         if (!allRound2Submitted(st)) return;
+
         st.round3EventEmitted = true;
         emit Types.SecretGenRound3(rpId);
     }
 
-    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY)
-        internal
-        virtual
-    {
-        if (accumulator.isOnCurve(newPointX, newPointY) == false) {
-            revert BadContribution();
-        }
+    ////////////////////////////////////////////////////////////
+    //                    Upgrade Authorization               //
+    ////////////////////////////////////////////////////////////
 
-        if (_isEmpty(st.keyAggregate)) {
-            st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
-            return;
-        }
-
-        (uint256 resultX, uint256 resultY) = accumulator.add(
-            st.keyAggregate.x,
-            st.keyAggregate.y,
-            newPointX,
-            newPointY
-        );
-
-        st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
-    }
-
-    function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
-        return element.x == 0 && element.y == 1;
-    }
-
-    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
-        return element.x == 0 && element.y == 0;
-    }
-
-    // =============================================
-    //         Upgrade Authorization
-    // =============================================
-
+    /**
+     *
+     *
+     * @dev Authorize upgrade to a new implementation
+     *
+     *
+     * @param newImplementation Address of the new implementation contract
+     *
+     *
+     * @notice Only the contract owner can authorize upgrades
+     *
+     *
+     */
     function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
 
-    // =============================================
-    //              Storage Gap
-    // =============================================
+    ////////////////////////////////////////////////////////////
+    //                    Storage Gap                         //
+    ////////////////////////////////////////////////////////////
 
-    uint256[36] private __gap; // Reserve storage slots for future upgrades
+    /**
+     *
+     *
+     * @dev Storage gap to allow for future upgrades without storage collisions
+     *
+     *
+     * This is set to take a total of 50 storage slots for future state variables
+     *
+     *
+     */
+    uint256[40] private __gap;
 }
