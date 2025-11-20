@@ -6,9 +6,6 @@ import {CredentialSchemaIssuerRegistry} from "@world-id-protocol/contracts/Crede
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
-import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
@@ -28,27 +25,7 @@ interface IBabyJubJub {
     function isOnCurve(uint256 x, uint256 y) external view returns (bool);
 }
 
-interface IPaymaster {
-    function validatePaymasterUserOp(
-        UserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 maxCost
-    ) external returns (bytes memory context, uint256 validationData);
-
-    function postOp(
-        PostOpMode mode,
-        bytes calldata context,
-        uint256 actualGasCost
-    ) external;
-}
-
-enum PostOpMode {
-    opSucceeded,
-    opReverted,
-    postOpReverted
-}
-
-contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, BaseAccount {
+contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     using Types for Types.BabyJubJubElement;
     using Types for Types.EcDsaPubkeyCompressed;
     using Types for Types.OprfPeer;
@@ -57,48 +34,78 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     using Types for Types.RpNullifierGenState;
     using Types for Types.Groth16Proof;
 
-    // =============================================
-    //           ERC-4337 State Variables
-    // =============================================
-
-    IEntryPoint private immutable _entryPoint;
-    address public trustedPaymaster;
-    mapping(address => bool) public authorizedPaymasters;
-    mapping(address => uint256) public accountNonces;
-
-    // Gas sponsorship tracking
-    mapping(address => uint256) public sponsoredGasUsed;
-    mapping(address => uint256) public sponsorshipLimits;
-
-    // =============================================
-    //           State Variables
-    // =============================================
-
+    // Gets set to ready state once OPRF participants are registered
     bool public isContractReady;
+
+    // Admin to start KeyGens
     address public keygenAdmin;
     IGroth16VerifierKeyGen13 public keyGenVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
     uint256 public numPeers;
+
+    // The addresses of the currently participating peers.
     address[] public peerAddresses;
+    // Maps the address of a peer to its party id.
     mapping(address => Types.OprfPeer) addressToPeer;
+
+    // The keygen state for each RP
     mapping(uint128 => Types.RpNullifierGenState) internal runningKeyGens;
+
+    // Mapping between each rpId and the corresponding nullifier
     mapping(uint128 => Types.RpMaterial) internal rpRegistry;
 
     // =============================================
-    //                Events
+    //     ERC-4337 Support Variables
     // =============================================
 
-    event PaymasterAuthorized(address indexed paymaster, bool authorized);
-    event SponsorshipLimitSet(address indexed account, uint256 limit);
-    event GasSponsored(address indexed account, address indexed paymaster, uint256 gasUsed);
-    event UserOperationExecuted(address indexed account, address indexed paymaster, bool success);
+    // Maps smart account addresses to their peer owners
+    mapping(address => address) public smartAccountToPeer;
+
+    // Authorized paymasters for gas sponsorship
+    mapping(address => bool) public authorizedPaymasters;
+
+    // Track if an address is a registered smart account
+    mapping(address => bool) public isSmartAccount;
+
+    // Track all smart account addresses for distinguishability
+    address[] public smartAccountAddresses;
+
+    // =============================================
+    //                MODIFIERS
+    // =============================================
+    modifier isReady() {
+        _isReady();
+        _;
+    }
+
+    function _isReady() internal view {
+        if (!isContractReady) revert NotReady();
+    }
+
+    modifier onlyAdmin() {
+        _onlyAdmin();
+        _;
+    }
+
+    function _onlyAdmin() internal view {
+        if (keygenAdmin != msg.sender) revert OnlyAdmin();
+    }
+
+    modifier onlyInitialized() {
+        _onlyInitialized();
+        _;
+    }
+
+    function _onlyInitialized() internal view {
+        if (_getInitializedVersion() == 0) {
+            revert ImplementationNotInitialized();
+        }
+    }
 
     // =============================================
     //                Errors
     // =============================================
-
-    // Registry specific errors
     error ImplementationNotInitialized();
     error OnlyAdmin();
     error NotAParticipant();
@@ -112,30 +119,22 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     error UnknownId(uint128 id);
     error DeletedId(uint128 id);
 
-    // ERC-4337 specific errors
-    error UnauthorizedPaymaster();
-    error InvalidEntryPoint();
-    error SponsorshipLimitExceeded();
-    error InvalidUserOperation();
-    error OnlyEntryPoint();
+    // New error for smart account validation
+    error UnauthorizedSmartAccount();
 
-    // =============================================
-    //                Constructor
-    // =============================================
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(IEntryPoint _ep) {
-        _entryPoint = _ep;
+    constructor() {
         _disableInitializers();
     }
 
-    // =============================================
-    //                Initializer
-    // =============================================
+    /// @notice Initializer function to set up the RpRegistry contract
+    /// @param _keygenAdmin The address of the key generation administrator
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract
+    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract
     function initialize(
         address _keygenAdmin,
         address _keyGenVerifierAddress,
-        address _accumulatorAddress,
-        address _trustedPaymaster
+        address _accumulatorAddress
     ) public virtual initializer {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
@@ -145,56 +144,67 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         threshold = 2;
         numPeers = 3;
         isContractReady = false;
-        // ERC-4337 initialization
-        trustedPaymaster = _trustedPaymaster;
-        if (_trustedPaymaster != address(0)) {
-            authorizedPaymasters[_trustedPaymaster] = true;
-        }
-    }
-
-       /// @notice Initializer function to set up the RpRegistry contract, this is not a constructor due to the use of upgradeable proxies.
-    /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
-    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
-    /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
-    function initialize(address _keygenAdmin, address _keyGenVerifierAddress, address _accumulatorAddress)
-        public
-        virtual
-        initializer
-    {
-        __Ownable_init(msg.sender);
-        __Ownable2Step_init();
-        keygenAdmin = _keygenAdmin;
-        keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
-        accumulator = IBabyJubJub(_accumulatorAddress);
-        // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
-        threshold = 2;
-        numPeers = 3;
-        isContractReady = false;
     }
 
     // ==================================
     //         ADMIN FUNCTIONS
     // ==================================
 
-    /// @notice Registers the OPRF peers with their addresses and public keys. Only callable by the contract owner.
-    /// @param _peerAddresses An array of addresses of the OPRF peers.
-    function registerOprfPeers(address[] calldata _peerAddresses) external virtual onlyProxy onlyInitialized onlyOwner {
+    function registerOprfPeers(
+        address[] calldata _peerAddresses,
+        address[] calldata _smartAccounts
+    ) external virtual onlyProxy onlyInitialized onlyOwner {
         if (_peerAddresses.length != numPeers) revert UnexpectedAmountPeers(numPeers);
-        // delete the old participants
+
+        // delete old participants
         for (uint256 i = 0; i < peerAddresses.length; ++i) {
             delete addressToPeer[peerAddresses[i]];
         }
-        // set the new ones
-        for (uint256 i = 0; i < _peerAddresses.length; i++) {
-            addressToPeer[_peerAddresses[i]] = Types.OprfPeer({isParticipant: true, partyId: i});
+
+        // delete old smart accounts
+        for (uint256 i = 0; i < smartAccountAddresses.length; ++i) {
+            address oldSmartAccount = smartAccountAddresses[i];
+            delete addressToPeer[oldSmartAccount];
+            delete smartAccountToPeer[oldSmartAccount];
+            delete isSmartAccount[oldSmartAccount];
         }
+
+        delete smartAccountAddresses;
+
+        for (uint256 i = 0; i < _peerAddresses.length; i++) {
+            addressToPeer[_peerAddresses[i]] = Types.OprfPeer({
+                isParticipant: true,
+                partyId: i
+            });
+
+            if (_smartAccounts.length > 0 && _smartAccounts[i] != address(0)) {
+                smartAccountToPeer[_smartAccounts[i]] = _peerAddresses[i];
+                isSmartAccount[_smartAccounts[i]] = true;
+                addressToPeer[_smartAccounts[i]] = Types.OprfPeer({
+                    isParticipant: true,
+                    partyId: i
+                });
+                smartAccountAddresses.push(_smartAccounts[i]); // Track it
+            }
+        }
+
         peerAddresses = _peerAddresses;
         isContractReady = true;
     }
 
-    /// @notice Initializes the key generation process for a new RP.
-    /// @param rpId The unique identifier for the RP.
-    /// @param ecdsaPubKey The compressed ECDSA public key for the RP.
+    /// @notice Authorize a paymaster for gas sponsorship
+    /// @param paymaster The paymaster address
+    /// @param authorized Whether to authorize or revoke
+    function setPaymasterAuthorization(
+        address paymaster,
+        bool authorized
+    ) external virtual onlyProxy onlyOwner {
+        authorizedPaymasters[paymaster] = authorized;
+    }
+
+    /// @notice Initializes the key generation process for a new RP
+    /// @param rpId The unique identifier for the RP
+    /// @param ecdsaPubKey The compressed ECDSA public key for the RP
     function initKeyGen(uint128 rpId, Types.EcDsaPubkeyCompressed calldata ecdsaPubKey)
         external
         virtual
@@ -202,11 +212,9 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         isReady
         onlyAdmin
     {
-        // Check that this rpId was not used already
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (st.exists) revert AlreadySubmitted();
-        // We store the ecdsa key in compressed form - therefore we need to enforce
-        // that the parity bit is set to 2 or 3 (as produced by to_sec1_bytes in rust)
+
         if (ecdsaPubKey.yParity != 2 && ecdsaPubKey.yParity != 3) revert BadContribution();
 
         st.ecdsaPubKey = ecdsaPubKey;
@@ -219,18 +227,16 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         st.round3Done = new bool[](numPeers);
         st.exists = true;
 
-        // Emit Round1 event for everyone
         emit Types.SecretGenRound1(rpId, threshold);
     }
 
-    /// @notice Deletes the RP and its associated material. Works if during key-gen or afterwards.
-    /// @param rpId The unique identifier for the RP.
+    /// @notice Deletes the RP and its associated material
+    /// @param rpId The unique identifier for the RP
     function deleteRpMaterial(uint128 rpId) external virtual onlyProxy isReady onlyAdmin {
-        // try to delete the runningKeyGen data
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         bool needToEmitEvent = false;
+
         if (st.exists) {
-            // delete all the material and set to deleted
             delete st.ecdsaPubKey;
             delete st.round1;
             delete st.round2;
@@ -240,15 +246,12 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
             delete st.round2EventEmitted;
             delete st.round3EventEmitted;
             delete st.finalizeEventEmitted;
-            // mark the rp as deleted
-            // we need this to prevent race conditions during the key-gen
             st.deleted = true;
             needToEmitEvent = true;
         }
 
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (!_isEmpty(material.nullifierKey)) {
-            // delete the created key and the ecdsa key
             delete material.ecdsaKey;
             delete material.nullifierKey;
             needToEmitEvent = true;
@@ -259,194 +262,20 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         }
     }
 
+    // ==================================
+    //      OPRF Peer FUNCTIONS
+    // ==================================
 
-    // =============================================
-    //           ERC-4337 Implementation
-    // =============================================
-
-    /**
-     * @notice Returns the EntryPoint contract address
-     * @dev Required by IAccount interface
-     */
-    function entryPoint() public view virtual override returns (IEntryPoint) {
-        return _entryPoint;
-    }
-
-    /**
-     * @notice Validates a UserOperation
-     * @dev Called by EntryPoint to validate if the contract accepts the UserOperation
-     * @param userOp The UserOperation to validate
-     * @param userOpHash Hash of the UserOperation
-     * @param missingAccountFunds Funds needed to be deposited to EntryPoint
-     * @return validationData Validation result (0 for success, 1 for failure, timestamp for time-range)
-     */
-     //TODO: Fix error typing for this..
-    function _validateSignature(
-        UserOperation calldata userOp,
-        bytes32 userOpHash
-    ) internal virtual override returns (uint256 validationData) {
-        // Validate the operation based on your business logic
-        // For OPRF peers, we check if they're authorized participants
-
-        // Extract signer from signature
-        address signer = _recoverSigner(userOpHash, userOp.signature);
-
-        // Check if signer is an authorized peer or admin
-        Types.OprfPeer memory peer = addressToPeer[signer];
-        bool isAuthorized = peer.isParticipant || signer == keygenAdmin || signer == owner();
-
-        if (!isAuthorized) {
-            return 1;
-        }
-
-        // Check paymaster authorization if present
-        if (userOp.paymasterAndData.length >= 20) {
-            address paymaster = address(bytes20(userOp.paymasterAndData[:20]));
-            if (!authorizedPaymasters[paymaster]) {
-                return 1;
-            }
-        }
-
-        return 0; // Validation successful
-    }
-
-    /**
-     * @notice Execute a UserOperation
-     * @dev Called by EntryPoint after successful validation
-     * @param dest Target address for the call
-     * @param value ETH value to send
-     * @param func Function data to execute
-     */
-    function _call(address dest, uint256 value, bytes memory func) internal {
-        (bool success, bytes memory result) = dest.call{value: value}(func);
-        if (!success) {
-            assembly {
-                revert(add(result, 32), mload(result))
-            }
-        }
-    }
-
-    /**
-     * @notice Executes a UserOperation from the EntryPoint
-     * @param dest Destination address
-     * @param value ETH value to transfer
-     * @param func Function calldata
-     */
-    function execute(
-        address dest,
-        uint256 value,
-        bytes calldata func
-    ) external {
-        _requireFromEntryPoint();
-        _call(dest, value, func);
-    }
-
-    /**
-     * @notice Executes a batch of UserOperations
-     * @param dest Array of destination addresses
-     * @param value Array of ETH values
-     * @param func Array of function calldata
-     */
-    function executeBatch(
-        address[] calldata dest,
-        uint256[] calldata value,
-        bytes[] calldata func
-    ) external {
-        _requireFromEntryPoint();
-        require(
-            dest.length == func.length && dest.length == value.length,
-            "Length mismatch"
-        );
-
-        for (uint256 i = 0; i < dest.length; i++) {
-            _call(dest[i], value[i], func[i]);
-        }
-    }
-
-    // =============================================
-    //         Paymaster Management
-    // =============================================
-
-    /**
-     * @notice Authorize or revoke a paymaster
-     * @param paymaster Address of the paymaster
-     * @param authorized Whether to authorize or revoke
-     */
-    function setPaymasterAuthorization(
-        address paymaster,
-        bool authorized
-    ) external onlyOwner {
-        authorizedPaymasters[paymaster] = authorized;
-        emit PaymasterAuthorized(paymaster, authorized);
-    }
-
-    /**
-     * @notice Set gas sponsorship limit for an account
-     * @param account Address of the account
-     * @param limit Gas sponsorship limit in wei
-     */
-    function setSponsorshipLimit(
-        address account,
-        uint256 limit
-    ) external onlyOwner {
-        sponsorshipLimits[account] = limit;
-        emit SponsorshipLimitSet(account, limit);
-    }
-
-    /**
-     * @notice Check if an account can be sponsored for a certain gas amount
-     * @param account Address to check
-     * @param gasAmount Gas amount in wei
-     * @return canSponsor Whether the account can be sponsored
-     */
-    function canSponsor(
-        address account,
-        uint256 gasAmount
-    ) external view returns (bool canSponsor) {
-        uint256 totalUsed = sponsoredGasUsed[account] + gasAmount;
-        return totalUsed <= sponsorshipLimits[account];
-    }
-
-    /**
-     * @notice Record sponsored gas usage
-     * @param account Account that was sponsored
-     * @param gasUsed Amount of gas used
-     */
-    function recordSponsoredGas(
-        address account,
-        uint256 gasUsed
-    ) external {
-        require(authorizedPaymasters[msg.sender], "Only authorized paymaster");
-        sponsoredGasUsed[account] += gasUsed;
-        emit GasSponsored(account, msg.sender, gasUsed);
-    }
-
-    // =============================================
-    //         Modified OPRF Functions for AA
-    // =============================================
-
-    /**
-     * @notice AA-compatible version of addRound1Contribution
-     * @dev Can be called through UserOperation for gasless transactions
-     */
-    function addRound1ContributionAA(
-        uint128 rpId,
-        Types.Round1Contribution calldata data
-    ) external virtual {
-        // This can now be called via EntryPoint with sponsored gas
-        _requireFromEntryPointOrAuthorized();
-        _addRound1ContributionInternal(rpId, data, _getOperationSender());
-    }
-
-    /**
-     * @notice Internal implementation of addRound1Contribution
-     */
-    // TODO: Put this in helpers I guess..
-    function _addRound1ContributionInternal(
-        uint128 rpId,
-        Types.Round1Contribution memory data,
-        address sender
-    ) internal {
+    /// @notice Adds a Round 1 contribution - works with both EOAs and smart accounts
+    /// @param rpId The unique identifier for the RP
+    /// @param data The Round 1 contribution data
+    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
+        external
+        virtual
+        onlyProxy
+        isReady
+    {
+        // Validation checks
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
         if (_isEmpty(data.ephPubKey)) revert BadContribution();
@@ -456,7 +285,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         if (st.deleted) revert DeletedId(rpId);
         if (st.round2EventEmitted) revert WrongRound();
 
-        uint256 partyId = _internParticipantCheckForAddress(sender);
+        // Get party ID - this now works for both EOAs and smart accounts
+        uint256 partyId = _internParticipantCheck();
 
         if (!_isEmpty(st.round1[partyId].commShare)) revert AlreadySubmitted();
 
@@ -465,55 +295,31 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         _tryEmitRound2Event(rpId, st);
     }
 
-    // =============================================
-    //        OPRF Functions
-    // =============================================
-
-    /// @notice Adds a Round 2 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
-    /// @param rpId The unique identifier for the RP.
-    /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
-    /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
+    /// @notice Adds a Round 2 contribution - unchanged
     function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data)
         external
         virtual
         onlyProxy
         isReady
     {
-        // check that the contribution is complete
         if (data.ciphers.length != numPeers) revert BadContribution();
-        // check that we started the key-gen for this rp-id
+
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
-        // check if the rp was deleted in the meantime
         if (st.deleted) revert DeletedId(rpId);
-        // check that we are actually in round2
         if (!st.round2EventEmitted || st.round3EventEmitted) revert WrongRound();
-        // return the partyId if sender is really a participant
+
         uint256 partyId = _internParticipantCheck();
-        // check that this peer did not submit anything for this round
+
         if (st.round2Done[partyId]) revert AlreadySubmitted();
 
-        // everything looks good - push the ciphertexts
         for (uint256 i = 0; i < numPeers; ++i) {
             st.round2[i][partyId] = data.ciphers[i];
         }
-        // set the contribution to done
         st.round2Done[partyId] = true;
 
-        // last step verify the proof and potentially revert if proof fails
-
-        // build the public input:
-        // 1) PublicKey from sender (Affine Point Babyjubjub)
-        // 2) Commitment to share (Affine Point Babyjubjub)
-        // 3) Commitment to coeffs (Basefield Babyjubjub)
-        // 4) Ciphertexts for peers (in this case 3 Basefield BabyJubJub)
-        // 5) Commitments to plaintexts (in this case 3 Affine Points BabyJubJub)
-        // 6) Degree (Basefield BabyJubJub)
-        // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
-        // 8) Nonces (in this case 3 Basefield BabyJubJub)
-        // verifier.verifyProof();
+        // Build and verify proof (unchanged logic)
         uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] memory publicInputs;
-
         Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
         publicInputs[0] = pubKeyList[partyId].x;
         publicInputs[1] = pubKeyList[partyId].y;
@@ -521,7 +327,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         publicInputs[3] = st.round1[partyId].commShare.y;
         publicInputs[4] = st.round1[partyId].commCoeffs;
         publicInputs[14] = threshold - 1;
-        // peer keys
+
         for (uint256 i = 0; i < numPeers; ++i) {
             publicInputs[5 + i] = data.ciphers[i].cipher;
             publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
@@ -530,66 +336,74 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
             publicInputs[15 + (i * 2) + 1] = pubKeyList[i].y;
             publicInputs[21 + i] = data.ciphers[i].nonce;
         }
+
         _tryEmitRound3Event(rpId, st);
-        // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
+
         if (!keyGenVerifier.verifyProof(data.proof.pA, data.proof.pB, data.proof.pC, publicInputs)) {
             revert InvalidProof();
         }
     }
 
-    /// @notice Adds a Round 3 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
-    /// @param rpId The unique identifier for the RP.
-    /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
+    /// @notice Adds a Round 3 contribution - unchanged
     function addRound3Contribution(uint128 rpId) external virtual onlyProxy isReady {
-        // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
-        // check if the rp was deleted in the meantime
         if (st.deleted) revert DeletedId(rpId);
-        // check that we are actually in round3
         if (!st.round3EventEmitted || st.finalizeEventEmitted) revert NotReady();
-        // return the partyId if sender is really a participant
+
         uint256 partyId = _internParticipantCheck();
-        // check that this peer did not submit anything for this round
+
         if (st.round3Done[partyId]) revert AlreadySubmitted();
         st.round3Done[partyId] = true;
 
         if (allRound3Submitted(st)) {
-            // We are done! Register the RP and emit event!
-            rpRegistry[rpId] = Types.RpMaterial({ecdsaKey: st.ecdsaPubKey, nullifierKey: st.keyAggregate});
-            // cleanup all old data
+            rpRegistry[rpId] = Types.RpMaterial({
+                ecdsaKey: st.ecdsaPubKey,
+                nullifierKey: st.keyAggregate
+            });
+
             delete st.ecdsaPubKey;
             delete st.round1;
             delete st.round2;
             delete st.keyAggregate;
             delete st.round2Done;
             delete st.round3Done;
-            // we keep the eventsEmitted and exists to prevent participants to double submit
+
             emit Types.SecretGenFinalize(rpId);
             st.finalizeEventEmitted = true;
         }
     }
 
+    // ==================================
+    //     ERC4337 MODIFIED HELPER FUNCTIONS
+    // ==================================
 
-    // =============================================
-    //           Helper Functions
-    // =============================================
+    /// @notice Modified to support both EOAs and smart accounts
+    function _internParticipantCheck() internal view virtual returns (uint256) {
+        // First check if direct participant
+        Types.OprfPeer memory peer = addressToPeer[msg.sender];
+        if (peer.isParticipant) {
+            return peer.partyId;
+        }
 
-    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID.
-    /// @return The party ID of the caller if they are a registered participant.
+        // If not, check if it's a registered smart account
+        if (isSmartAccount[msg.sender]) {
+            address peerOwner = smartAccountToPeer[msg.sender];
+            peer = addressToPeer[peerOwner];
+            if (peer.isParticipant) {
+                return peer.partyId;
+            }
+        }
+
+        revert NotAParticipant();
+    }
+
+    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID
     function checkIsParticipantAndReturnPartyId() external view virtual isReady onlyProxy returns (uint256) {
         return _internParticipantCheck();
     }
 
-    function _internParticipantCheck() internal view virtual returns (uint256) {
-        Types.OprfPeer memory peer = addressToPeer[msg.sender];
-        if (!peer.isParticipant) revert NotAParticipant();
-        return peer.partyId;
-    }
-
-    /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided rp id.
-    /// @param rpId The unique identifier for the RP.
-    /// @return The ephemeral public keys generated in round 1
+    /// @notice Returns ephemeral public keys - works with smart accounts
     function checkIsParticipantAndReturnEphemeralPublicKeys(uint128 rpId)
         external
         view
@@ -598,21 +412,15 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         onlyProxy
         returns (Types.BabyJubJubElement[] memory)
     {
-        // check if a participant
-        Types.OprfPeer memory peer = addressToPeer[msg.sender];
-        if (!peer.isParticipant) revert NotAParticipant();
-        // check if there exists this key-gen
+        _internParticipantCheck(); // Will revert if not participant
+
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
-        // check if the key-gen was deleted
         if (st.deleted) revert DeletedId(rpId);
         return _loadPeerPublicKeys(st);
     }
 
-
-    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for a specific RP.
-    /// @param rpId The unique identifier for the RP.
-    /// @return An array of Round 2 ciphertexts belonging to the caller.
+    /// @notice Returns Round 2 ciphers - works with smart accounts
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
@@ -621,22 +429,17 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         isReady
         returns (Types.SecretGenCiphertext[] memory)
     {
-        // check if a participant
-        Types.OprfPeer memory peer = addressToPeer[msg.sender];
-        if (!peer.isParticipant) revert NotAParticipant();
-        // check if there exists this a key-gen
+        uint256 partyId = _internParticipantCheck();
+
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
-        // check if the key-gen was deleted
         if (st.deleted) revert DeletedId(rpId);
-        // check that round2 ciphers are finished
         if (!allRound2Submitted(st)) revert NotReady();
-        return st.round2[peer.partyId];
+
+        return st.round2[partyId];
     }
 
-    /// @notice Retrieves the nullifier public key for a specific RP.
-    /// @param rpId The unique identifier for the RP.
-    /// @return The BabyJubJub element representing the nullifier public key for the specified RP.
+    /// @notice Retrieves the nullifier public key for a specific RP
     function getRpNullifierKey(uint128 rpId)
         public
         view
@@ -650,97 +453,26 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         return rpRegistry[rpId].nullifierKey;
     }
 
-    /// @notice Retrieves the RP material (ECDSA public key and nullifier key) for a specific RP.
-    /// @param rpId The unique identifier for the RP.
-    /// @return The RpMaterial struct containing the ECDSA public key and nullifier key for the specified RP.
-    function getRpMaterial(uint128 rpId) external view virtual onlyProxy isReady returns (Types.RpMaterial memory) {
+    /// @notice Retrieves the RP material for a specific RP
+    function getRpMaterial(uint128 rpId)
+        external
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.RpMaterial memory)
+    {
         Types.RpMaterial storage material = rpRegistry[rpId];
         if (_isEmpty(material.nullifierKey)) revert UnknownId(rpId);
         return rpRegistry[rpId];
     }
 
-    /**
-     * @notice Ensures call is from EntryPoint
-     */
-    function _requireFromEntryPoint() internal view {
-        require(
-            msg.sender == address(entryPoint()),
-            "Only EntryPoint"
-        );
-    }
-
-    /**
-     * @notice Ensures call is from EntryPoint or authorized address
-     */
-    function _requireFromEntryPointOrAuthorized() internal view {
-        require(
-            msg.sender == address(entryPoint()) ||
-            addressToPeer[msg.sender].isParticipant ||
-            msg.sender == keygenAdmin ||
-            msg.sender == owner(),
-            "Unauthorized"
-        );
-    }
-
-    /**
-     * @notice Get the actual sender of the operation
-     */
-    function _getOperationSender() internal view returns (address) {
-        if (msg.sender == address(entryPoint())) {
-            // In AA context, extract sender from calldata
-            // This is a simplified version - actual implementation would decode UserOp
-            return tx.origin; // Simplified for demonstration
-        }
-        return msg.sender;
-    }
-
-    /**
-     * @notice Check participant status for a specific address
-     */
-    //TODO: Question: Do we still need onlyProxy anywhere..?
-    function _internParticipantCheckForAddress(address addr)
-        internal
-        view
-        virtual
-        returns (uint256)
-    {
-        Types.OprfPeer memory peer = addressToPeer[addr];
-        if (!peer.isParticipant) revert NotAParticipant();
-        return peer.partyId;
-    }
-
-    /**
-     * @notice Recover signer from signature
-     */
-    function _recoverSigner(
-        bytes32 hash,
-        bytes memory signature
-    ) internal pure returns (address) {
-        require(signature.length == 65, "Invalid signature length");
-
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-
-        assembly {
-            r := mload(add(signature, 0x20))
-            s := mload(add(signature, 0x40))
-            v := byte(0, mload(add(signature, 0x60)))
-        }
-
-        if (v < 27) {
-            v += 27;
-        }
-
-        require(v == 27 || v == 28, "Invalid signature v value");
-
-        return ecrecover(hash, v, r, s);
-    }
+    // ==================================
+    //    HELPER FUNCTIONS
+    // ==================================
 
     function allRound1Submitted(Types.RpNullifierGenState storage st) internal view virtual returns (bool) {
         for (uint256 i = 0; i < numPeers; ++i) {
-            // we don't allow commitments to be zero, therefore if one
-            // commitments is still 0, not all contributed.
             if (st.round1[i].commCoeffs == 0) return false;
         }
         return true;
@@ -776,7 +508,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     function _tryEmitRound2Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
-
         st.round2EventEmitted = true;
         emit Types.SecretGenRound2(rpId);
     }
@@ -784,16 +515,14 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     function _tryEmitRound3Event(uint128 rpId, Types.RpNullifierGenState storage st) internal virtual {
         if (st.round3EventEmitted) return;
         if (!allRound2Submitted(st)) return;
-
         st.round3EventEmitted = true;
         emit Types.SecretGenRound3(rpId);
     }
 
-    function _addToAggregate(
-        Types.RpNullifierGenState storage st,
-        uint256 newPointX,
-        uint256 newPointY
-    ) internal virtual {
+    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY)
+        internal
+        virtual
+    {
         if (accumulator.isOnCurve(newPointX, newPointY) == false) {
             revert BadContribution();
         }
@@ -821,40 +550,6 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
         return element.x == 0 && element.y == 0;
     }
 
-
-    // =============================================
-    //         Modifiers
-    // =============================================
-
-    modifier isReady() {
-        _isReady();
-        _;
-    }
-
-    function _isReady() internal view {
-        if (!isContractReady) revert NotReady();
-    }
-
-    modifier onlyAdmin() {
-        _onlyAdmin();
-        _;
-    }
-
-    function _onlyAdmin() internal view {
-        if (keygenAdmin != msg.sender) revert OnlyAdmin();
-    }
-
-    modifier onlyInitialized() {
-        _onlyInitialized();
-        _;
-    }
-
-    function _onlyInitialized() internal view {
-        if (_getInitializedVersion() == 0) {
-            revert ImplementationNotInitialized();
-        }
-    }
-
     // =============================================
     //         Upgrade Authorization
     // =============================================
@@ -865,5 +560,5 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, 
     //              Storage Gap
     // =============================================
 
-    uint256[35] private __gap;
+    uint256[36] private __gap; // Reserve storage slots for future upgrades
 }
