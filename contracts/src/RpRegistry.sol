@@ -476,8 +476,8 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     {
         uint256 partyId = _internParticipantCheck();
 
-        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         // check if there exists this a key-gen
+        Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
         // check if the key-gen was deleted
         if (st.deleted) revert DeletedId(rpId);
@@ -575,6 +575,33 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         emit Types.SecretGenRound3(rpId);
     }
 
+    function _addToAggregate(Types.RpNullifierGenState storage st, uint256 newPointX, uint256 newPointY) internal virtual {
+        if (accumulator.isOnCurve(newPointX, newPointY) == false) {
+            revert BadContribution();
+        }
+
+        if (_isEmpty(st.keyAggregate)) {
+            // We checked above that the point is on curve, so we can just set it
+            st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
+            return;
+        }
+
+        // we checked above that the new point is on curve
+        // the initial aggregate is on curve as well, checked inside the if above
+        // induction: sum of two on-curve points is on-curve, so the result is on-curve as well
+        (uint256 resultX, uint256 resultY) = accumulator.add(st.keyAggregate.x, st.keyAggregate.y, newPointX, newPointY);
+
+        st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
+    }
+
+    function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
+        return element.x == 0 && element.y == 1;
+    }
+
+    function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
+        return element.x == 0 && element.y == 0;
+    }
+
     ////////////////////////////////////////////////////////////
     //                    Upgrade Authorization               //
     ////////////////////////////////////////////////////////////
@@ -608,5 +635,5 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
      *
      *
      */
-    uint256[40] private __gap;
+    uint256[36] private __gap;
 }
