@@ -234,6 +234,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         st.round3Done = new bool[](numPeers);
         st.exists = true;
 
+        // Emit Round1 event for everyone
         emit Types.SecretGenRound1(rpId, threshold);
     }
 
@@ -279,7 +280,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     //
     // ==================================
 
-    /// @notice Adds a Round 1 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers. - works with both EOAs and smart accounts
+    /// @notice Adds a Round 1 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
     /// @param rpId The unique identifier for the RP.
     /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
     function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data)
@@ -292,47 +293,70 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         if (_isEmpty(data.commShare)) revert BadContribution();
         if (data.commCoeffs == 0) revert BadContribution();
         if (_isEmpty(data.ephPubKey)) revert BadContribution();
-
+        // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
         if (st.deleted) revert DeletedId(rpId);
         if (st.round2EventEmitted) revert WrongRound();
 
-        // Get party ID - this now works for both EOAs and smart accounts
+        // return the partyId if sender is really a participant
         uint256 partyId = _internParticipantCheck();
 
+        // check that we don't have double submission
         if (!_isEmpty(st.round1[partyId].commShare)) revert AlreadySubmitted();
 
+        // Add BabyJubJub Elements together and keep running total
         _addToAggregate(st, data.commShare.x, data.commShare.y);
         st.round1[partyId] = data;
         _tryEmitRound2Event(rpId, st);
     }
 
-    /// @notice Adds a Round 2 contribution - unchanged
+    /// @notice Adds a Round 2 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
+    /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
     function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data)
         external
         virtual
         onlyProxy
         isReady
     {
+        // check that the contribution is complete
         if (data.ciphers.length != numPeers) revert BadContribution();
-
+        // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
         if (st.deleted) revert DeletedId(rpId);
+        // check that we are actually in round2
         if (!st.round2EventEmitted || st.round3EventEmitted) revert WrongRound();
-
+        // return the partyId if sender is really a participant
         uint256 partyId = _internParticipantCheck();
-
+        // check that this peer did not submit anything for this round
         if (st.round2Done[partyId]) revert AlreadySubmitted();
 
+        // everything looks good - push the ciphertexts
         for (uint256 i = 0; i < numPeers; ++i) {
             st.round2[i][partyId] = data.ciphers[i];
         }
+        // set the contribution to done
         st.round2Done[partyId] = true;
 
-        // Build and verify proof (unchanged logic)
+        // last step verify the proof and potentially revert if proof fails
+
+        // build the public input:
+        // 1) PublicKey from sender (Affine Point Babyjubjub)
+        // 2) Commitment to share (Affine Point Babyjubjub)
+        // 3) Commitment to coeffs (Basefield Babyjubjub)
+        // 4) Ciphertexts for peers (in this case 3 Basefield BabyJubJub)
+        // 5) Commitments to plaintexts (in this case 3 Affine Points BabyJubJub)
+        // 6) Degree (Basefield BabyJubJub)
+        // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
+        // 8) Nonces (in this case 3 Basefield BabyJubJub)
+        // verifier.verifyProof();
         uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] memory publicInputs;
+
         Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
         publicInputs[0] = pubKeyList[partyId].x;
         publicInputs[1] = pubKeyList[partyId].y;
@@ -340,7 +364,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         publicInputs[3] = st.round1[partyId].commShare.y;
         publicInputs[4] = st.round1[partyId].commCoeffs;
         publicInputs[14] = threshold - 1;
-
+        // peer keys
         for (uint256 i = 0; i < numPeers; ++i) {
             publicInputs[5 + i] = data.ciphers[i].cipher;
             publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
@@ -349,39 +373,41 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
             publicInputs[15 + (i * 2) + 1] = pubKeyList[i].y;
             publicInputs[21 + i] = data.ciphers[i].nonce;
         }
-
         _tryEmitRound3Event(rpId, st);
-
+        // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
         if (!keyGenVerifier.verifyProof(data.proof.pA, data.proof.pB, data.proof.pC, publicInputs)) {
             revert InvalidProof();
         }
     }
 
-    /// @notice Adds a Round 3 contribution - unchanged
+    /// @notice Adds a Round 3 contribution to the key generation process for a specific RP. Only callable by registered OPRF peers.
+    /// @param rpId The unique identifier for the RP.
+    /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
     function addRound3Contribution(uint128 rpId) external virtual onlyProxy isReady {
+        // check that we started the key-gen for this rp-id
         Types.RpNullifierGenState storage st = runningKeyGens[rpId];
         if (!st.exists) revert UnknownId(rpId);
+        // check if the rp was deleted in the meantime
         if (st.deleted) revert DeletedId(rpId);
+        // check that we are actually in round3
         if (!st.round3EventEmitted || st.finalizeEventEmitted) revert NotReady();
-
+        // return the partyId if sender is really a participant
         uint256 partyId = _internParticipantCheck();
-
+        // check that this peer did not submit anything for this round
         if (st.round3Done[partyId]) revert AlreadySubmitted();
         st.round3Done[partyId] = true;
 
         if (allRound3Submitted(st)) {
-            rpRegistry[rpId] = Types.RpMaterial({
-                ecdsaKey: st.ecdsaPubKey,
-                nullifierKey: st.keyAggregate
-            });
-
+            // We are done! Register the RP and emit event!
+            rpRegistry[rpId] = Types.RpMaterial({ecdsaKey: st.ecdsaPubKey, nullifierKey: st.keyAggregate});
+            // cleanup all old data
             delete st.ecdsaPubKey;
             delete st.round1;
             delete st.round2;
             delete st.keyAggregate;
             delete st.round2Done;
             delete st.round3Done;
-
+            // we keep the eventsEmitted and exists to prevent participants to double submit
             emit Types.SecretGenFinalize(rpId);
             st.finalizeEventEmitted = true;
         }
@@ -416,7 +442,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return _internParticipantCheck();
     }
 
-    /// @notice Returns ephemeral public keys - works with smart accounts
+    /// @notice Returns ephemeral public keys
     function checkIsParticipantAndReturnEphemeralPublicKeys(uint128 rpId)
         external
         view
@@ -433,7 +459,7 @@ contract RpRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
         return _loadPeerPublicKeys(st);
     }
 
-    /// @notice Returns Round 2 ciphers - works with smart accounts
+    /// @notice Returns Round 2 ciphers
     function checkIsParticipantAndReturnRound2Ciphers(uint128 rpId)
         external
         view
