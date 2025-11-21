@@ -21,14 +21,6 @@ prepare-localstack-secrets:
       --secret-string '0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6'
 
 [group('build')]
-dev-up *args:
-    cd oprf-service/deploy && docker-compose up -d {{ args }}
-
-[group('build')]
-dev-down:
-    cd oprf-service/deploy && docker-compose down
-
-[group('build')]
 export-contract-abi:
     cd contracts && forge build --silent && jq '.abi' out/OprfKeyRegistry.sol/OprfKeyRegistry.json > OprfKeyRegistry.json
 
@@ -82,31 +74,51 @@ lint:
     cd contracts && forge fmt
 
 [group('local-setup')]
-run-services:
+run-services-world:
     #!/usr/bin/env bash
     mkdir -p logs
     cargo build --workspace --release
     # anvil wallet 7
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service0.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
     # anvil wallet 8
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service1.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service1.log 2>&1 &
     pid1=$!
     echo "started service1 with PID $pid1"
     # anvil wallet 9
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service2.log 2>&1  &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service2.log 2>&1  &
     pid2=$!
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
     wait $pid0 $pid1 $pid2
 
 [group('local-setup')]
-run-setup:
+run-services-example:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    cargo build --workspace --release
+    # anvil wallet 7
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service0.log 2>&1 &
+    pid0=$!
+    echo "started service0 with PID $pid0"
+    # anvil wallet 8
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service1.log 2>&1 &
+    pid1=$!
+    echo "started service1 with PID $pid1"
+    # anvil wallet 9
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service2.log 2>&1  &
+    pid2=$!
+    echo "started service2 with PID $pid2"
+    trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
+    wait $pid0 $pid1 $pid2
+
+[group('local-setup')]
+run-setup-world:
     #!/usr/bin/env bash
     mkdir -p logs
     echo "starting localstack and anvil"
-    just dev-up localstack anvil
+    docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d localstack anvil
     sleep 1
     echo "preparing localstack"
     just prepare-localstack-secrets
@@ -119,14 +131,33 @@ run-setup:
     echo "register oprf-nodes..."
     OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
     echo "starting indexer..."
-    REGISTRY_ADDRESS=$account_registry just dev-up postgres world-id-indexer
+    REGISTRY_ADDRESS=$account_registry docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services
-    echo "stoping containers..."
-    just dev-down
+    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services-world
+    echo "stopping containers..."
+    docker compose -f ./oprf-service-world/deploy/docker-compose.yml down
 
 [group('local-setup')]
-run-oprf-key-registry-and-services account_registry:
+run-setup-example:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    echo "starting localstack and anvil"
+    docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d localstack anvil
+    sleep 1
+    echo "preparing localstack"
+    just prepare-localstack-secrets
+    echo "starting OprfKeyRegistry contract.."
+    just deploy-oprf-key-registry-with-deps-anvil | tee logs/deploy_oprf_key_registry.log
+    oprf_key_registry=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_oprf_key_registry.log)
+    echo "register oprf-nodes..."
+    OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
+    echo "starting OPRF services..."
+    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-services-example
+    echo "stopping containers..."
+    docker compose -f ./oprf-service-example/deploy/docker-compose.yml down 
+
+[group('local-setup')]
+run-oprf-key-registry-and-services-world account_registry:
     #!/usr/bin/env bash
     mkdir -p logs
     echo "starting OprfKeyRegistry contract.."
@@ -134,7 +165,7 @@ run-oprf-key-registry-and-services account_registry:
     address=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/oprf_key_registry.log)
     sleep 1
     echo "starting OPRF services..."
-    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services
+    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services-world
 
 [group('dev-client')]
 run-dev-client *args:
