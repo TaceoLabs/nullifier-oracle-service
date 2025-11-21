@@ -312,7 +312,6 @@ mod tests {
     use oprf_world_types::api::v1::OprfRequestAuth;
     use oprf_world_types::proof_inputs::query::MAX_PUBLIC_KEYS;
     use oprf_world_types::{MerkleMembership, MerkleRoot, TREE_DEPTH};
-    use poseidon2::Poseidon2;
     use rand::Rng as _;
     use uuid::Uuid;
 
@@ -329,14 +328,13 @@ mod tests {
         index: u64,
     ) -> ark_babyjubjub::Fq {
         // Hash pk
-        let poseidon2_16 = Poseidon2::<_, 16, 5>::default();
         let mut input = array::from_fn(|_| ark_babyjubjub::Fq::zero());
         input[0] = ark_babyjubjub::Fq::from_be_bytes_mod_order(PK_DS);
         for (i, pk) in pks.iter().enumerate() {
             input[1 + i * 2] = pk.x;
             input[1 + i * 2 + 1] = pk.y;
         }
-        let leaf = poseidon2_16.permutation(&input)[1];
+        let leaf = poseidon2::bn254::t16::permutation(&input)[1];
         merkle_root(leaf, siblings, index)
     }
 
@@ -348,12 +346,12 @@ mod tests {
         let mut current_hash = leaf;
 
         // Merkle chain
-        let poseidon2_2 = Poseidon2::<_, 2, 5>::default();
         for s in siblings {
             if index & 1 == 0 {
-                current_hash = poseidon2_2.permutation(&[current_hash, *s])[0] + current_hash;
+                current_hash =
+                    poseidon2::bn254::t2::permutation(&[current_hash, *s])[0] + current_hash;
             } else {
-                current_hash = poseidon2_2.permutation(&[*s, current_hash])[0] + s;
+                current_hash = poseidon2::bn254::t2::permutation(&[*s, current_hash])[0] + s;
             }
             index >>= 1;
         }

@@ -26,9 +26,9 @@ use crate::{
 };
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::Zero;
+use ark_serde_compat::babyjubjub;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use taceo_ark_serde_compat::babyjubjub;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 

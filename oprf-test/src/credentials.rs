@@ -3,7 +3,6 @@ use eddsa_babyjubjub::EdDSAPrivateKey;
 use oprf_world_types::{
     CredentialsSignature, UserKeyMaterial, UserPublicKeyBatch, proof_inputs::query::MAX_PUBLIC_KEYS,
 };
-use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
 type BaseField = ark_babyjubjub::Fq;
@@ -33,7 +32,6 @@ pub fn random_credential_signature<R: Rng + CryptoRng>(
     let genesis_issued_at = rng.r#gen::<u64>();
     let expires_at = rng.gen_range(current_time_stamp + 1..=u64::MAX);
 
-    let poseidon2_8 = Poseidon2::<_, 8, 5>::default();
     let mut input = [
         BaseField::from_be_bytes_mod_order(CRED_DS),
         type_id,
@@ -44,7 +42,7 @@ pub fn random_credential_signature<R: Rng + CryptoRng>(
         cred_hashes[1],
         BaseField::zero(),
     ];
-    poseidon2_8.permutation_in_place(&mut input);
+    poseidon2::bn254::t8::permutation_in_place(&mut input);
     let sk = EdDSAPrivateKey::random(rng);
 
     CredentialsSignature {

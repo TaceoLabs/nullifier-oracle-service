@@ -12,7 +12,6 @@
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
-use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
 /// A Chaum-Pedersen discrete logarithm equality proof.
@@ -108,7 +107,6 @@ pub(crate) fn challenge_hash(
     r1: Affine,
     r2: Affine,
 ) -> BaseField {
-    let poseidon = Poseidon2::<_, 16, 5>::default();
     let hash_input = [
         DLogEqualityProof::get_dlog_ds(), // Domain separator in capacity of hash
         a.x,
@@ -127,7 +125,7 @@ pub(crate) fn challenge_hash(
         BaseField::zero(),
         BaseField::zero(),
     ];
-    poseidon.permutation(&hash_input)[1] // output first state element as hash output
+    poseidon2::bn254::t16::permutation(&hash_input)[1] // output first state element as hash output
 }
 
 // This is just a modular reduction. We show in the docs why this does not introduce a bias when applied to a uniform element of the base field.

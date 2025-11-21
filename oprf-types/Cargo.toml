@@ -1,21 +1,33 @@
 [package]
-name = "oprf-types"
+name = "taceo-oprf-types"
 version = "0.1.0"
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "Types for TACEO:Oprf"
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-publish.workspace = true
+keywords = [
+  "cryptography",
+  "mpc",
+  "nullifier",
+  "oprf"
+]
+exclude = [".gitignore"]
+publish = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
-circom-types = { workspace = true, features = ["bn254", "groth16", "zkey", "proof"] }
+ark-serde-compat = { workspace = true }
+circom-types = { workspace = true, features = [
+  "bn254",
+  "groth16",
+  "proof",
+  "zkey"
+] }
 eyre = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa", "serde", "pem"] }
+k256 = { workspace = true, features = ["ecdsa", "pem", "serde"] }
 oprf-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-taceo-ark-serde-compat = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }

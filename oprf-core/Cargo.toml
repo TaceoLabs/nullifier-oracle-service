@@ -1,14 +1,21 @@
 [package]
-name = "oprf-core"
+name = "taceo-oprf-core"
 version = "0.1.0"
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "Core implementation of the distributed OPRF protocol for TACEO:Oprf"
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-publish.workspace = true
+keywords = [
+  "cryptography",
+  "mpc",
+  "nullifier",
+  "oprf"
+]
+exclude = [".gitignore"]
+publish = true
 
 [[bench]]
 harness = false
@@ -19,15 +26,15 @@ required-features = ["additive", "server"]
 ark-babyjubjub = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
+ark-serde-compat = { workspace = true, features = ["babyjubjub"] }
 ark-serialize = { workspace = true }
 blake3 = { workspace = true }
 itertools = { workspace = true }
 num-bigint.workspace = true
-poseidon2 = { workspace = true }
+poseidon2 = { workspace = true, features = ["bn254", "t3", "t4", "t16"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 subtle = "2"
-taceo-ark-serde-compat = { workspace = true, features = ["babyjubjub"] }
 uuid = { workspace = true, features = ["v4"] }
 zeroize = { workspace = true, features = ["derive"] }
 

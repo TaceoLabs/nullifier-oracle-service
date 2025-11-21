@@ -4,7 +4,6 @@
 
 use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, UniformRand};
-use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 
 use crate::dlog_equality::{DLogEqualityProof, InvalidProof};
@@ -47,10 +46,9 @@ pub fn get_id_commitment_ds() -> BaseField {
 ///
 /// A `BaseField` element representing the domain-separated OPRF query input.
 pub fn generate_query(index: BaseField, rp_id: BaseField, action: BaseField) -> BaseField {
-    let poseidon = Poseidon2::<_, 4, 5>::default();
     // capacity of the sponge has domain separator
     let input = [get_query_ds(), index, rp_id, action];
-    poseidon.permutation(&input)[1]
+    poseidon2::bn254::t4::permutation(&input)[1]
 }
 
 /// Blinds a query for the OPRF server using a randomly generated blinding factor.
@@ -112,8 +110,7 @@ pub fn finalize_query(
         unblinded_point.y,
     ];
 
-    let poseidon = Poseidon2::<_, 4, 5>::default();
-    let output = poseidon.permutation(&hash_input);
+    let output = poseidon2::bn254::t4::permutation(&hash_input);
     output[1] // Return the first element of the state as the field element,
 }
 

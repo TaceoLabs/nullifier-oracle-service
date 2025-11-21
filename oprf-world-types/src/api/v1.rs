@@ -8,10 +8,10 @@
 //! cryptographic proofs and points with Serde (de)serialization so
 //! they can be sent over the wire.
 
+use ark_serde_compat::babyjubjub;
 use circom_types::{ark_bn254::Bn254, groth16::Proof};
 use eddsa_babyjubjub::EdDSAPublicKey;
 use serde::{Deserialize, Serialize};
-use taceo_ark_serde_compat::babyjubjub;
 
 use crate::MerkleRoot;
 

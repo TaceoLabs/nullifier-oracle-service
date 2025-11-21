@@ -1,7 +1,6 @@
 [package]
 name = "oprf-service"
 version = "0.1.0"
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
@@ -64,5 +63,5 @@ axum-test = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
-poseidon2 = { workspace = true }
+poseidon2 = { workspace = true, features=["t2","t16"] }
 testcontainers-modules = { version = "0.13", features = ["localstack"] }
