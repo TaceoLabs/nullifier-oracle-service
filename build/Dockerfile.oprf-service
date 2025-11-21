@@ -15,7 +15,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
-RUN cargo build --release --bin oprf-service
+RUN cargo build --release --bin oprf-service-world
 
 # Build healthcheck
 FROM rust:1.91-bookworm AS healthcheck-builder
@@ -36,6 +36,6 @@ COPY --from=healthcheck-builder /usr/local/cargo/bin/simple-web-healthcheck /hea
 COPY ./circom/main/query/OPRFQuery.vk.json /app/OPRFQuery.vk.json
 COPY ./circom/main/key-gen/OPRFKeyGen.13.zkey /app/OPRFKeyGenProof.13.zkey
 COPY ./circom/main/key-gen/OPRFKeyGenGraph.13.bin /app/OPRFKeyGenGraph.13.bin
-COPY --from=builder /app/target/release/oprf-service /app/oprf-service
+COPY --from=builder /app/target/release/oprf-service-world /app/oprf-service-world
 
-ENTRYPOINT [ "/app/oprf-service" ]
+ENTRYPOINT [ "/app/oprf-service-world" ]
