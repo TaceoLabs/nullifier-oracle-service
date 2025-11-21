@@ -2,24 +2,24 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {RpRegistry} from "../src/RpRegistry.sol";
+import {OprfKeyRegistry} from "../src/OprfKeyRegistry.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
 import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
 import {Types} from "../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {aliceRound2Contribution, bobRound2Contribution, carolRound2Contribution} from "./RpRegistry.t.sol";
+import {aliceRound2Contribution, bobRound2Contribution, carolRound2Contribution} from "./OprfKeyRegistry.t.sol";
 
 /**
  *
  *
- * @title RpRegistryV2Mock
+ * @title OprfKeyRegistryV2Mock
  *
  *
  * @notice Mock V2 implementation for testing upgrades
  *
  *
  */
-contract RpRegistryV2Mock is RpRegistry {
+contract OprfKeyRegistryV2Mock is OprfKeyRegistry {
     // Add a new state variable to test storage layout preservation
 
     uint256 public newFeature;
@@ -33,13 +33,13 @@ contract RpRegistryV2Mock is RpRegistry {
     }
 }
 
-contract RpRegistryUpgradeTest is Test {
+contract OprfKeyRegistryUpgradeTest is Test {
     using Types for Types.BabyJubJubElement;
 
     uint256 public constant THRESHOLD = 2;
     uint256 public constant MAX_PEERS = 3;
 
-    RpRegistry public rpRegistry;
+    OprfKeyRegistry public oprfKeyRegistry;
     BabyJubJub public accumulator;
     Groth16VerifierKeyGen13 public verifierKeyGen;
     ERC1967Proxy public proxy;
@@ -89,49 +89,47 @@ contract RpRegistryUpgradeTest is Test {
         y: 0x2cf9744859cdd3d29fd15057b7e3ebd2197a1af0bae650e5e40bfcd437dfd299
     });
 
-    Types.EcDsaPubkeyCompressed ecdsaPubKey = Types.EcDsaPubkeyCompressed({x: bytes32(0), yParity: 2});
-
     function setUp() public {
         accumulator = new BabyJubJub();
         verifierKeyGen = new Groth16VerifierKeyGen13();
         // Deploy implementation
-        RpRegistry implementation = new RpRegistry();
+        OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
         bytes memory initData =
-            abi.encodeWithSelector(RpRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
-        rpRegistry = RpRegistry(address(proxy));
+        oprfKeyRegistry = OprfKeyRegistry(address(proxy));
 
         // register participants for runs later
         address[] memory peerAddresses = new address[](3);
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        rpRegistry.registerOprfPeers(peerAddresses);
+        oprfKeyRegistry.registerOprfPeers(peerAddresses);
     }
 
     function testUpgrade() public {
-        // start key generation process for rpId 42
-        // see testE2E in RpRegistry.t.sol for the full process
-        uint128 rpId = 42;
+        // start key generation process for oprfKeyId 42
+        // see testE2E in OprfKeyRegistry.t.sol for the full process
+        uint256 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound1(rpId, THRESHOLD);
-        rpRegistry.initKeyGen(rpId, ecdsaPubKey);
+        emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
+        oprfKeyRegistry.initKeyGen(oprfKeyId);
         vm.stopPrank();
 
         // do round 1 contributions
         vm.prank(bob);
-        rpRegistry.addRound1Contribution(
-            rpId,
+        oprfKeyRegistry.addRound1Contribution(
+            oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        rpRegistry.addRound1Contribution(
-            rpId,
+        oprfKeyRegistry.addRound1Contribution(
+            oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
             })
@@ -140,9 +138,9 @@ contract RpRegistryUpgradeTest is Test {
 
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound2(rpId);
-        rpRegistry.addRound1Contribution(
-            rpId,
+        emit Types.SecretGenRound2(oprfKeyId);
+        oprfKeyRegistry.addRound1Contribution(
+            oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
             })
@@ -151,83 +149,75 @@ contract RpRegistryUpgradeTest is Test {
 
         // do round 2 contributions
         vm.prank(bob);
-        rpRegistry.addRound2Contribution(rpId, bobRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(oprfKeyId, bobRound2Contribution());
         vm.stopPrank();
 
         vm.prank(alice);
-        rpRegistry.addRound2Contribution(rpId, aliceRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(oprfKeyId, aliceRound2Contribution());
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound3(rpId);
+        emit Types.SecretGenRound3(oprfKeyId);
         vm.prank(carol);
-        rpRegistry.addRound2Contribution(rpId, carolRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(oprfKeyId, carolRound2Contribution());
         vm.stopPrank();
 
         // do round 3 contributions
         vm.prank(alice);
-        rpRegistry.addRound3Contribution(rpId);
+        oprfKeyRegistry.addRound3Contribution(oprfKeyId);
         vm.stopPrank();
 
         vm.prank(bob);
-        rpRegistry.addRound3Contribution(rpId);
+        oprfKeyRegistry.addRound3Contribution(oprfKeyId);
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenFinalize(rpId);
+        emit Types.SecretGenFinalize(oprfKeyId);
         vm.prank(carol);
-        rpRegistry.addRound3Contribution(rpId);
+        oprfKeyRegistry.addRound3Contribution(oprfKeyId);
         vm.stopPrank();
 
         // check that the computed nullifier is correct
-        Types.RpMaterial memory material = rpRegistry.getRpMaterial(rpId);
-        assertEq(material.nullifierKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
-        assertEq(material.nullifierKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
-        assertEq(material.ecdsaKey.x, bytes32(0));
-        assertEq(material.ecdsaKey.yParity, 2);
+        Types.BabyJubJubElement memory oprfKey = oprfKeyRegistry.getOprfPublicKey(oprfKeyId);
+        assertEq(oprfKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
+        assertEq(oprfKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
 
         // Now perform upgrade
-        RpRegistryV2Mock implementationV2 = new RpRegistryV2Mock();
+        OprfKeyRegistryV2Mock implementationV2 = new OprfKeyRegistryV2Mock();
         // upgrade as owner
-        RpRegistry(address(proxy)).upgradeToAndCall(address(implementationV2), "");
+        OprfKeyRegistry(address(proxy)).upgradeToAndCall(address(implementationV2), "");
         // Wrap proxy with V2 interface
-        RpRegistryV2Mock rpRegistryV2 = RpRegistryV2Mock(address(proxy));
+        OprfKeyRegistryV2Mock oprfKeyRegistryV2 = OprfKeyRegistryV2Mock(address(proxy));
 
         // Verify storage was preserved
-        Types.RpMaterial memory materialv2 = rpRegistryV2.getRpMaterial(rpId);
-        assertEq(
-            materialv2.nullifierKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738
-        );
-        assertEq(
-            materialv2.nullifierKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329
-        );
-        assertEq(materialv2.ecdsaKey.x, bytes32(0));
-        assertEq(materialv2.ecdsaKey.yParity, 2);
+        Types.BabyJubJubElement memory oprfKeyV2 = oprfKeyRegistryV2.getOprfPublicKey(oprfKeyId);
+        assertEq(oprfKeyV2.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
+        assertEq(oprfKeyV2.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
 
         // Verify new functionality works
-        assertEq(rpRegistryV2.version(), "V2");
-        rpRegistryV2.setNewFeature(42);
-        assertEq(rpRegistryV2.newFeature(), 42);
+        assertEq(oprfKeyRegistryV2.version(), "V2");
+        oprfKeyRegistryV2.setNewFeature(42);
+        assertEq(oprfKeyRegistryV2.newFeature(), 42);
 
         // Verify old functionality still works
-        uint128 newRpId = 43;
+        uint256 newOprfKeyId = 43;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound1(newRpId, 2);
-        rpRegistry.initKeyGen(newRpId, ecdsaPubKey);
+        emit Types.SecretGenRound1(newOprfKeyId, 2);
+        oprfKeyRegistry.initKeyGen(newOprfKeyId);
         vm.stopPrank();
 
         // do round 1 contributions
         vm.prank(bob);
-        rpRegistry.addRound1Contribution(
-            newRpId,
+        oprfKeyRegistry.addRound1Contribution(
+            newOprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        rpRegistry.addRound1Contribution(
-            newRpId,
+        oprfKeyRegistry.addRound1Contribution(
+            newOprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
             })
@@ -236,9 +226,9 @@ contract RpRegistryUpgradeTest is Test {
 
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound2(newRpId);
-        rpRegistry.addRound1Contribution(
-            newRpId,
+        emit Types.SecretGenRound2(newOprfKeyId);
+        oprfKeyRegistry.addRound1Contribution(
+            newOprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
             })
@@ -247,44 +237,38 @@ contract RpRegistryUpgradeTest is Test {
 
         // do round 2 contributions
         vm.prank(bob);
-        rpRegistry.addRound2Contribution(newRpId, bobRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(newOprfKeyId, bobRound2Contribution());
         vm.stopPrank();
 
         vm.prank(alice);
-        rpRegistry.addRound2Contribution(newRpId, aliceRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(newOprfKeyId, aliceRound2Contribution());
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenRound3(newRpId);
+        emit Types.SecretGenRound3(newOprfKeyId);
         vm.prank(carol);
-        rpRegistry.addRound2Contribution(newRpId, carolRound2Contribution());
+        oprfKeyRegistry.addRound2Contribution(newOprfKeyId, carolRound2Contribution());
         vm.stopPrank();
 
         // do round 3 contributions
         vm.prank(alice);
-        rpRegistry.addRound3Contribution(newRpId);
+        oprfKeyRegistry.addRound3Contribution(newOprfKeyId);
         vm.stopPrank();
 
         vm.prank(bob);
-        rpRegistry.addRound3Contribution(newRpId);
+        oprfKeyRegistry.addRound3Contribution(newOprfKeyId);
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenFinalize(newRpId);
+        emit Types.SecretGenFinalize(newOprfKeyId);
         vm.prank(carol);
-        rpRegistry.addRound3Contribution(newRpId);
+        oprfKeyRegistry.addRound3Contribution(newOprfKeyId);
         vm.stopPrank();
 
         // check that the computed nullifier is correct
-        Types.RpMaterial memory materialnew = rpRegistry.getRpMaterial(newRpId);
-        assertEq(
-            materialnew.nullifierKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738
-        );
-        assertEq(
-            materialnew.nullifierKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329
-        );
-        assertEq(materialnew.ecdsaKey.x, bytes32(0));
-        assertEq(materialnew.ecdsaKey.yParity, 2);
+        Types.BabyJubJubElement memory oprfKeyNew = oprfKeyRegistry.getOprfPublicKey(newOprfKeyId);
+        assertEq(oprfKeyNew.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
+        assertEq(oprfKeyNew.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
     }
 }
 

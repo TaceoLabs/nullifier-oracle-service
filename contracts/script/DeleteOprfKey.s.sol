@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {OprfKeyRegistry} from "../src/OprfKeyRegistry.sol";
 
-contract RevokeKeyGenAdminScript is Script {
+contract DeleteRpMaterialScript is Script {
     OprfKeyRegistry public oprfKeyRegistry;
 
     function setUp() public {
@@ -12,10 +12,11 @@ contract RevokeKeyGenAdminScript is Script {
     }
 
     function run() public {
-        address admin = vm.envAddress("ADMIN_ADDRESS_REGISTER");
+        uint256 oprfKeyId = vm.envUint("OPRF_KEY_ID");
         vm.startBroadcast();
-        oprfKeyRegistry.addKeyGenAdmin(admin);
+        oprfKeyRegistry.deleteOprfPublicKey(oprfKeyId);
         vm.stopBroadcast();
-        console.log("Added new admin:", admin, "at: ", address(oprfKeyRegistry));
+
+        console.log("Deleted OPRF public-key", oprfKeyId, "from OprfKeyRegistry at: ", address(oprfKeyRegistry));
     }
 }

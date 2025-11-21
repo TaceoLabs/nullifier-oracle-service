@@ -29,8 +29,7 @@ library Types {
         BabyJubJubElement commitment;
     }
 
-    struct RpNullifierGenState {
-        EcDsaPubkeyCompressed ecdsaPubKey;
+    struct OprfKeyGenState {
         Round1Contribution[] round1;
         SecretGenCiphertext[][] round2;
         BabyJubJubElement keyAggregate;
@@ -54,23 +53,13 @@ library Types {
         uint256 y;
     }
 
-    struct EcDsaPubkeyCompressed {
-        bytes32 x;
-        uint256 yParity; // 0 or 1
-    }
-
-    struct RpMaterial {
-        EcDsaPubkeyCompressed ecdsaKey;
-        BabyJubJubElement nullifierKey;
-    }
-
     // events for key-gen
-    event SecretGenRound1(uint128 indexed rpId, uint256 threshold);
-    event SecretGenRound2(uint128 indexed rpId);
-    event SecretGenRound3(uint128 indexed rpId);
-    event SecretGenFinalize(uint128 indexed rpId);
+    event SecretGenRound1(uint256 indexed oprfKeyId, uint256 threshold);
+    event SecretGenRound2(uint256 indexed oprfKeyId);
+    event SecretGenRound3(uint256 indexed oprfKeyId);
+    event SecretGenFinalize(uint256 indexed oprfKeyId);
     // event to delete created key
-    event KeyDeletion(uint128 indexed rpId);
+    event KeyDeletion(uint256 indexed oprfKeyId);
     // admin events
     event KeyGenAdminRevoked(address indexed admin);
     event KeyGenAdminRegistered(address indexed admin);
