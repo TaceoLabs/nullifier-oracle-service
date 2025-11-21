@@ -5,7 +5,6 @@ use std::{
 };
 
 use alloy::primitives::{Address, address};
-use oprf_service::config::{Environment, OprfPeerConfig};
 use reqwest::StatusCode;
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt as _,
@@ -46,7 +45,7 @@ pub const OPRF_PEER_ADDRESS_2: Address = address!("0xa0Ee7A142d267C1f36714E4a8F7
 pub static MOCK_RP_SECRET_KEY: LazyLock<k256::SecretKey> =
     LazyLock::new(|| k256::SecretKey::from_slice(&[42u8; 24]).unwrap());
 
-async fn start_service(
+async fn start_world_service(
     id: usize,
     chain_ws_rpc_url: &str,
     secret_manager: TestSecretManager,
@@ -55,15 +54,12 @@ async fn start_service(
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
-    let config = OprfPeerConfig {
-        environment: Environment::Dev,
+    let config = oprf_service_world::config::OprfPeerConfig {
+        environment: oprf_service_world::config::Environment::Dev,
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
-        input_max_body_limit: 32768,
         request_lifetime: Duration::from_secs(5 * 60),
         session_cleanup_interval: Duration::from_micros(1000000),
-        max_concurrent_jobs: 100000,
         max_wait_time_shutdown: Duration::from_secs(10),
-        session_store_mailbox: 4096,
         user_verification_key_path: dir.join("../circom/main/query/OPRFQuery.vk.json"),
         rp_secret_id_prefix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
@@ -79,7 +75,48 @@ async fn start_service(
     let never = async { futures::future::pending::<()>().await };
 
     tokio::spawn(async move {
-        let res = oprf_service::start(config, Arc::new(secret_manager), never).await;
+        let res = oprf_service_world::start(config, Arc::new(secret_manager), never).await;
+        eprintln!("service failed to start: {res:?}");
+    });
+    // very graceful timeout for CI
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            if reqwest::get(url.clone() + "/health").await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    })
+    .await
+    .expect("can start");
+    url
+}
+
+async fn start_example_service(
+    id: usize,
+    chain_ws_rpc_url: &str,
+    secret_manager: TestSecretManager,
+    rp_registry_contract: Address,
+) -> String {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
+    let config = oprf_service_example::config::OprfPeerConfig {
+        environment: oprf_service_example::config::Environment::Dev,
+        bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
+        request_lifetime: Duration::from_secs(5 * 60),
+        session_cleanup_interval: Duration::from_micros(1000000),
+        max_wait_time_shutdown: Duration::from_secs(10),
+        rp_secret_id_prefix: format!("oprf/rp/n{id}"),
+        rp_registry_contract,
+        chain_ws_rpc_url: chain_ws_rpc_url.into(),
+        key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
+        key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
+        wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+    };
+    let never = async { futures::future::pending::<()>().await };
+
+    tokio::spawn(async move {
+        let res = oprf_service_example::start(config, Arc::new(secret_manager), never).await;
         eprintln!("service failed to start: {res:?}");
     });
     // very graceful timeout for CI
@@ -99,18 +136,18 @@ async fn start_service(
 pub fn create_secret_managers() -> [TestSecretManager; 3] {
     [
         TestSecretManager::new(
-            "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356".to_string(),
+            "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
         ),
         TestSecretManager::new(
-            "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97".to_string(),
+            "0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
         ),
         TestSecretManager::new(
-            "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6".to_string(),
+            "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
         ),
     ]
 }
 
-pub async fn start_services(
+pub async fn start_world_services(
     chain_ws_rpc_url: &str,
     secret_manager: [TestSecretManager; 3],
     key_gen_contract: Address,
@@ -118,7 +155,7 @@ pub async fn start_services(
 ) -> [String; 3] {
     let [secret_manager0, secret_manager1, secret_manager2] = secret_manager;
     [
-        start_service(
+        start_world_service(
             0,
             chain_ws_rpc_url,
             secret_manager0,
@@ -126,7 +163,7 @@ pub async fn start_services(
             account_registry_contract,
         )
         .await,
-        start_service(
+        start_world_service(
             1,
             chain_ws_rpc_url,
             secret_manager1,
@@ -134,7 +171,7 @@ pub async fn start_services(
             account_registry_contract,
         )
         .await,
-        start_service(
+        start_world_service(
             2,
             chain_ws_rpc_url,
             secret_manager2,
@@ -142,6 +179,19 @@ pub async fn start_services(
             account_registry_contract,
         )
         .await,
+    ]
+}
+
+pub async fn start_example_services(
+    chain_ws_rpc_url: &str,
+    secret_manager: [TestSecretManager; 3],
+    key_gen_contract: Address,
+) -> [String; 3] {
+    let [secret_manager0, secret_manager1, secret_manager2] = secret_manager;
+    [
+        start_example_service(0, chain_ws_rpc_url, secret_manager0, key_gen_contract).await,
+        start_example_service(1, chain_ws_rpc_url, secret_manager1, key_gen_contract).await,
+        start_example_service(2, chain_ws_rpc_url, secret_manager2, key_gen_contract).await,
     ]
 }
 

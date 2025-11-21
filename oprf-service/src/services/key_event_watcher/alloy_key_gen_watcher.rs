@@ -35,7 +35,7 @@ use crate::{rp_registry::RpRegistry, services::key_event_watcher::KeyGenEventLis
 ///
 /// Subscribes to blockchain events for key generation rounds and reports
 /// contributions back to the contract.
-pub(crate) struct AlloyKeyGenWatcher {
+pub struct AlloyKeyGenWatcher {
     contract_address: Address,
     provider: DynProvider,
 }
@@ -50,7 +50,7 @@ impl AlloyKeyGenWatcher {
     /// * `rpc_url` - WebSocket RPC URL for blockchain connection
     /// * `contract_address` - Address of the RpRegistry contract
     /// * `wallet` - Ethereum wallet for signing transactions
-    pub(crate) async fn new(
+    pub async fn new(
         rpc_url: &str,
         contract_address: Address,
         wallet: EthereumWallet,

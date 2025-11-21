@@ -11,22 +11,41 @@
 //! and current/previous epoch secrets.
 
 use alloy::hex;
+use alloy::signers::local::PrivateKeySigner;
+use aws_config::Region;
+use aws_sdk_secretsmanager::config::Credentials;
 use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
 use k256::ecdsa::SigningKey;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use std::collections::HashMap;
+use std::str::FromStr as _;
+use zeroize::Zeroize as _;
 
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
 use eyre::{Context, ContextCompat};
 use oprf_types::crypto::RpNullifierKey;
 use oprf_types::{RpId, ShareEpoch};
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
 use crate::services::secret_manager::{SecretManager, StoreDLogShare};
+
+pub async fn localstack_aws_config() -> aws_config::SdkConfig {
+    let region_provider = Region::new("us-east-1");
+    let credentials = Credentials::new("test", "test", None, None, "Static");
+    // in case we don't want the standard url, we can configure it via the environment
+    aws_config::from_env()
+        .region(region_provider)
+        .endpoint_url(
+            std::env::var("TEST_AWS_ENDPOINT_URL").unwrap_or("http://localhost:4566".to_string()),
+        )
+        .credentials_provider(credentials)
+        .load()
+        .await
+}
 
 /// AWS Secret Manager client wrapper.
 #[derive(Debug, Clone)]
@@ -116,12 +135,12 @@ impl From<AwsRpSecret> for RpMaterial {
 
 #[async_trait]
 impl SecretManager for AwsSecretManager {
-    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<SecretString> {
+    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<PrivateKeySigner> {
         tracing::debug!(
             "checking if there exists a private key at: {}",
             self.wallet_private_key_secret_id
         );
-        let hex_private_key = match self
+        let mut hex_private_key = match self
             .client
             .get_secret_value()
             .secret_id(&self.wallet_private_key_secret_id)
@@ -158,7 +177,12 @@ impl SecretManager for AwsSecretManager {
                 }
             }
         };
-        Ok(hex_private_key)
+
+        let private_key = PrivateKeySigner::from_str(hex_private_key.expose_secret())
+            .context("while reading wallet private key")?;
+        // set private key to all zeroes
+        hex_private_key.zeroize();
+        Ok(private_key)
     }
 
     /// Loads all RP secrets from AWS Secrets Manager.
@@ -320,14 +344,17 @@ fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{AwsSecretManager, SecretManager as _};
+    use std::str::FromStr as _;
+
+    use alloy::signers::local::PrivateKeySigner;
     use aws_config::Region;
     use aws_sdk_secretsmanager::config::Credentials;
-    use secrecy::ExposeSecret;
     use testcontainers_modules::{
         localstack::LocalStack,
         testcontainers::{ContainerAsync, ImageExt as _, runners::AsyncRunner as _},
     };
+
+    use crate::services::secret_manager::{SecretManager as _, aws::AwsSecretManager};
 
     const WALLET_SECRET_ID: &str = "wallet_secret_id";
     const RP_SECRET_ID_PREFIX: &str = "rp_suffix";
@@ -384,12 +411,10 @@ pub mod tests {
 
         let secret_string_new_created = secret_manager.load_or_insert_wallet_private_key().await?;
         let secret_string_loading = secret_manager.load_or_insert_wallet_private_key().await?;
-        assert_eq!(
-            secret_string_new_created.expose_secret(),
-            secret_string_loading.expose_secret()
-        );
-        let is_secret = load_secret(client, WALLET_SECRET_ID).await?;
-        assert_eq!(is_secret, secret_string_new_created.expose_secret());
+        assert_eq!(secret_string_new_created, secret_string_loading);
+        let is_secret = PrivateKeySigner::from_str(&load_secret(client, WALLET_SECRET_ID).await?)
+            .expect("valid private key");
+        assert_eq!(is_secret, secret_string_new_created);
 
         Ok(())
     }

@@ -12,9 +12,9 @@ use oprf_types::{
 use tokio::sync::mpsc;
 
 /// Type alias for a shared key generation event listener service.
-pub(crate) type KeyGenEventListenerService = Arc<dyn KeyGenEventListener + Send + Sync>;
+pub type KeyGenEventListenerService = Arc<dyn KeyGenEventListener + Send + Sync>;
 
-pub(crate) mod alloy_key_gen_watcher;
+pub mod alloy_key_gen_watcher;
 
 /// Service trait for subscribing to and reporting key generation events.
 ///
@@ -28,7 +28,7 @@ pub(crate) mod alloy_key_gen_watcher;
 /// # Errors
 /// All methods return [`eyre::Result`] to propagate service or network errors.
 #[async_trait]
-pub(crate) trait KeyGenEventListener {
+pub trait KeyGenEventListener {
     /// Subscribes to a stream of chain events.
     async fn subscribe(&self) -> eyre::Result<mpsc::Receiver<ChainEvent>>;
 

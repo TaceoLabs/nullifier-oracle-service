@@ -8,19 +8,16 @@
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
 use axum::{
     Router,
-    extract::State,
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
     routing::get,
 };
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::AppState;
-
 /// Create a router containing the health endpoints.
 ///
 /// All endpoints have `Cache-Control: no-cache` set.
-pub(crate) fn routes() -> Router<AppState> {
+pub(crate) fn routes() -> Router {
     Router::new()
         .route("/health", get(health))
         .layer(SetResponseHeaderLayer::overriding(
@@ -32,6 +29,6 @@ pub(crate) fn routes() -> Router<AppState> {
 /// General health check endpoint.
 ///
 /// Returns `200 OK` with a plain `"healthy"` response.
-async fn health(State(_app_state): State<AppState>) -> impl IntoResponse {
+async fn health() -> impl IntoResponse {
     (StatusCode::OK, "healthy")
 }

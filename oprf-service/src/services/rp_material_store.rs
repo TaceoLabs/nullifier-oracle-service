@@ -5,8 +5,6 @@
 //! Use the store to retrieve or add shares and public keys safely.  
 //! Each RP's material is represented by [`RpMaterial`].
 
-use ark_ff::{BigInteger as _, PrimeField as _};
-use k256::ecdsa::signature::Verifier;
 use oprf_core::{
     ddlog_equality::shamir::{
         DLogCommitmentsShamir, DLogProofShareShamir, DLogSessionShamir, DLogShareShamir,
@@ -34,13 +32,13 @@ type RpMaterialStoreResult<T> = std::result::Result<T, RpMaterialStoreError>;
 /// Methods that are used in other contexts may return one of the variants
 /// here or return an `eyre::Result`.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum RpMaterialStoreError {
+pub enum RpMaterialStoreError {
     /// Cannot find the RP.
     #[error("Cannot find RP id: {0}")]
-    NoSuchRp(RpId),
-    /// Cannot find a secret share for the given RP at the requested epoch.
-    #[error("Cannot find share for Rp with epoch: {0:?}")]
-    UnknownRpShareEpoch(NullifierShareIdentifier),
+    UnknownRp(RpId),
+    /// Cannot find a secret share for the epoch.
+    #[error("Cannot find share with epoch: {0}")]
+    UnknownShareEpoch(ShareEpoch),
     /// Cannot verify nonce signature.
     #[error(transparent)]
     NonceSignatureError(#[from] k256::ecdsa::Error),
@@ -103,35 +101,6 @@ impl RpMaterialStore {
         Self(Arc::new(RwLock::new(inner)))
     }
 
-    /// Verifies an ECDSA signature over a nonce and current_time_stamp for the given relying party.
-    ///
-    /// The BabyJubJub `nonce` is converted into `ark_ff::BigInt` and then into **little-endian bytes**.
-    /// The `current_time_stamp` (given as u64 seconds since `UNIX_EPOCH`) is converted into **little-endian bytes**.
-    /// The msg `nonce || current_time_stamp` is then verified against the stored ECDSA public key for `rp_id`
-    /// using the provided `signature`.
-    ///
-    /// Returns `Ok(())` on success or an error if the relying party is unknown
-    /// or the signature check fails.
-    #[instrument(level = "debug", skip(self, nonce, signature))]
-    pub(crate) fn verify_nonce_signature(
-        &self,
-        rp_id: RpId,
-        nonce: ark_babyjubjub::Fq,
-        current_time_stamp: u64,
-        signature: &k256::ecdsa::Signature,
-    ) -> RpMaterialStoreResult<()> {
-        tracing::debug!("verifying nonce: {nonce}");
-        let vk = self
-            .get_rp_public_key(rp_id)
-            .ok_or_else(|| RpMaterialStoreError::NoSuchRp(rp_id))?;
-        let mut msg = Vec::new();
-        msg.extend(nonce.into_bigint().to_bytes_le());
-        msg.extend(current_time_stamp.to_le_bytes());
-        vk.verify(&msg, signature)?;
-        tracing::debug!("success");
-        Ok(())
-    }
-
     /// Computes C = B * x_share and commitments to a random value k_share.
     ///
     /// This generates the peer's partial contribution used in the DLogEqualityProof.
@@ -145,9 +114,11 @@ impl RpMaterialStore {
         share_identifier: &NullifierShareIdentifier,
     ) -> RpMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
         tracing::debug!("computing partial commitment");
-        let share = self.get(share_identifier).ok_or_else(|| {
-            RpMaterialStoreError::UnknownRpShareEpoch(share_identifier.to_owned())
-        })?;
+        let share = self
+            .get(share_identifier.rp_id)
+            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?
+            .get_share(share_identifier.share_epoch)
+            .ok_or_else(|| RpMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch))?;
         Ok(DLogSessionShamir::partial_commitments(
             point_b,
             share,
@@ -172,10 +143,12 @@ impl RpMaterialStore {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
             .get_rp_nullifier_key(share_identifier.rp_id)
-            .ok_or_else(|| RpMaterialStoreError::NoSuchRp(share_identifier.rp_id))?;
-        let share = self.get(share_identifier).ok_or_else(|| {
-            RpMaterialStoreError::UnknownRpShareEpoch(share_identifier.to_owned())
-        })?;
+            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?;
+        let share = self
+            .get(share_identifier.rp_id)
+            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?
+            .get_share(share_identifier.share_epoch)
+            .ok_or_else(|| RpMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch))?;
         let lagrange_coefficient = shamir::single_lagrange_from_coeff(
             my_party_id.into_inner() + 1,
             challenge.get_contributing_parties(),
@@ -188,14 +161,12 @@ impl RpMaterialStore {
             lagrange_coefficient,
         ))
     }
+
     /// Retrieves the secret share for the given [`NullifierShareIdentifier`].
     ///
     /// Returns `None` if the RP or share epoch is not found.
-    fn get(&self, key_identifier: &NullifierShareIdentifier) -> Option<DLogShareShamir> {
-        self.0
-            .read()
-            .get(&key_identifier.rp_id)?
-            .get_share(key_identifier.share_epoch)
+    fn get(&self, rp_id: RpId) -> Option<RpMaterial> {
+        self.0.read().get(&rp_id).cloned()
     }
 
     /// Returns the ECDSA `VerifyingKey` of the specified RP, if registered.

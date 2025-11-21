@@ -8,19 +8,19 @@
 
 use std::sync::Arc;
 
+use alloy::signers::local::PrivateKeySigner;
 use async_trait::async_trait;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_types::{RpId, ShareEpoch, crypto::RpNullifierKey};
-use secrecy::SecretString;
 
 use crate::services::rp_material_store::RpMaterialStore;
 
-pub(crate) mod aws;
+pub mod aws;
 
 /// Dynamic trait object for secret manager service.
 ///
 /// Must be `Send + Sync` to work with async contexts (e.g., Axum).
-pub(crate) type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
+pub type SecretManagerService = Arc<dyn SecretManager + Send + Sync>;
 
 /// Data required to store a new RP's DLog share.
 ///
@@ -45,7 +45,8 @@ pub trait SecretManager {
     /// Loads the wallet private key from the secret-manager.
     ///
     /// If the secret-manager can't find a secret, it shall create a new one, store it and then return the new one.
-    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<SecretString>;
+    async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<PrivateKeySigner>;
+
     /// Loads the DLog secrets and creates a [`RpMaterialStore`].
     async fn load_secrets(&self) -> eyre::Result<RpMaterialStore>;
 

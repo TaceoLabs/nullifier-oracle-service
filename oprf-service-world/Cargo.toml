@@ -1,5 +1,5 @@
 [package]
-name = "oprf-service"
+name = "oprf-service-world"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -13,27 +13,24 @@ publish.workspace = true
 alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
 ark-bn254.workspace = true
-ark-ec.workspace = true
-ark-ff.workspace = true
+ark-groth16.workspace = true
 async-trait = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
-aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
 circom-types = { workspace = true, features = ["bn254", "groth16", "zkey"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
-git-version = { workspace = true }
 groth16-material = { workspace = true }
-http = { workspace = true }
-itertools = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa", "serde"] }
+humantime = { workspace = true }
 metrics = { workspace = true }
-oprf-core = { workspace = true }
+nodes-telemetry = { workspace = true }
+oprf-service = { workspace = true }
 oprf-types = { workspace = true }
+oprf-world-types = { workspace = true }
 parking_lot = { workspace = true }
-rand.workspace = true
+rustls = { workspace = true }
 secrecy = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = [
@@ -44,16 +41,13 @@ tokio = { workspace = true, features = [
   "time",
   "tokio-macros",
 ] }
-tokio-util = { workspace = true }
-tower-http = { workspace = true, features = ["set-header", "trace"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
-zeroize = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 axum-test = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
-poseidon2 = { workspace = true, features=["t2","t16"] }
+poseidon2 = { workspace = true }
 testcontainers-modules = { version = "0.13", features = ["localstack"] }

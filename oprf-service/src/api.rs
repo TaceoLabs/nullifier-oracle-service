@@ -8,14 +8,11 @@
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
 use alloy::primitives::Address;
-use axum::Router;
-use oprf_types::crypto::PartyId;
+use axum::{Router, response::IntoResponse};
+use serde::{Serialize, de::DeserializeOwned};
 use tower_http::trace::TraceLayer;
 
-use crate::{AppState, services::oprf::OprfService};
-
-#[cfg(test)]
-use axum_test::TestServer;
+use crate::services::oprf::{OprfReqAuthService, OprfService};
 
 pub(crate) mod errors;
 pub(crate) mod health;
@@ -33,39 +30,20 @@ pub(crate) mod v1;
 ///
 /// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
 /// instances needed to handle requests.
-pub(crate) fn new_app(
-    party_id: PartyId,
+pub fn routes<
+    ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    ReqAuthError: IntoResponse + Send + Sync + 'static,
+>(
     oprf_service: OprfService,
+    req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
     wallet_address: Address,
 ) -> Router {
-    let app_state = AppState {
-        oprf_service,
-        party_id,
-        wallet_address,
-    };
     Router::new()
-        .nest("/api/v1", v1::build())
+        .nest(
+            "/api/v1",
+            v1::routes(oprf_service.clone(), req_auth_service),
+        )
         .merge(health::routes())
-        .merge(info::routes())
+        .merge(info::routes(oprf_service.clone(), wallet_address))
         .layer(TraceLayer::new_for_http())
-        .with_state(app_state)
-}
-
-/// Builds a [`TestServer`] with the same configuration as [`new_app`].
-///
-/// This function is only compiled in tests (`#[cfg(test)]`) and provides a convenient way
-/// to spin up the full API with mock services and expectations.
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn new_test_app(
-    party_id: PartyId,
-    oprf_service: OprfService,
-    wallet_address: Address,
-) -> TestServer {
-    let app = new_app(party_id, oprf_service, wallet_address);
-    TestServer::builder()
-        .expect_success_by_default()
-        .mock_transport()
-        .build(app)
-        .unwrap()
 }

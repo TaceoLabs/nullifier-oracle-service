@@ -37,7 +37,7 @@ use crate::services::secret_manager::SecretManagerService;
 /// Spawns a dedicated Tokio task that subscribes at the provided
 /// [`KeyGenEventListenerService`] for [`ChainEvent`]s. Calls the
 /// corresponding method and reports the result back.
-pub(crate) struct ChainEventHandler(JoinHandle<()>);
+pub struct ChainEventHandler(JoinHandle<()>);
 
 impl ChainEventHandler {
     /// Spawns a new chain event handler.
@@ -51,7 +51,7 @@ impl ChainEventHandler {
     ///
     /// # Returns
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
-    pub(crate) fn spawn(
+    pub fn spawn(
         watcher: KeyGenEventListenerService,
         rp_material_store: RpMaterialStore,
         secret_manager: SecretManagerService,
@@ -81,7 +81,7 @@ impl ChainEventHandler {
     ///
     /// This will return once the cancellation token is triggered and the periodic
     /// loop has completed.
-    pub(crate) async fn wait(self) {
+    pub async fn wait(self) {
         self.0.await.expect("did not panic");
     }
 }

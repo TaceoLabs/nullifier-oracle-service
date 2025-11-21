@@ -28,7 +28,7 @@ use eddsa_babyjubjub::EdDSAPrivateKey;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
-async fn nullifier_e2e_test() -> eyre::Result<()> {
+async fn world_nullifier_e2e_test() -> eyre::Result<()> {
     let (_anvil_container, host_rpc_url, host_ws_url, bridge_rpc_url, bridge_ws_url) =
         anvil_testcontainer().await?;
     let mut rng = rand::thread_rng();
@@ -54,7 +54,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     .await?;
 
     println!("Starting OPRF peers...");
-    let oprf_services = oprf_test::start_services(
+    let oprf_services = oprf_test::start_world_services(
         &host_ws_url,
         oprf_test::create_secret_managers(),
         rp_registry_contract,
@@ -203,6 +203,66 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
+async fn example_nullifier_e2e_test() -> eyre::Result<()> {
+    let (_anvil_container, _host_rpc_url, host_ws_url, _bridge_rpc_url, _bridge_ws_url) =
+        anvil_testcontainer().await?;
+    let mut rng = rand::thread_rng();
+
+    println!("Deploying RpRegistry contract...");
+    let rp_registry_contract = rp_registry_scripts::deploy_test_setup(
+        &host_ws_url,
+        &TACEO_ADMIN_ADDRESS.to_string(),
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+
+    println!("Starting OPRF peers...");
+    let oprf_services = oprf_test::start_example_services(
+        &host_ws_url,
+        oprf_test::create_secret_managers(),
+        rp_registry_contract,
+    )
+    .await;
+
+    let rp_pk = EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
+
+    let rp_id = rp_registry_scripts::init_key_gen(
+        &host_ws_url,
+        rp_registry_contract,
+        rp_pk,
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+    println!("init key-gen with rp id: {rp_id}");
+
+    println!("Fetching RpNullifierKey...");
+    let ws = WsConnect::new(&host_ws_url);
+    let provider = ProviderBuilder::new()
+        .connect_ws(ws)
+        .await
+        .context("while connecting to RPC")?;
+    let contract = RpRegistry::new(rp_registry_contract, provider.clone());
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    // very graceful timeout for CI
+    let rp_nullifier_key = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            interval.tick().await;
+            let maybe_rp_nullifier_key =
+                contract.getRpNullifierKey(rp_id.into_inner()).call().await;
+            if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
+                return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+            }
+        }
+    })
+    .await
+    .context("could not finish key-gen in 60 seconds")?
+    .context("while polling RP key")?;
+
+    println!("Running OPRF client flow...");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[serial_test::file_serial]
 async fn test_delete_rp_material() -> eyre::Result<()> {
     let (_anvil_container, host_rpc_url, host_ws_url, _, _) = anvil_testcontainer().await?;
 
@@ -218,7 +278,7 @@ async fn test_delete_rp_material() -> eyre::Result<()> {
 
     let secret_managers = oprf_test::create_secret_managers();
     println!("Starting OPRF peers...");
-    let oprf_services = oprf_test::start_services(
+    let oprf_services = oprf_test::start_world_services(
         &host_ws_url,
         secret_managers.clone(),
         rp_registry_contract,

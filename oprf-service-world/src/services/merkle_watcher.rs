@@ -16,8 +16,6 @@ use tracing::instrument;
 use crate::metrics::METRICS_MERKLE_COUNT;
 
 pub(crate) mod alloy_merkle_watcher;
-#[cfg(test)]
-pub(crate) mod test;
 
 /// Dyn trait for the watcher service. Must be `Send` + `Sync` to work with Axum.
 pub(crate) type MerkleWatcherService = Arc<dyn MerkleWatcher + Send + Sync>;

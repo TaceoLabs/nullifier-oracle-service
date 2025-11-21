@@ -50,16 +50,6 @@ pub struct OprfPeerConfig {
     #[clap(long, env = "OPRF_SERVICE_BIND_ADDR", default_value = "0.0.0.0:4321")]
     pub bind_addr: SocketAddr,
 
-    /// Max size we allow for uploading input for jobs in bytes.
-    ///
-    /// Default value = 32kB,
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_INPUT_MAX_BODY_LIMIT",
-        default_value = "32768"
-    )]
-    pub input_max_body_limit: usize,
-
     /// Max time a request is valid, after that it is automatically cancelled and will be cleaned up.
     #[clap(
         long,
@@ -81,14 +71,6 @@ pub struct OprfPeerConfig {
     )]
     pub session_cleanup_interval: Duration,
 
-    /// Max concurrently allowed HTTP requests.
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_MAX_CONCURRENT_HTTP_REQUESTS",
-        default_value = "100000"
-    )]
-    pub max_concurrent_jobs: usize,
-
     /// Max wait time the service waits for its workers during shutdown.
     #[clap(
         long,
@@ -99,25 +81,9 @@ pub struct OprfPeerConfig {
     )]
     pub max_wait_time_shutdown: Duration,
 
-    /// Mailbox size for the session store.
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_SESSION_MAILBOX_SIZE",
-        default_value = "4096"
-    )]
-    pub session_store_mailbox: usize,
-
-    /// Path to the verification key used to verify the proof provided by the user during session initialization.
-    #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
-    pub user_verification_key_path: PathBuf,
-
     /// The Address of the RpRegistry contract.
     #[clap(long, env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT")]
     pub rp_registry_contract: Address,
-
-    /// The address of the AccountRegistry smart contract
-    #[clap(long, env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT")]
-    pub account_registry_contract: Address,
 
     /// The websocket rpc url of the chain
     #[clap(
@@ -139,32 +105,6 @@ pub struct OprfPeerConfig {
     /// Secret Id of the wallet private key.
     #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY_SECRET_ID")]
     pub wallet_private_key_secret_id: String,
-
-    /// The maximum size of the merkle store.
-    ///
-    /// Will drop old merkle roots if this capacity is reached.
-    #[clap(long, env = "OPRF_SERVICE_MERKLE_STORE_SIZE", default_value = "100")]
-    pub max_merkle_store_size: usize,
-
-    /// The maximum delta between the received current_time_stamp the service current_time_stamp
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_CURRENT_TIME_STAMP_MAX_DIFFERENCE",
-        default_value = "5min",
-        value_parser = humantime::parse_duration
-
-    )]
-    pub current_time_stamp_max_difference: Duration,
-
-    /// Interval to cleanup the signature history
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_SIGNATURE_HISTORY_CLEANUP_INTERVAL",
-        default_value = "10min",
-        value_parser = humantime::parse_duration
-
-    )]
-    pub signature_history_cleanup_interval: Duration,
 
     /// The location of the zkey for the key-gen proof in round 2 of KeyGen
     #[clap(long, env = "OPRF_SERVICE_KEY_GEN_ZKEY")]

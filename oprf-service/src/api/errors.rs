@@ -1,154 +1,57 @@
 //! API Error Handling
 //!
-//! This module defines the error types and conversions used by the OPRF peer API.
-//!
-//! - [`ApiError`] is a structured error returned to clients, including an optional
-//!   message and an HTTP status code.
-//! - [`ApiErrors`] is an enum representing different kinds of API errors internally,
-//!   including authorization errors, resource-not-found errors, explicit errors, and
-//!   internal server errors.
-//!
 //! Conversions are provided from service-level errors like [`OprfServiceError`] into
 //! API errors, ensuring consistent HTTP responses.
 //!
 //! All errors implement [`IntoResponse`] so they can be directly returned from Axum
 //! handlers.
 
-use axum::{Json, http::StatusCode, response::IntoResponse};
-use eyre::Report;
-use serde::{Serialize, Serializer};
+use axum::{http::StatusCode, response::IntoResponse};
 use uuid::Uuid;
 
-use crate::services::{
-    merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
-    rp_material_store::RpMaterialStoreError,
-};
+use crate::services::{oprf::OprfServiceError, rp_material_store::RpMaterialStoreError};
 
-/// A structured API error returned to clients.
-#[derive(Debug, Serialize)]
-pub(crate) struct ApiError {
-    /// Optional human-readable message.
-    pub(crate) message: Option<String>,
-    /// HTTP status code for this error.
-    #[serde(serialize_with = "serialize_status_code")]
-    pub(crate) code: StatusCode,
-}
-
-impl IntoResponse for ApiError {
-    /// Convert the API error into an Axum response.
-    fn into_response(self) -> axum::response::Response {
-        (self.code, Json(self)).into_response()
-    }
-}
-
-/// Result type used by API endpoints.
-pub(crate) type ApiResult<T> = Result<T, ApiErrors>;
-
-/// Represents all possible API errors internally.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ApiErrors {
-    #[error("an explicit error was returned: {0:?}")]
-    ExplicitError(ApiError),
-    #[error("Cannot find resource: \"{0}\"")]
-    NotFound(String),
-    #[error("Bad request: \"{0}\"")]
-    BadRequest(String),
-    #[error(transparent)]
-    InternalSeverError(#[from] eyre::Report),
-}
-
-impl From<ApiError> for ApiErrors {
-    fn from(inner: ApiError) -> Self {
-        ApiErrors::ExplicitError(inner)
-    }
-}
-
-impl From<MerkleWatcherError> for ApiErrors {
-    fn from(value: MerkleWatcherError) -> Self {
-        tracing::debug!("{value:?}");
-        ApiErrors::InternalSeverError(eyre::eyre!("{}", value.0))
-    }
-}
-
-impl From<OprfServiceError> for ApiErrors {
-    fn from(value: OprfServiceError) -> Self {
-        tracing::debug!("{value:?}");
-        match value {
-            OprfServiceError::InvalidProof => ApiErrors::BadRequest("invalid proof".to_string()),
-            OprfServiceError::BlindedQueryIsIdentity => {
-                ApiErrors::BadRequest("blinded query not allowed to be identity".to_string())
-            }
-            OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
-            OprfServiceError::RpMaterialStoreError(rp_material_error) => {
-                Self::from(rp_material_error)
-            }
-            OprfServiceError::TimeStampDifference => {
-                ApiErrors::BadRequest("the time stamp difference is too large".to_string())
-            }
-            OprfServiceError::DuplicateSignatureError(err) => {
-                ApiErrors::BadRequest(err.to_string())
-            }
-            OprfServiceError::MerkleWatcherError(merkle_watcher_error) => {
-                Self::from(merkle_watcher_error)
-            }
-            OprfServiceError::InvalidMerkleRoot => {
-                ApiErrors::BadRequest("invalid merkle root".to_string())
-            }
-            OprfServiceError::InternalServerErrpr(report) => ApiErrors::InternalSeverError(report),
-        }
-    }
-}
-
-impl From<RpMaterialStoreError> for ApiErrors {
-    fn from(value: RpMaterialStoreError) -> Self {
-        match value {
-            RpMaterialStoreError::NoSuchRp(rp_id) => {
-                ApiErrors::NotFound(format!("Cannot find RP with id: {rp_id}"))
-            }
-            RpMaterialStoreError::NonceSignatureError(error) => {
-                ApiErrors::BadRequest(format!("Invalid signature: {error}"))
-            }
-            RpMaterialStoreError::UnknownRpShareEpoch(key_identifier) => {
-                ApiErrors::NotFound(format!(
-                    "Cannot find share with epoch {} for RP with id: {}",
-                    key_identifier.share_epoch, key_identifier.rp_id
-                ))
-            }
-        }
-    }
-}
-
-impl IntoResponse for ApiErrors {
+impl IntoResponse for OprfServiceError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            ApiErrors::ExplicitError(ApiError { message, code }) => {
-                (code, message.unwrap_or(String::from("unknown error"))).into_response()
+            OprfServiceError::BlindedQueryIsIdentity => (
+                StatusCode::BAD_REQUEST,
+                "blinded query not allowed to be identity",
+            )
+                .into_response(),
+            OprfServiceError::UnknownRequestId(id) => {
+                (StatusCode::NOT_FOUND, format!("unknown request id: {id}")).into_response()
             }
-            ApiErrors::InternalSeverError(inner) => {
-                handle_internal_server_error(inner).into_response()
+            OprfServiceError::RpMaterialStoreError(err) => err.into_response(),
+            OprfServiceError::InternalServerError(err) => {
+                let error_id = Uuid::new_v4();
+                tracing::error!("{error_id} - {err:?}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("An internal server error has occurred. Error ID={error_id}"),
+                )
+                    .into_response()
             }
-            ApiErrors::NotFound(message) => (StatusCode::NOT_FOUND, message).into_response(),
-            ApiErrors::BadRequest(message) => (StatusCode::BAD_REQUEST, message).into_response(),
         }
     }
 }
 
-/// Serialize an HTTP status code as its numeric value.
-fn serialize_status_code<S>(x: &StatusCode, s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    s.serialize_u16(x.as_u16())
-}
-
-/// Handle internal server errors by logging and returning a generic message to clients.
-///
-/// Generates a unique error ID for tracking in logs.
-fn handle_internal_server_error(err: Report) -> (StatusCode, String) {
-    let error_id = Uuid::new_v4();
-    tracing::error!("{error_id} - {err:?}");
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("An internal server error has occurred. Error ID={error_id}"),
-    )
+impl IntoResponse for RpMaterialStoreError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            RpMaterialStoreError::UnknownRp(rp_id) => (
+                StatusCode::NOT_FOUND,
+                format!("cannot find RP with id: {rp_id}"),
+            )
+                .into_response(),
+            RpMaterialStoreError::UnknownShareEpoch(share_epoch) => (
+                StatusCode::NOT_FOUND,
+                format!("cannot find share with epoch {share_epoch}"),
+            )
+                .into_response(),
+            RpMaterialStoreError::NonceSignatureError(err) => {
+                (StatusCode::BAD_REQUEST, format!("invalid signature: {err}")).into_response()
+            }
+        }
+    }
 }
