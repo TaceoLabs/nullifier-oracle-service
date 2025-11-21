@@ -1,7 +1,7 @@
 //! Alloy-based Key Generation Event Watcher
 //!
 //! This module provides [`AlloyKeyGenWatcher`], an implementation of [`KeyGenEventListener`]
-//! that monitors an on-chain RpRegistry contract for key generation events.
+//! that monitors an on-chain OprfKeyRegistry contract for key generation events.
 //!
 //! The watcher subscribes to various key generation events (Round 1, 2, 3, and Finalize)
 //! and reports contributions back to the contract. It uses Alloy for blockchain interaction.
@@ -9,29 +9,32 @@
 use alloy::{
     eips::BlockNumberOrTag,
     network::EthereumWallet,
-    primitives::{Address, TxHash},
+    primitives::{Address, TxHash, U160},
     providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
     rpc::types::{Filter, TransactionReceipt},
-    sol_types::SolEvent,
+    sol_types::SolEvent as _,
     transports::RpcError,
 };
 use async_trait::async_trait;
 use eyre::Context;
 use futures::StreamExt as _;
 use oprf_types::{
-    RpId,
+    OprfKeyId,
     chain::{
         ChainEvent, ChainEventResult, SecretGenFinalizeEvent, SecretGenRound1Contribution,
         SecretGenRound1Event, SecretGenRound2Contribution, SecretGenRound2Event,
         SecretGenRound3Contribution, SecretGenRound3Event,
     },
-    crypto::{PartyId, PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext},
+    crypto::{
+        EphemeralEncryptionPublicKey, OprfPublicKey, PartyId, PeerPublicKeyList,
+        SecretGenCiphertext,
+    },
 };
 use tokio::sync::mpsc;
 
-use crate::{rp_registry::RpRegistry, services::key_event_watcher::KeyGenEventListener};
+use crate::{oprf_key_registry::OprfKeyRegistry, services::key_event_watcher::KeyGenEventListener};
 
-/// Monitors key generation events from an on-chain RpRegistry contract.
+/// Monitors key generation events from an on-chain OprfKeyRegistry contract.
 ///
 /// Subscribes to blockchain events for key generation rounds and reports
 /// contributions back to the contract.
@@ -44,11 +47,11 @@ impl AlloyKeyGenWatcher {
     /// Creates a new key generation event watcher.
     ///
     /// Connects to the blockchain via WebSocket and verifies that the
-    /// RpRegistry contract is ready.
+    /// OprfKeyRegistry contract is ready.
     ///
     /// # Arguments
     /// * `rpc_url` - WebSocket RPC URL for blockchain connection
-    /// * `contract_address` - Address of the RpRegistry contract
+    /// * `contract_address` - Address of the OprfKeyRegistry contract
     /// * `wallet` - Ethereum wallet for signing transactions
     pub async fn new(
         rpc_url: &str,
@@ -62,10 +65,10 @@ impl AlloyKeyGenWatcher {
             .connect_ws(ws)
             .await
             .context("while connecting to RPC")?;
-        tracing::info!("checking RpRegistry ready state at address {contract_address}..");
-        let contract = RpRegistry::new(contract_address, provider.clone());
+        tracing::info!("checking OprfKeyRegistry ready state at address {contract_address}..");
+        let contract = OprfKeyRegistry::new(contract_address, provider.clone());
         if !contract.isContractReady().call().await? {
-            eyre::bail!("RpRegistry contract not ready");
+            eyre::bail!("OprfKeyRegistry contract not ready");
         }
         tracing::info!("ready!");
         Ok(Self {
@@ -92,14 +95,14 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
     }
 
     async fn report_result(&self, result: ChainEventResult) -> eyre::Result<()> {
-        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
+        let contract = OprfKeyRegistry::new(self.contract_address, self.provider.clone());
         match result {
             ChainEventResult::SecretGenRound1(SecretGenRound1Contribution {
-                rp_id,
+                oprf_key_id,
                 contribution,
             }) => {
                 let pending_tx = contract
-                    .addRound1Contribution(rp_id.into_inner(), contribution.into())
+                    .addRound1Contribution(oprf_key_id.into_inner(), contribution.into())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
@@ -117,11 +120,11 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                 }
             }
             ChainEventResult::SecretGenRound2(SecretGenRound2Contribution {
-                rp_id,
+                oprf_key_id,
                 contribution,
             }) => {
                 let pending_tx = contract
-                    .addRound2Contribution(rp_id.into_inner(), contribution.into())
+                    .addRound2Contribution(oprf_key_id.into_inner(), contribution.into())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
@@ -138,9 +141,9 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                     eyre::bail!("cannot finish transaction: {receipt:?}");
                 }
             }
-            ChainEventResult::SecretGenRound3(SecretGenRound3Contribution { rp_id }) => {
+            ChainEventResult::SecretGenRound3(SecretGenRound3Contribution { oprf_key_id }) => {
                 let pending_tx = contract
-                    .addRound3Contribution(rp_id.into_inner())
+                    .addRound3Contribution(oprf_key_id.into_inner())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
@@ -161,9 +164,9 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
         Ok(())
     }
 
-    /// Loads the party ID for this peer from the RpRegistry contract.
+    /// Loads the party ID for this peer from the OprfKeyRegistry contract.
     async fn load_party_id(&self) -> eyre::Result<PartyId> {
-        let contract = RpRegistry::new(self.contract_address, self.provider.clone());
+        let contract = OprfKeyRegistry::new(self.contract_address, self.provider.clone());
         let party_id = contract.checkIsParticipantAndReturnPartyId().call().await?;
         Ok(PartyId(u16::try_from(party_id)?))
     }
@@ -182,24 +185,27 @@ async fn subscribe_task(
         .address(contract_address)
         .from_block(BlockNumberOrTag::Latest)
         .event_signature(vec![
-            RpRegistry::SecretGenRound1::SIGNATURE_HASH,
-            RpRegistry::SecretGenRound2::SIGNATURE_HASH,
-            RpRegistry::SecretGenRound3::SIGNATURE_HASH,
-            RpRegistry::SecretGenFinalize::SIGNATURE_HASH,
-            RpRegistry::KeyDeletion::SIGNATURE_HASH,
+            OprfKeyRegistry::SecretGenRound1::SIGNATURE_HASH,
+            OprfKeyRegistry::SecretGenRound2::SIGNATURE_HASH,
+            OprfKeyRegistry::SecretGenRound3::SIGNATURE_HASH,
+            OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH,
+            OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH,
         ]);
     // Subscribe to event logs
     let sub = provider.subscribe_logs(&filter).await?;
     let mut stream = sub.into_stream();
     while let Some(log) = stream.next().await {
         match log.topic0() {
-            Some(&RpRegistry::SecretGenRound1::SIGNATURE_HASH) => {
+            Some(&OprfKeyRegistry::SecretGenRound1::SIGNATURE_HASH) => {
                 let round1 = log
                     .log_decode()
                     .context("while decoding secret-gen round1 event")?;
-                let RpRegistry::SecretGenRound1 { rpId, threshold } = round1.inner.data;
+                let OprfKeyRegistry::SecretGenRound1 {
+                    oprfKeyId,
+                    threshold,
+                } = round1.inner.data;
                 let event = ChainEvent::SecretGenRound1(SecretGenRound1Event {
-                    rp_id: RpId::from(rpId),
+                    oprf_key_id: OprfKeyId::from(oprfKeyId),
                     threshold: u16::try_from(threshold)?,
                 });
                 if tx.send(event).await.is_err() {
@@ -207,13 +213,13 @@ async fn subscribe_task(
                     break;
                 }
             }
-            Some(&RpRegistry::SecretGenRound2::SIGNATURE_HASH) => {
+            Some(&OprfKeyRegistry::SecretGenRound2::SIGNATURE_HASH) => {
                 tracing::debug!("got round 2 event!");
                 let round2 = log
                     .log_decode()
                     .context("while decoding secret-gen round2 event")?;
-                let RpRegistry::SecretGenRound2 { rpId } = round2.inner.data;
-                let event = prepare_round2_event(rpId, contract_address, provider.clone())
+                let OprfKeyRegistry::SecretGenRound2 { oprfKeyId } = round2.inner.data;
+                let event = prepare_round2_event(oprfKeyId, contract_address, provider.clone())
                     .await
                     .context("while preparing round2 event");
                 match event {
@@ -229,13 +235,13 @@ async fn subscribe_task(
                     }
                 }
             }
-            Some(&RpRegistry::SecretGenRound3::SIGNATURE_HASH) => {
+            Some(&OprfKeyRegistry::SecretGenRound3::SIGNATURE_HASH) => {
                 tracing::debug!("got round 3 event!");
                 let round3 = log
                     .log_decode()
                     .context("while decoding secret-gen round3 event")?;
-                let RpRegistry::SecretGenRound3 { rpId } = round3.inner.data;
-                let event = prepare_round3_event(rpId, contract_address, provider.clone())
+                let OprfKeyRegistry::SecretGenRound3 { oprfKeyId } = round3.inner.data;
+                let event = prepare_round3_event(oprfKeyId, contract_address, provider.clone())
                     .await
                     .context("while preparing round3 event");
                 match event {
@@ -251,12 +257,12 @@ async fn subscribe_task(
                     }
                 }
             }
-            Some(&RpRegistry::SecretGenFinalize::SIGNATURE_HASH) => {
+            Some(&OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH) => {
                 let finalize = log
                     .log_decode()
                     .context("while decoding secret-gen finalize event")?;
-                let RpRegistry::SecretGenFinalize { rpId } = finalize.inner.data;
-                let event = prepare_finalize_event(rpId, contract_address, provider.clone())
+                let OprfKeyRegistry::SecretGenFinalize { oprfKeyId } = finalize.inner.data;
+                let event = prepare_finalize_event(oprfKeyId, contract_address, provider.clone())
                     .await
                     .context("while preparing finalize event");
                 match event {
@@ -273,13 +279,13 @@ async fn subscribe_task(
                 }
             }
 
-            Some(&RpRegistry::KeyDeletion::SIGNATURE_HASH) => {
+            Some(&OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH) => {
                 let key_delete = log
                     .log_decode()
                     .context("while decoding key deletion event")?;
-                let RpRegistry::KeyDeletion { rpId } = key_delete.inner.data;
-                tracing::info!("got key deletion event for {rpId}");
-                let event = ChainEvent::DeleteRpMaterial(RpId::from(rpId));
+                let OprfKeyRegistry::KeyDeletion { oprfKeyId } = key_delete.inner.data;
+                tracing::info!("got key deletion event for {oprfKeyId}");
+                let event = ChainEvent::DeleteOprfKeyMaterial(OprfKeyId::from(oprfKeyId));
                 if tx.send(event).await.is_err() {
                     tracing::debug!("subscriber dropped channel - will shutdown");
                     break;
@@ -331,26 +337,26 @@ async fn watch_receipt(
 
 /// Prepares a Round 2 event by fetching ephemeral public keys from the contract.
 ///
-/// Queries the RpRegistry contract to retrieve the ephemeral public keys
+/// Queries the OprfKeyRegistry contract to retrieve the ephemeral public keys
 /// submitted by all peers in Round 1.
 async fn prepare_round2_event(
-    rp_id: u128,
+    oprf_key_id: U160,
     contract_address: Address,
     provider: DynProvider,
 ) -> eyre::Result<ChainEvent> {
-    let contract = RpRegistry::new(contract_address, provider.clone());
+    let contract = OprfKeyRegistry::new(contract_address, provider.clone());
     let peers = contract
-        .checkIsParticipantAndReturnEphemeralPublicKeys(rp_id)
+        .checkIsParticipantAndReturnEphemeralPublicKeys(oprf_key_id)
         .call()
         .await
         .context("while loading eph keys")?;
     // TODO handle error case better - we want to know which one send wrong key
     let list = peers
         .into_iter()
-        .map(PeerPublicKey::try_from)
+        .map(EphemeralEncryptionPublicKey::try_from)
         .collect::<eyre::Result<Vec<_>>>()?;
     let event = ChainEvent::SecretGenRound2(SecretGenRound2Event {
-        rp_id: RpId::from(rp_id),
+        oprf_key_id: OprfKeyId::from(oprf_key_id),
         peers: PeerPublicKeyList::from(list),
     });
     Ok(event)
@@ -358,44 +364,40 @@ async fn prepare_round2_event(
 
 /// Prepares a Round 3 event by fetching ciphertexts from the contract.
 ///
-/// Queries the RpRegistry contract to retrieve the ciphertexts
+/// Queries the OprfKeyRegistry contract to retrieve the ciphertexts
 /// submitted by all peers in Round 2.
 async fn prepare_round3_event(
-    rp_id: u128,
+    oprf_key_id: U160,
     contract_address: Address,
     provider: DynProvider,
 ) -> eyre::Result<ChainEvent> {
-    let contract = RpRegistry::new(contract_address, provider.clone());
+    let contract = OprfKeyRegistry::new(contract_address, provider.clone());
     let ciphers = contract
-        .checkIsParticipantAndReturnRound2Ciphers(rp_id)
+        .checkIsParticipantAndReturnRound2Ciphers(oprf_key_id)
         .call()
         .await
         .context("while loading ciphers")?;
     let event = ChainEvent::SecretGenRound3(SecretGenRound3Event {
-        rp_id: RpId::from(rp_id),
+        oprf_key_id: OprfKeyId::from(oprf_key_id),
         ciphers: ciphers
             .into_iter()
-            .map(RpSecretGenCiphertext::try_from)
+            .map(SecretGenCiphertext::try_from)
             .collect::<eyre::Result<Vec<_>>>()?,
     });
     Ok(event)
 }
 
-/// Prepares a finalize event by fetching RP material from the contract.
-///
-/// Queries the RpRegistry contract to retrieve the final RP material
-/// including the public key and nullifier key.
+/// Prepares a finalize event by fetching the OPRF public-key from the contract.
 async fn prepare_finalize_event(
-    rp_id: u128,
+    oprf_key_id: U160,
     contract_address: Address,
     provider: DynProvider,
 ) -> eyre::Result<ChainEvent> {
-    let contract = RpRegistry::new(contract_address, provider.clone());
-    let rp_material = contract.getRpMaterial(rp_id).call().await?;
+    let contract = OprfKeyRegistry::new(contract_address, provider.clone());
+    let oprf_public_key = contract.getOprfPublicKey(oprf_key_id).call().await?;
     let event = ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
-        rp_id: RpId::from(rp_id),
-        rp_public_key: rp_material.ecdsaKey.try_into()?,
-        rp_nullifier_key: RpNullifierKey::new(rp_material.nullifierKey.try_into()?),
+        oprf_key_id: OprfKeyId::from(oprf_key_id),
+        oprf_public_key: OprfPublicKey::new(oprf_public_key.try_into()?),
     });
     Ok(event)
 }

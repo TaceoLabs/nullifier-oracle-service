@@ -6996,6 +6996,8 @@ dependencies = [
 name = "taceo-oprf-types"
 version = "0.1.0"
 dependencies = [
+ "alloy",
+ "ark-ff 0.5.0",
  "eyre",
  "k256",
  "serde",

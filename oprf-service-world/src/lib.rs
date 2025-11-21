@@ -84,11 +84,11 @@ pub async fn start(
     let key_gen_watcher: KeyGenEventListenerService = Arc::new(
         AlloyKeyGenWatcher::new(
             config.chain_ws_rpc_url.expose_secret(),
-            config.rp_registry_contract,
+            config.oprf_key_registry_contract,
             wallet,
         )
         .await
-        .context("while connecting to RpRegistry contract")?,
+        .context("while connecting to OprfKeyRegistry contract")?,
     );
 
     tracing::info!("loading party id..");
@@ -99,7 +99,7 @@ pub async fn start(
     tracing::info!("we are party id: {party_id}");
 
     tracing::info!("init RpMaterialStore..");
-    let rp_material_store = secret_manager
+    let oprf_key_material_store = secret_manager
         .load_secrets()
         .await
         .context("while loading secrets from secret-manager")?;
@@ -119,7 +119,7 @@ pub async fn start(
 
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
-        rp_material_store.clone(),
+        oprf_key_material_store.clone(),
         config.request_lifetime,
         config.session_cleanup_interval,
         party_id,
@@ -139,7 +139,7 @@ pub async fn start(
         .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
     let event_handler = ChainEventHandler::spawn(
         key_gen_watcher,
-        rp_material_store,
+        oprf_key_material_store,
         secret_manager,
         cancellation_token.clone(),
         key_gen_material,

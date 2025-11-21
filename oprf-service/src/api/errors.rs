@@ -1,5 +1,3 @@
-//! API Error Handling
-//!
 //! Conversions are provided from service-level errors like [`OprfServiceError`] into
 //! API errors, ensuring consistent HTTP responses.
 //!
@@ -9,7 +7,7 @@
 use axum::{http::StatusCode, response::IntoResponse};
 use uuid::Uuid;
 
-use crate::services::{oprf::OprfServiceError, rp_material_store::RpMaterialStoreError};
+use crate::services::{oprf::OprfServiceError, oprf_key_material_store::OprfKeyMaterialStoreError};
 
 impl IntoResponse for OprfServiceError {
     fn into_response(self) -> axum::response::Response {
@@ -22,7 +20,7 @@ impl IntoResponse for OprfServiceError {
             OprfServiceError::UnknownRequestId(id) => {
                 (StatusCode::NOT_FOUND, format!("unknown request id: {id}")).into_response()
             }
-            OprfServiceError::RpMaterialStoreError(err) => err.into_response(),
+            OprfServiceError::OprfKeyMaterialStoreError(err) => err.into_response(),
             OprfServiceError::InternalServerError(err) => {
                 let error_id = Uuid::new_v4();
                 tracing::error!("{error_id} - {err:?}");
@@ -36,22 +34,19 @@ impl IntoResponse for OprfServiceError {
     }
 }
 
-impl IntoResponse for RpMaterialStoreError {
+impl IntoResponse for OprfKeyMaterialStoreError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            RpMaterialStoreError::UnknownRp(rp_id) => (
+            OprfKeyMaterialStoreError::UnknownRp(rp_id) => (
                 StatusCode::NOT_FOUND,
                 format!("cannot find RP with id: {rp_id}"),
             )
                 .into_response(),
-            RpMaterialStoreError::UnknownShareEpoch(share_epoch) => (
+            OprfKeyMaterialStoreError::UnknownShareEpoch(share_epoch) => (
                 StatusCode::NOT_FOUND,
                 format!("cannot find share with epoch {share_epoch}"),
             )
                 .into_response(),
-            RpMaterialStoreError::NonceSignatureError(err) => {
-                (StatusCode::BAD_REQUEST, format!("invalid signature: {err}")).into_response()
-            }
         }
     }
 }

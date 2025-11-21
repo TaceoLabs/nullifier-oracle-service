@@ -1,9 +1,9 @@
-//! This module provides [`RpMaterialStore`], which securely holds each RP's
+//! This module provides [`OprfKeyMaterialStore`], which securely holds each RP's
 //! DLog shares (per epoch) along with their ECDSA verifying key.  
 //! Access is synchronized via a `RwLock` and wrapped in an `Arc` for thread-safe shared ownership.
 //!
 //! Use the store to retrieve or add shares and public keys safely.  
-//! Each RP's material is represented by [`RpMaterial`].
+//! Each RP's material is represented by [`OprfKeyMaterial`].
 
 use oprf_core::{
     ddlog_equality::shamir::{
@@ -13,18 +13,18 @@ use oprf_core::{
     shamir,
 };
 use oprf_types::{
-    RpId, ShareEpoch,
-    api::v1::{NullifierShareIdentifier, PublicRpMaterial},
-    crypto::{PartyId, RpNullifierKey},
+    OprfKeyId, ShareEpoch,
+    api::v1::ShareIdentifier,
+    crypto::{OprfPublicKey, PartyId},
 };
 use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use uuid::Uuid;
 
-type RpMaterialStoreResult<T> = std::result::Result<T, RpMaterialStoreError>;
+type OprfKeyMaterialStoreResult<T> = std::result::Result<T, OprfKeyMaterialStoreError>;
 
-/// Errors returned by the [`RpMaterialStore`].
+/// Errors returned by the [`OprfKeyMaterial`].
 ///
 /// This error type is mostly used in API contexts, meaning it should be digested by the
 /// [`crate::api::errors`] module.
@@ -32,49 +32,41 @@ type RpMaterialStoreResult<T> = std::result::Result<T, RpMaterialStoreError>;
 /// Methods that are used in other contexts may return one of the variants
 /// here or return an `eyre::Result`.
 #[derive(Debug, thiserror::Error)]
-pub enum RpMaterialStoreError {
+pub enum OprfKeyMaterialStoreError {
     /// Cannot find the RP.
     #[error("Cannot find RP id: {0}")]
-    UnknownRp(RpId),
+    UnknownRp(OprfKeyId),
     /// Cannot find a secret share for the epoch.
     #[error("Cannot find share with epoch: {0}")]
     UnknownShareEpoch(ShareEpoch),
-    /// Cannot verify nonce signature.
-    #[error(transparent)]
-    NonceSignatureError(#[from] k256::ecdsa::Error),
 }
 
-/// Thread-safe storage of all cryptographic material for each relying party:
-/// discrete-log shares **and** the ECDSA public key of the RP.
+/// Storage of the OPRF cryptographic material.
+///
+/// Includes the [`DLogShareShamir`] secret-share and the [`OprfPublicKey`].
 #[derive(Default, Clone)]
-pub struct RpMaterialStore(Arc<RwLock<HashMap<RpId, RpMaterial>>>);
+pub struct OprfKeyMaterialStore(Arc<RwLock<HashMap<OprfKeyId, OprfKeyMaterial>>>);
 
-/// Holds all cryptographic material for a single relying party (RP).
+/// The cryptographic material for one OPRF key.
 ///
 /// Stores:
 /// * A mapping of [`ShareEpoch`] → [`DLogShareShamir`]
-/// * The RP's ECDSA `VerifyingKey` used for nonce-signature verification.
-///
-/// This struct is typically wrapped in a larger storage type (e.g. `RpMaterialStore`)
-/// to manage multiple RPs.
+/// * The [`OprfPublicKey`] associated with the share.
 #[derive(Clone)]
-pub struct RpMaterial {
+pub struct OprfKeyMaterial {
     pub(crate) shares: HashMap<ShareEpoch, DLogShareShamir>,
-    public_key: k256::ecdsa::VerifyingKey,
-    nullifier_key: RpNullifierKey,
+    nullifier_key: OprfPublicKey,
 }
 
-impl RpMaterial {
-    /// Creates a new [`RpMaterial`] from the provided shares and ECDSA public key.
+impl OprfKeyMaterial {
+    /// Creates a new [`OprfKeyMaterial`] from the provided shares and ECDSA public key.
     #[allow(dead_code)]
     pub(crate) fn new(
         shares: HashMap<ShareEpoch, DLogShareShamir>,
-        public_key: k256::ecdsa::VerifyingKey,
-        nullifier_key: RpNullifierKey,
+        nullifier_key: OprfPublicKey,
     ) -> Self {
         Self {
             shares,
-            public_key,
             nullifier_key,
         }
     }
@@ -84,41 +76,38 @@ impl RpMaterial {
         self.shares.get(&epoch).cloned()
     }
 
-    /// Returns the RP's ECDSA `VerifyingKey`.
-    fn get_public_key(&self) -> k256::ecdsa::VerifyingKey {
-        self.public_key
-    }
-
-    /// Returns the RP's `RpNullifierKey`.
-    fn get_nullifier_key(&self) -> RpNullifierKey {
+    /// Returns the [`OprfPublicKey`].
+    fn get_oprf_public_key(&self) -> OprfPublicKey {
         self.nullifier_key
     }
 }
 
-impl RpMaterialStore {
+impl OprfKeyMaterialStore {
     /// Creates a new storage instance with the provided initial shares.
-    pub(crate) fn new(inner: HashMap<RpId, RpMaterial>) -> Self {
+    pub(crate) fn new(inner: HashMap<OprfKeyId, OprfKeyMaterial>) -> Self {
         Self(Arc::new(RwLock::new(inner)))
     }
 
     /// Computes C = B * x_share and commitments to a random value k_share.
     ///
     /// This generates the peer's partial contribution used in the DLogEqualityProof.
-    /// The provided [`NullifierShareIdentifier`] identifies the RP and the epoch of the share.
+    /// The provided [`OprfShareIdentifier`] identifies the RP and the epoch of the share.
     ///
     /// Returns an error if the RP is unknown or the share for the epoch is not registered.
     #[instrument(level = "debug", skip_all)]
     pub(crate) fn partial_commit(
         &self,
         point_b: ark_babyjubjub::EdwardsAffine,
-        share_identifier: &NullifierShareIdentifier,
-    ) -> RpMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
+        share_identifier: &ShareIdentifier,
+    ) -> OprfKeyMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
         tracing::debug!("computing partial commitment");
         let share = self
-            .get(share_identifier.rp_id)
-            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?
+            .get(share_identifier.oprf_key_id)
+            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?
             .get_share(share_identifier.share_epoch)
-            .ok_or_else(|| RpMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch))?;
+            .ok_or_else(|| {
+                OprfKeyMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch)
+            })?;
         Ok(DLogSessionShamir::partial_commitments(
             point_b,
             share,
@@ -129,7 +118,7 @@ impl RpMaterialStore {
     /// Finalizes a proof share for a given challenge hash and session.
     ///
     /// Consumes the session to prevent reuse of the randomness. The provided
-    /// [`NullifierShareIdentifier`] identifies the RP and the epoch of the key.
+    /// [`OprfShareIdentifier`] identifies the RP and the epoch of the key.
     ///
     /// Returns an error if the RP is unknown or the key epoch is not registered.
     pub(crate) fn challenge(
@@ -138,17 +127,19 @@ impl RpMaterialStore {
         my_party_id: PartyId,
         session: DLogSessionShamir,
         challenge: DLogCommitmentsShamir,
-        share_identifier: &NullifierShareIdentifier,
-    ) -> RpMaterialStoreResult<DLogProofShareShamir> {
+        share_identifier: &ShareIdentifier,
+    ) -> OprfKeyMaterialStoreResult<DLogProofShareShamir> {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
-            .get_rp_nullifier_key(share_identifier.rp_id)
-            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?;
+            .get_oprf_public_key(share_identifier.oprf_key_id)
+            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?;
         let share = self
-            .get(share_identifier.rp_id)
-            .ok_or_else(|| RpMaterialStoreError::UnknownRp(share_identifier.rp_id))?
+            .get(share_identifier.oprf_key_id)
+            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?
             .get_share(share_identifier.share_epoch)
-            .ok_or_else(|| RpMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch))?;
+            .ok_or_else(|| {
+                OprfKeyMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch)
+            })?;
         let lagrange_coefficient = shamir::single_lagrange_from_coeff(
             my_party_id.into_inner() + 1,
             challenge.get_contributing_parties(),
@@ -162,32 +153,26 @@ impl RpMaterialStore {
         ))
     }
 
-    /// Retrieves the secret share for the given [`NullifierShareIdentifier`].
+    /// Retrieves the secret share for the given [`OprfShareIdentifier`].
     ///
     /// Returns `None` if the RP or share epoch is not found.
-    fn get(&self, rp_id: RpId) -> Option<RpMaterial> {
+    fn get(&self, rp_id: OprfKeyId) -> Option<OprfKeyMaterial> {
         self.0.read().get(&rp_id).cloned()
     }
 
-    /// Returns the ECDSA `VerifyingKey` of the specified RP, if registered.
-    fn get_rp_public_key(&self, rp_id: RpId) -> Option<k256::ecdsa::VerifyingKey> {
-        Some(self.0.read().get(&rp_id)?.get_public_key())
+    /// Returns the [`OprfPublicKey`], if registered.
+    pub(crate) fn get_oprf_public_key(&self, rp_id: OprfKeyId) -> Option<OprfPublicKey> {
+        Some(self.0.read().get(&rp_id)?.get_oprf_public_key())
     }
 
-    /// Returns the `RpNullifierKey` of the specified RP, if registered.
-    fn get_rp_nullifier_key(&self, rp_id: RpId) -> Option<RpNullifierKey> {
-        Some(self.0.read().get(&rp_id)?.get_nullifier_key())
-    }
-
-    /// Adds a new RP entry with a secret share at epoch 0.
+    /// Adds OPRF key-material with epoch 0.
     ///
     /// Overwrites any existing entry.  
     /// Intended for creating new shares, not rotation.
     pub(super) fn add(
         &self,
-        rp_id: RpId,
-        public_key: k256::ecdsa::VerifyingKey,
-        nullifier_key: RpNullifierKey,
+        rp_id: OprfKeyId,
+        oprf_public_key: OprfPublicKey,
         dlog_share: DLogShareShamir,
     ) {
         let mut shares = HashMap::new();
@@ -197,10 +182,9 @@ impl RpMaterialStore {
             .write()
             .insert(
                 rp_id,
-                RpMaterial {
+                OprfKeyMaterial {
                     shares,
-                    public_key,
-                    nullifier_key,
+                    nullifier_key: oprf_public_key,
                 },
             )
             .is_some()
@@ -212,21 +196,9 @@ impl RpMaterialStore {
     /// Removes the RP entry associated with the provided [`RpId`].
     ///
     /// If the id is not registered, doesn't do anything.
-    pub(super) fn remove(&self, rp_id: RpId) {
+    pub(super) fn remove(&self, rp_id: OprfKeyId) {
         if self.0.write().remove(&rp_id).is_some() {
-            tracing::debug!("removed {rp_id:?} material from RpMaterialStore");
+            tracing::debug!("removed {rp_id:?} material from OprfKeyMaterialStore");
         }
-    }
-
-    /// Returns the [`PublicRpMaterial`] of the specified RP, if registered.
-    /// This contains
-    /// * ECDSA `VerifyingKey`
-    /// * [`RpNullifierKey`]
-    pub(crate) fn get_rp_public_material(&self, rp_id: RpId) -> Option<PublicRpMaterial> {
-        let rp_material = self.0.read().get(&rp_id)?.to_owned();
-        Some(PublicRpMaterial {
-            public_key: rp_material.public_key,
-            nullifier_key: rp_material.nullifier_key,
-        })
     }
 }

@@ -148,7 +148,7 @@ impl OprfReqAuthenticator for WorldOprfReqAuthenticator {
             request.auth.current_time_stamp.into(),
             request.auth.merkle_root.into_inner(),
             ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
-            request.rp_identifier.rp_id.into(),
+            request.share_identifier.oprf_key_id.into(),
             request.auth.action,
             request.auth.nonce,
         ];

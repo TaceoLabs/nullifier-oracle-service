@@ -81,9 +81,9 @@ pub struct OprfPeerConfig {
     )]
     pub max_wait_time_shutdown: Duration,
 
-    /// The Address of the RpRegistry contract.
-    #[clap(long, env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT")]
-    pub rp_registry_contract: Address,
+    /// The Address of the OprfKeyRegistry contract.
+    #[clap(long, env = "OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT")]
+    pub oprf_key_registry_contract: Address,
 
     /// The websocket rpc url of the chain
     #[clap(

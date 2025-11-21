@@ -8,14 +8,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    RpId,
+    OprfKeyId,
     crypto::{
-        PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext, RpSecretGenCiphertexts,
-        RpSecretGenCommitment,
+        EphemeralEncryptionPublicKey, OprfPublicKey, PeerPublicKeyList, SecretGenCiphertext,
+        SecretGenCiphertexts, SecretGenCommitment,
     },
 };
 
-/// Events emitted by the RpRegistry.
+/// Events emitted by the OprfKeyRegistry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChainEvent {
     /// First-round key-generation event.
@@ -26,8 +26,8 @@ pub enum ChainEvent {
     SecretGenRound3(SecretGenRound3Event),
     /// Finalization event for key generation.
     SecretGenFinalize(SecretGenFinalizeEvent),
-    /// Delete RpMaterial event.
-    DeleteRpMaterial(RpId),
+    /// Delete OPRF key material event.
+    DeleteOprfKeyMaterial(OprfKeyId),
 }
 
 /// Represents the result of processing a chain event.
@@ -45,8 +45,8 @@ pub enum ChainEventResult {
 /// Payload of a first-round key-generation event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound1Event {
-    /// Identifier of the relying party this event belongs to.
-    pub rp_id: RpId,
+    /// Identifier this event belongs to.
+    pub oprf_key_id: OprfKeyId,
     /// The threshold for this shamir-sharing.
     pub threshold: u16,
 }
@@ -54,8 +54,8 @@ pub struct SecretGenRound1Event {
 /// Payload of a second-round key-generation event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound2Event {
-    /// Identifier of the relying party this event belongs to.
-    pub rp_id: RpId,
+    /// Identifier this event belongs to.
+    pub oprf_key_id: OprfKeyId,
     /// List of ephemeral public keys of the peers for this round (including own key).
     pub peers: PeerPublicKeyList,
 }
@@ -63,45 +63,43 @@ pub struct SecretGenRound2Event {
 /// Payload of a third-round event for key generation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound3Event {
-    /// Identifier of the relying party this event belongs to.
-    pub rp_id: RpId,
+    /// Identifier this event belongs to.
+    pub oprf_key_id: OprfKeyId,
     /// Ciphertexts submitted in round 2.
-    pub ciphers: Vec<RpSecretGenCiphertext>,
+    pub ciphers: Vec<SecretGenCiphertext>,
 }
 
 /// Payload of a finalization event for key generation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenFinalizeEvent {
-    /// Identifier of the relying party this event belongs to.
-    pub rp_id: RpId,
-    /// The public key of the RP to check the signature nonce.
-    pub rp_public_key: k256::PublicKey,
-    /// The computed nullifier-public key
-    pub rp_nullifier_key: RpNullifierKey,
+    /// Identifier this event belongs to.
+    pub oprf_key_id: OprfKeyId,
+    /// The computed OPRF public-key
+    pub oprf_public_key: OprfPublicKey,
 }
 
 /// A first-round key-generation contribution submitted on-chain.
 ///
 /// Contains the relying-party identifier, the sending peer’s identifier,
-/// and its first-round [`RpSecretGenCommitment`].
+/// and its first-round [`SecretGenCommitment`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound1Contribution {
-    /// Identifier of the relying party this contribution belongs to.
-    pub rp_id: RpId,
+    /// Identifier of key this contribution belongs to.
+    pub oprf_key_id: OprfKeyId,
     /// The peer’s first-round commitment.
-    pub contribution: RpSecretGenCommitment,
+    pub contribution: SecretGenCommitment,
 }
 
 /// A second-round key-generation contribution submitted on-chain.
 ///
 /// Contains the relying-party identifier, the sending peer’s identifier,
-/// and its second-round [`RpSecretGenCiphertexts`].
+/// and its second-round [`SecretGenCiphertexts`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound2Contribution {
-    /// Identifier of the relying party this contribution belongs to.
-    pub rp_id: RpId,
+    /// Identifier this contribution belongs to.
+    pub oprf_key_id: OprfKeyId,
     /// The peer’s second-round ciphertexts.
-    pub contribution: RpSecretGenCiphertexts,
+    pub contribution: SecretGenCiphertexts,
 }
 
 /// A finalization message for key generation submitted on-chain.
@@ -110,6 +108,6 @@ pub struct SecretGenRound2Contribution {
 /// everyone that the sending peer successfully computed its share.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenRound3Contribution {
-    /// Identifier of the relying party this contribution belongs to.
-    pub rp_id: RpId,
+    /// Identifier this contribution belongs to.
+    pub oprf_key_id: OprfKeyId,
 }

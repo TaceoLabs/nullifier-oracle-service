@@ -30,7 +30,7 @@ async fn oprf_request<ReqAuth: Clone + Serialize + DeserializeOwned, ReqAuthErro
     tracing::debug!("verifying request auth...");
     oprf_req_auth_service.verify(&request).await?;
     let commitments = oprf_service
-        .init_oprf_session(request_id, request.rp_identifier, request.blinded_query)
+        .init_oprf_session(request_id, request.share_identifier, request.blinded_query)
         .await?;
     Ok(Json(OprfResponse {
         request_id,

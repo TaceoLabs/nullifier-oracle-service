@@ -26,20 +26,22 @@ use oprf_core::{
     keygen::{self, KeyGenPoly},
 };
 use oprf_types::{
-    RpId,
+    OprfKeyId,
     chain::{
         SecretGenRound1Contribution, SecretGenRound2Contribution, SecretGenRound3Contribution,
     },
     crypto::{
-        PeerPublicKey, PeerPublicKeyList, RpNullifierKey, RpSecretGenCiphertext,
-        RpSecretGenCiphertexts, RpSecretGenCommitment,
+        EphemeralEncryptionPublicKey, OprfPublicKey, PeerPublicKeyList, SecretGenCiphertext,
+        SecretGenCiphertexts, SecretGenCommitment,
     },
 };
 use rand::{CryptoRng, Rng};
 use tracing::instrument;
 use zeroize::ZeroizeOnDrop;
 
-use crate::services::{rp_material_store::RpMaterialStore, secret_manager::StoreDLogShare};
+use crate::services::{
+    oprf_key_material_store::OprfKeyMaterialStore, secret_manager::StoreDLogShare,
+};
 
 #[cfg(test)]
 mod tests;
@@ -51,11 +53,11 @@ mod tests;
 ///
 /// **Note:** Must only be used in a single-owner context. Do not share across tasks.
 pub(crate) struct DLogSecretGenService {
-    toxic_waste_round1: HashMap<RpId, ToxicWasteRound1>,
-    toxic_waste_round2: HashMap<RpId, ToxicWasteRound2>,
-    finished_shares: HashMap<RpId, DLogShareShamir>,
+    toxic_waste_round1: HashMap<OprfKeyId, ToxicWasteRound1>,
+    toxic_waste_round2: HashMap<OprfKeyId, ToxicWasteRound2>,
+    finished_shares: HashMap<OprfKeyId, DLogShareShamir>,
     key_gen_material: CircomGroth16Material,
-    rp_material_store: RpMaterialStore,
+    oprf_key_material_store: OprfKeyMaterialStore,
 }
 
 /// The ephemeral private key of an OPRF peer.
@@ -90,9 +92,9 @@ impl PeerPrivateKey {
     fn generate<R: Rng + CryptoRng>(r: &mut R) -> Self {
         Self(ark_babyjubjub::Fr::rand(r))
     }
-    /// Computes the associated [`PeerPublicKey`] by multiplying the private key with the generator.
-    pub fn get_public_key(&self) -> PeerPublicKey {
-        PeerPublicKey::new_unchecked(
+    /// Computes the associated [`EphemeralEncryptionPublicKey`] by multiplying the private key with the generator.
+    pub fn get_public_key(&self) -> EphemeralEncryptionPublicKey {
+        EphemeralEncryptionPublicKey::new_unchecked(
             (ark_babyjubjub::EdwardsAffine::generator() * self.0).into_affine(),
         )
     }
@@ -141,7 +143,7 @@ impl ToxicWasteRound1 {
 impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
     pub(crate) fn init(
-        rp_material_store: RpMaterialStore,
+        oprf_key_material_store: OprfKeyMaterialStore,
         key_gen_material: CircomGroth16Material,
     ) -> Self {
         Self {
@@ -149,27 +151,27 @@ impl DLogSecretGenService {
             toxic_waste_round2: HashMap::new(),
             finished_shares: HashMap::new(),
             key_gen_material,
-            rp_material_store,
+            oprf_key_material_store,
         }
     }
 
-    /// Deletes all material associated with the [`RpId`].
+    /// Deletes all material associated with the [`OprfKeyId`].
     /// This includes:
     /// * [`ToxicWasteRound1`]
     /// * [`ToxicWasteRound2`]
     /// * Any finished shares that wait for finalize from all peers
-    /// * The [`crate::services::rp_material_store::RpMaterial`] in the [`RpMaterialStore`].
-    pub(crate) fn delete_rp_material(&mut self, rp_id: RpId) {
-        if self.toxic_waste_round1.remove(&rp_id).is_some() {
-            tracing::debug!("removed {rp_id:?} toxic waste round 1 from secret-gen");
+    /// * The [`crate::services::oprf_key_material_store::OprfKeyMaterial`] in the [`OprfKeyMaterialStore`].
+    pub(crate) fn delete_oprf_key_material(&mut self, oprf_key_id: OprfKeyId) {
+        if self.toxic_waste_round1.remove(&oprf_key_id).is_some() {
+            tracing::debug!("removed {oprf_key_id:?} toxic waste round 1 from secret-gen");
         };
-        if self.toxic_waste_round2.remove(&rp_id).is_some() {
-            tracing::debug!("removed {rp_id:?} toxic waste round 2 from secret-gen");
+        if self.toxic_waste_round2.remove(&oprf_key_id).is_some() {
+            tracing::debug!("removed {oprf_key_id:?} toxic waste round 2 from secret-gen");
         };
-        if self.finished_shares.remove(&rp_id).is_some() {
-            tracing::debug!("removed {rp_id:?} finished share from secret-gen");
+        if self.finished_shares.remove(&oprf_key_id).is_some() {
+            tracing::debug!("removed {oprf_key_id:?} finished share from secret-gen");
         };
-        self.rp_material_store.remove(rp_id);
+        self.oprf_key_material_store.remove(oprf_key_id);
     }
 
     /// Executes round 1 of the secret generation protocol.
@@ -178,43 +180,47 @@ impl DLogSecretGenService {
     /// Returns a [`SecretGenRound1Contribution`] containing the commitment to share with other parties.
     ///
     /// # Arguments
-    /// * `rp_id` - Identifier of the RP for which the secret is being generated.
+    /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `threshold` - The threshold of the MPC-protocol.
     #[instrument(level = "info", skip(self))]
-    pub(crate) fn round1(&mut self, rp_id: RpId, threshold: u16) -> SecretGenRound1Contribution {
+    pub(crate) fn round1(
+        &mut self,
+        oprf_key_id: OprfKeyId,
+        threshold: u16,
+    ) -> SecretGenRound1Contribution {
         tracing::info!("secret gen round1..");
         let mut rng = rand::thread_rng();
         let degree = usize::from(threshold - 1);
         let toxic_waste = ToxicWasteRound1::new(degree, &mut rng);
-        let contribution = RpSecretGenCommitment {
+        let contribution = SecretGenCommitment {
             comm_share: toxic_waste.poly.get_pk_share(),
             comm_coeffs: toxic_waste.poly.get_coeff_commitment(),
             eph_pub_key: toxic_waste.sk.get_public_key(),
         };
-        let old_value = self.toxic_waste_round1.insert(rp_id, toxic_waste);
+        let old_value = self.toxic_waste_round1.insert(oprf_key_id, toxic_waste);
         // TODO handle this more gracefully
         assert!(
             old_value.is_none(),
             "already had this round1 - this is a bug"
         );
         SecretGenRound1Contribution {
-            rp_id,
+            oprf_key_id,
             contribution,
         }
     }
 
     /// Executes round 2 of the secret generation protocol.
     ///
-    /// Generates secret shares for all peers based on the polynomial generated in round 1
-    /// and a proof of the encryptions.
+    /// Generates secret shares for all peers based on the polynomial generated in round 1 and a proof of the encryptions.
+    ///
     /// Returns a [`SecretGenRound2Contribution`] containing ciphertexts for all parties + the proof.
     ///
     /// # Arguments
-    /// * `rp_id` - Identifier of the RP for which the secret is being generated.
+    /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `peers` - List of public keys for peers participating in the protocol.
     pub(crate) fn round2(
         &mut self,
-        rp_id: RpId,
+        oprf_key_id: OprfKeyId,
         peers: PeerPublicKeyList,
     ) -> eyre::Result<SecretGenRound2Contribution> {
         // check that degree is 1 and num_parties is 3
@@ -223,7 +229,7 @@ impl DLogSecretGenService {
         }
         let toxic_waste_r1 = self
             .toxic_waste_round1
-            .remove(&rp_id)
+            .remove(&oprf_key_id)
             .expect("todo how to handle this");
         let (contribution, toxix_waste_r2) = compute_keygen_proof_max_degree1_parties3(
             &self.key_gen_material,
@@ -231,9 +237,9 @@ impl DLogSecretGenService {
             peers,
         )
         .context("while computing proof for round2")?;
-        self.toxic_waste_round2.insert(rp_id, toxix_waste_r2);
+        self.toxic_waste_round2.insert(oprf_key_id, toxix_waste_r2);
         Ok(SecretGenRound2Contribution {
-            rp_id,
+            oprf_key_id,
             contribution,
         })
     }
@@ -242,55 +248,48 @@ impl DLogSecretGenService {
     /// computing the final secret share for this party.
     ///
     /// # Arguments
-    /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
+    /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `ciphers` - Ciphertexts received from other parties in round 2.
     #[instrument(level = "info", skip(self, ciphers))]
     pub(crate) fn round3(
         &mut self,
-        rp_id: RpId,
-        ciphers: Vec<RpSecretGenCiphertext>,
+        oprf_key_id: OprfKeyId,
+        ciphers: Vec<SecretGenCiphertext>,
     ) -> eyre::Result<SecretGenRound3Contribution> {
         tracing::info!("calling round3 with {}", ciphers.len());
         let toxic_waste_r2 = self
             .toxic_waste_round2
-            .remove(&rp_id)
+            .remove(&oprf_key_id)
             .expect("todo what if not here?");
         let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2)
             .context("while computing DLogShare")?;
         // We need to store the computed share - as soon as we get ready
         // event, we will store the share inside the crypto-device.
-        self.finished_shares.insert(rp_id, share);
-        Ok(SecretGenRound3Contribution { rp_id })
+        self.finished_shares.insert(oprf_key_id, share);
+        Ok(SecretGenRound3Contribution { oprf_key_id })
     }
 
-    /// Marks the generated secret as finished and stores it to the [`RpMaterialStore`] along with the provided ecdsa public key and nullifier key.
+    /// Marks the generated secret as finished and stores it to the [`OprfKeyMaterialStore`] along with its public key.
     ///
     /// # Arguments
-    /// * `rp_id` - Identifier of the RP for which the secret is being finalized.
-    /// * `rp_public_key` - The ecdsa key to verify nonces of the RP.
-    /// * `rp_nullifier_key` - The public point P of the created secret x, where P=xG and G is the generator of BabyJubJub.
-    #[instrument(level = "info", skip(self, rp_public_key, rp_nullifier_key))]
+    /// * `oprf_key_id` - Identifier of the RP for which the secret is being finalized.
+    /// * `oprf_public_key` - The public point P of the created secret x, where P=xG and G is the generator of BabyJubJub.
+    #[instrument(level = "info", skip(self, oprf_public_key))]
     pub(crate) fn finalize(
         &mut self,
-        rp_id: RpId,
-        rp_public_key: k256::PublicKey,
-        rp_nullifier_key: RpNullifierKey,
+        oprf_key_id: OprfKeyId,
+        oprf_public_key: OprfPublicKey,
     ) -> eyre::Result<StoreDLogShare> {
         tracing::info!("calling finalize");
         let dlog_share = self
             .finished_shares
-            .remove(&rp_id)
+            .remove(&oprf_key_id)
             .context("cannot find computed DLogShare")?;
-        self.rp_material_store.add(
-            rp_id,
-            rp_public_key.into(),
-            rp_nullifier_key,
-            dlog_share.clone(),
-        );
+        self.oprf_key_material_store
+            .add(oprf_key_id, oprf_public_key, dlog_share.clone());
         Ok(StoreDLogShare {
-            rp_id,
-            public_key: rp_public_key,
-            rp_nullifier_key,
+            oprf_key_id,
+            oprf_public_key,
             share: dlog_share,
         })
     }
@@ -300,7 +299,7 @@ impl DLogSecretGenService {
 ///
 /// Returns the share of the peer's polynomial or an error if decryption fails.
 fn decrypt_key_gen_ciphertexts(
-    ciphers: Vec<RpSecretGenCiphertext>,
+    ciphers: Vec<SecretGenCiphertext>,
     toxic_waste: ToxicWasteRound2,
 ) -> eyre::Result<DLogShareShamir> {
     let ToxicWasteRound2 { peers, sk } = toxic_waste;
@@ -317,7 +316,7 @@ fn decrypt_key_gen_ciphertexts(
         .into_iter()
         .enumerate()
         .map(|(idx, cipher)| {
-            let RpSecretGenCiphertext {
+            let SecretGenCiphertext {
                 nonce,
                 cipher,
                 commitment,
@@ -341,17 +340,17 @@ fn decrypt_key_gen_ciphertexts(
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
 ///
 /// ## Security Considerations
-/// This method expects that the parameter `peers` contains exactly three [`PeerPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
+/// This method expects that the parameter `peers` contains exactly three [`EphemeralEncryptionPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
 ///
 /// If `peers.len()` != 3, the method panics.
-/// If `peers` were constructed without [`PeerPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
+/// If `peers` were constructed without [`EphemeralEncryptionPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
 ///
 /// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
 fn compute_keygen_proof_max_degree1_parties3(
     key_gen_material: &CircomGroth16Material,
     toxic_waste: ToxicWasteRound1,
     peers: PeerPublicKeyList,
-) -> eyre::Result<(RpSecretGenCiphertexts, ToxicWasteRound2)> {
+) -> eyre::Result<(SecretGenCiphertexts, ToxicWasteRound2)> {
     // compute the nonces for every party
     assert_eq!(
         peers.len(),
@@ -416,7 +415,7 @@ fn compute_keygen_proof_max_degree1_parties3(
         .map(|coords| ark_babyjubjub::EdwardsAffine::new(coords[0], coords[1]));
 
     let rp_ciphertexts = izip!(ciphertexts, comm_plains, nonces)
-        .map(|(cipher, comm, nonce)| RpSecretGenCiphertext::new(*cipher, comm, nonce))
+        .map(|(cipher, comm, nonce)| SecretGenCiphertext::new(*cipher, comm, nonce))
         .collect_vec();
 
     if pk_computed != toxic_waste.sk.get_public_key().inner() {
@@ -431,6 +430,6 @@ fn compute_keygen_proof_max_degree1_parties3(
         eyre::bail!("computed commitment to coeffs does not match with my own!");
     }
 
-    let ciphers = RpSecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
+    let ciphers = SecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
     Ok((ciphers, toxic_waste.next(peers)))
 }

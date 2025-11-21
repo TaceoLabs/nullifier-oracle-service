@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 pub mod api;
 pub mod metrics;
-pub mod rp_registry;
+pub mod oprf_key_registry;
 pub mod services;
 
 /// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
@@ -88,14 +88,14 @@ mod tests {
     use axum::Router;
     use axum_test::TestServer;
     use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
-    use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
-    use oprf_types::crypto::{PartyId, RpNullifierKey};
-    use oprf_types::{RpId, ShareEpoch};
+    use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
+    use oprf_types::crypto::{EphemeralEncryptionPublicKey, OprfPublicKey, PartyId};
+    use oprf_types::{OprfKeyId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
 
     use crate::services::oprf::{OprfReqAuthenticator, OprfService};
-    use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
+    use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;
 
@@ -127,16 +127,14 @@ mod tests {
 
             let share_epoch = ShareEpoch::default();
 
-            let rp_id = RpId::new(rng.r#gen());
-            let rp_secret_key = k256::SecretKey::random(&mut rng);
-            let rp_public_key = rp_secret_key.public_key();
+            let oprf_key_id = OprfKeyId::new(rng.r#gen());
 
             let request_id = Uuid::new_v4();
             let action = ark_babyjubjub::Fq::rand(&mut rng);
             let mt_index = rng.gen_range(0..(1 << 30)) as u64;
             let query_hash = oprf_core::oprf::client::generate_query(
                 mt_index.into(),
-                rp_id.into_inner().into(),
+                oprf_key_id.into(),
                 action,
             );
             let (blinded_request, _blinding_factor) =
@@ -144,7 +142,10 @@ mod tests {
             let oprf_req = OprfRequest {
                 request_id,
                 blinded_query: blinded_request.blinded_query(),
-                rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
+                share_identifier: ShareIdentifier {
+                    oprf_key_id,
+                    share_epoch,
+                },
                 auth: (),
             };
             let challenge_req = ChallengeRequest {
@@ -157,25 +158,27 @@ mod tests {
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     vec![1, 2, 3],
                 ),
-                rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
+                share_identifier: ShareIdentifier {
+                    oprf_key_id,
+                    share_epoch,
+                },
             };
 
-            let rp_material = RpMaterialStore::new(HashMap::from([(
-                rp_id,
-                RpMaterial::new(
+            let oprf_key_material = OprfKeyMaterialStore::new(HashMap::from([(
+                oprf_key_id,
+                OprfKeyMaterial::new(
                     HashMap::from([(
                         ShareEpoch::default(),
                         DLogShareShamir::from(ark_babyjubjub::Fr::rand(&mut rng)),
                     )]),
-                    rp_public_key.into(),
-                    RpNullifierKey::new(rng.r#gen()),
+                    OprfPublicKey::new(rng.r#gen()),
                 ),
             )]));
 
             let request_lifetime = Duration::from_secs(5 * 60);
             let session_cleanup_interval = Duration::from_secs(30);
             let oprf_service = OprfService::init(
-                rp_material,
+                oprf_key_material,
                 request_lifetime,
                 session_cleanup_interval,
                 PartyId(0),
@@ -235,18 +238,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_init_unknown_rp_id() -> eyre::Result<()> {
+    async fn test_init_unknown_oprf_key_id() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
-        let unknown_rp_id = RpId::new(rand::random());
+        let unknown_oprf_key_id = OprfKeyId::new(rand::random());
         let mut req = setup.oprf_req;
-        req.rp_identifier.rp_id = unknown_rp_id;
+        req.share_identifier.oprf_key_id = unknown_oprf_key_id;
+
         let res = setup
             .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
             .await;
-        res.assert_text(format!("cannot find RP with id: {unknown_rp_id}"));
+        res.assert_text(format!("cannot find RP with id: {unknown_oprf_key_id}"));
         res.assert_status_not_found();
         Ok(())
     }
@@ -256,7 +260,7 @@ mod tests {
         let setup = TestSetup::new().await?;
         let unknown_share_epoch = ShareEpoch::new(rand::random());
         let mut req = setup.oprf_req;
-        req.rp_identifier.share_epoch = unknown_share_epoch;
+        req.share_identifier.share_epoch = unknown_share_epoch;
         let res = setup
             .server
             .post("/api/v1/init")
@@ -328,7 +332,7 @@ mod tests {
             .assert_status_ok();
         let unknown_share_epoch = ShareEpoch::new(rand::random());
         let mut req = setup.challenge_req;
-        req.rp_identifier.share_epoch = unknown_share_epoch;
+        req.share_identifier.share_epoch = unknown_share_epoch;
         let res = setup
             .server
             .post("/api/v1/finish")

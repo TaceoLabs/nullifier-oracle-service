@@ -13,13 +13,13 @@ use testcontainers::{
 };
 use testcontainers_modules::{anvil::AnvilNode, postgres::Postgres};
 
-pub use oprf_service::rp_registry::{RpRegistry, Types::EcDsaPubkeyCompressed};
+pub use oprf_service::oprf_key_registry::OprfKeyRegistry;
 
 use crate::test_secret_manager::TestSecretManager;
 
 pub mod credentials;
 pub mod health_checks;
-pub mod rp_registry_scripts;
+pub mod oprf_key_registry_scripts;
 pub mod test_secret_manager;
 pub mod world_id_protocol_mock;
 
@@ -65,7 +65,7 @@ async fn start_world_service(
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
-        rp_registry_contract,
+        oprf_key_registry_contract: rp_registry_contract,
         account_registry_contract,
         chain_ws_rpc_url: chain_ws_rpc_url.into(),
         key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
@@ -107,7 +107,7 @@ async fn start_example_service(
         session_cleanup_interval: Duration::from_micros(1000000),
         max_wait_time_shutdown: Duration::from_secs(10),
         rp_secret_id_prefix: format!("oprf/rp/n{id}"),
-        rp_registry_contract,
+        oprf_key_registry_contract: rp_registry_contract,
         chain_ws_rpc_url: chain_ws_rpc_url.into(),
         key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
         key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),

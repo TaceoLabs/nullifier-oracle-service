@@ -288,7 +288,7 @@ contract OprfKeyRegistryTest is Test {
     }
 
     function testDeleteBeforeRound1() public {
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
@@ -323,7 +323,7 @@ contract OprfKeyRegistryTest is Test {
     }
 
     function testDeleteDuringRound1() public {
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
@@ -368,7 +368,7 @@ contract OprfKeyRegistryTest is Test {
     }
 
     function testDeleteDuringRound2() public {
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
@@ -430,7 +430,7 @@ contract OprfKeyRegistryTest is Test {
     }
 
     function testDeleteDuringRound3() public {
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
@@ -510,7 +510,7 @@ contract OprfKeyRegistryTest is Test {
     }
 
     function testE2E() public {
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);

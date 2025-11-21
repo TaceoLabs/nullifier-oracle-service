@@ -15,7 +15,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use oprf_types::RpId;
+use oprf_types::OprfKeyId;
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::services::oprf::OprfService;
@@ -27,7 +27,7 @@ pub(crate) fn routes(oprf_service: OprfService, wallet_address: Address) -> Rout
     Router::new()
         .route("/version", get(version))
         .route("/wallet", get(move || wallet(wallet_address)))
-        .route("/rp/{rp_id}", get(rp_available))
+        .route("/oprf_pub/{id}", get(oprf_key_available))
         .layer(Extension(oprf_service))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -49,15 +49,15 @@ async fn wallet(wallet_address: Address) -> impl IntoResponse {
     (StatusCode::OK, wallet_address.to_string())
 }
 
-/// Checks whether a RP associated with the [`RpId`] is registered at the service.
+/// Checks whether a OPRF public-key associated with the [`OprfKeyId`] is registered at the service.
 ///
-/// Returns `200 OK` with [`oprf_types::api::v1::PublicRpMaterial`] from the RP if registered.
+/// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKey`].
 /// Returns `404 Not Found` if not registered.
-async fn rp_available(
+async fn oprf_key_available(
     Extension(oprf_service): Extension<OprfService>,
-    Path(rp_id): Path<RpId>,
+    Path(id): Path<OprfKeyId>,
 ) -> impl IntoResponse {
-    if let Some(public_material) = oprf_service.rp_material_store.get_rp_public_material(rp_id) {
+    if let Some(public_material) = oprf_service.oprf_material_store.get_oprf_public_key(id) {
         (StatusCode::OK, Json(public_material)).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

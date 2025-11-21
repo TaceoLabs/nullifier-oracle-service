@@ -85,9 +85,9 @@ pub struct OprfPeerConfig {
     #[clap(long, env = "OPRF_SERVICE_USER_PROOF_VERIFICATION_KEY_PATH")]
     pub user_verification_key_path: PathBuf,
 
-    /// The Address of the RpRegistry contract.
-    #[clap(long, env = "OPRF_SERVICE_RP_REGISTRY_CONTRACT")]
-    pub rp_registry_contract: Address,
+    /// The Address of the OprfKeyRegistry contract.
+    #[clap(long, env = "OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT")]
+    pub oprf_key_registry_contract: Address,
 
     /// The address of the AccountRegistry smart contract
     #[clap(long, env = "OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT")]

@@ -1,7 +1,7 @@
 //! Provides functionality for OPRF session management.
 //!
 //! Responsibilities:
-//! - Produce partial discrete-log equality commitments via the [`RpMaterialStore`].
+//! - Produce partial discrete-log equality commitments via the [`OprfKeyMaterialStore`].
 //! - Persist per-session randomness in the [`SessionStore`] for later challenge completion.
 //!
 //! The service exposes two main flows:
@@ -16,19 +16,14 @@ use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use oprf_core::ddlog_equality::shamir::{DLogProofShareShamir, PartialDLogCommitmentsShamir};
-use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
+use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
 use oprf_types::crypto::PartyId;
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{
-    metrics::METRICS_KEY_OPRF_SUCCESS,
-    services::{
-        rp_material_store::{RpMaterialStore, RpMaterialStoreError},
-        session_store::SessionStore,
-    },
-};
+use crate::services::oprf_key_material_store::{OprfKeyMaterialStore, OprfKeyMaterialStoreError};
+use crate::{metrics::METRICS_KEY_OPRF_SUCCESS, services::session_store::SessionStore};
 
 /// Errors returned by the [`OprfService`].
 #[derive(Debug, thiserror::Error)]
@@ -39,9 +34,9 @@ pub enum OprfServiceError {
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
-    /// Error from RpMaterialStore
+    /// Error from OprfKeyMaterialStore
     #[error(transparent)]
-    RpMaterialStoreError(#[from] RpMaterialStoreError),
+    OprfKeyMaterialStoreError(#[from] OprfKeyMaterialStoreError),
     /// Internal server error
     #[error(transparent)]
     InternalServerError(#[from] eyre::Report),
@@ -60,12 +55,12 @@ pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
 
 /// Main OPRF service managing session lifecycle and cryptographic operations.
 ///
-/// Holds references to the RP material store, session store, merkle watcher,
+/// Holds references to the [`OprfKeyMaterialStore`], session store, merkle watcher,
 /// signature history, and verification key. Cloneable for use across multiple
 /// tasks and API handlers.
 #[derive(Clone)]
 pub struct OprfService {
-    pub(crate) rp_material_store: RpMaterialStore,
+    pub(crate) oprf_material_store: OprfKeyMaterialStore,
     pub(crate) session_store: SessionStore,
     pub(crate) party_id: PartyId,
 }
@@ -73,13 +68,13 @@ pub struct OprfService {
 impl OprfService {
     /// Builds an [`OprfService`] from its core services and config values.
     pub fn init(
-        rp_material_store: RpMaterialStore,
+        oprf_key_material_store: OprfKeyMaterialStore,
         request_lifetime: Duration,
         session_cleanup_interval: Duration,
         party_id: PartyId,
     ) -> Self {
         Self {
-            rp_material_store,
+            oprf_material_store: oprf_key_material_store,
             session_store: SessionStore::init(session_cleanup_interval, request_lifetime),
             party_id,
         }
@@ -88,13 +83,13 @@ impl OprfService {
     /// Initializes an OPRF session for the given request.
     ///
     /// This method executes the first step of the OPRF protocol:
-    /// - Computes partial discrete-log equality commitments using the [`RpMaterialStore`].
+    /// - Computes partial discrete-log equality commitments using the [`OprfKeyMaterialStore`].
     /// - Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     #[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
     pub(crate) async fn init_oprf_session(
         &self,
         request_id: Uuid,
-        rp_identifier: NullifierShareIdentifier,
+        share_identifier: ShareIdentifier,
         blinded_query: ark_babyjubjub::EdwardsAffine,
     ) -> Result<PartialDLogCommitmentsShamir, OprfServiceError> {
         tracing::debug!("handling session request: {request_id}");
@@ -106,8 +101,8 @@ impl OprfService {
 
         // Partial commit through the crypto device
         let (session, comm) = self
-            .rp_material_store
-            .partial_commit(blinded_query, &rp_identifier)?;
+            .oprf_material_store
+            .partial_commit(blinded_query, &share_identifier)?;
 
         // Store the randomness for finalize request
         self.session_store.insert(request_id, session);
@@ -118,7 +113,7 @@ impl OprfService {
     /// Finalizes an OPRF session for a client challenge request.
     ///
     /// - Retrieves the stored randomness from [`SessionStore`].
-    /// - Computes the final discrete-log equality proof share using [`RpMaterialStore`].
+    /// - Computes the final discrete-log equality proof share using [`OprfKeyMaterialStore`].
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) fn finalize_oprf_session(
         &self,
@@ -131,12 +126,12 @@ impl OprfService {
             .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self.rp_material_store.challenge(
+        let proof_share = self.oprf_material_store.challenge(
             request.request_id,
             self.party_id,
             session,
             request.challenge,
-            &request.rp_identifier,
+            &request.share_identifier,
         )?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");

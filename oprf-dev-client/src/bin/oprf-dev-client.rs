@@ -6,7 +6,7 @@ use std::{
 
 use alloy::{
     network::EthereumWallet,
-    primitives::Address,
+    primitives::{Address, U160},
     providers::{ProviderBuilder, WsConnect},
     signers::local::PrivateKeySigner,
 };
@@ -16,11 +16,11 @@ use eddsa_babyjubjub::EdDSAPrivateKey;
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
 use oprf_client::{CircomGroth16Material, NullifierArgs, OprfQuery, SignedOprfQuery};
-use oprf_service::rp_registry::Types;
+use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{
-    MOCK_RP_SECRET_KEY, RpRegistry, health_checks, rp_registry_scripts, world_id_protocol_mock,
+    MOCK_RP_SECRET_KEY, health_checks, oprf_key_registry_scripts, world_id_protocol_mock,
 };
-use oprf_types::{RpId, ShareEpoch, api::v1::OprfRequest, crypto::RpNullifierKey};
+use oprf_types::{OprfKeyId, ShareEpoch, api::v1::OprfRequest, crypto::OprfPublicKey};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
@@ -66,13 +66,13 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_THRESHOLD", default_value = "2")]
     pub threshold: usize,
 
-    /// The Address of the RpRegistry contract.
+    /// The Address of the OprfKeyRegistry contract.
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_RP_REGISTRY_CONTRACT",
+        env = "OPRF_DEV_CLIENT_OPRF_KEY_REGISTRY_CONTRACT",
         default_value = "0x0165878A594ca255338adfa4d48449f69242Eb8F"
     )]
-    pub rp_registry_contract: Address,
+    pub oprf_key_registry_contract: Address,
 
     /// The Address of the AccountRegistry contract.
     #[clap(
@@ -126,8 +126,8 @@ pub struct OprfDevClientConfig {
     pub indexer_inclusion_proof_timeout: Duration,
 
     /// rp id of already registered rp
-    #[clap(long, env = "OPRF_DEV_CLIENT_RP_ID")]
-    pub rp_id: Option<u128>,
+    #[clap(long, env = "OPRF_DEV_CLIENT_OPRF_KEY_ID")]
+    pub oprf_key_id: Option<U160>,
 
     /// max wait time for init key-gen to succeed.
     #[clap(long, env = "OPRF_DEV_CLIENT_KEY_GEN_WAIT_TIME", default_value="2min", value_parser=humantime::parse_duration)]
@@ -138,39 +138,41 @@ pub struct OprfDevClientConfig {
     pub command: Command,
 }
 
-async fn fetch_rp_nullifier_key(
-    rp_id: RpId,
+async fn fetch_oprf_public_key(
+    oprf_key_id: OprfKeyId,
     wallet: &EthereumWallet,
     config: &OprfDevClientConfig,
-) -> eyre::Result<RpNullifierKey> {
-    tracing::info!("fetching rp_nullifier_key..");
+) -> eyre::Result<OprfPublicKey> {
+    tracing::info!("fetching OPRF public-key..");
     let ws = WsConnect::new(config.chain_ws_rpc_url.expose_secret());
     let provider = ProviderBuilder::new()
         .wallet(wallet)
         .connect_ws(ws)
         .await
         .context("while connecting to RPC")?;
-    let contract = RpRegistry::new(config.rp_registry_contract, provider.clone());
+    let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let rp_nullifier_key = tokio::time::timeout(config.max_wait_time_key_gen, async move {
+    let oprf_public_key = tokio::time::timeout(config.max_wait_time_key_gen, async move {
         loop {
             interval.tick().await;
-            let maybe_rp_nullifier_key =
-                contract.getRpNullifierKey(rp_id.into_inner()).call().await;
-            if let Ok(rp_nullifier_key) = maybe_rp_nullifier_key {
-                return eyre::Ok(RpNullifierKey::new(rp_nullifier_key.try_into()?));
+            let maybe_oprf_public_key = contract
+                .getOprfPublicKey(oprf_key_id.into_inner())
+                .call()
+                .await;
+            if let Ok(oprf_public_key) = maybe_oprf_public_key {
+                return eyre::Ok(OprfPublicKey::new(oprf_public_key.try_into()?));
             }
         }
     })
     .await
     .context("could not fetch rp nullifier key in time")?
     .context("while polling RP key")?;
-    Ok(rp_nullifier_key)
+    Ok(oprf_public_key)
 }
 
 fn nullifier_args<R: Rng + CryptoRng>(
-    rp_id: RpId,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_key_id: OprfKeyId,
+    oprf_public_key: OprfPublicKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
     rng: &mut R,
@@ -186,7 +188,7 @@ fn nullifier_args<R: Rng + CryptoRng>(
     let signature = k256::ecdsa::SigningKey::from(MOCK_RP_SECRET_KEY.clone()).sign(&msg);
 
     let query = OprfQuery {
-        rp_id,
+        oprf_key_id,
         share_epoch: ShareEpoch::default(),
         action: ark_babyjubjub::Fq::rand(rng),
         nonce,
@@ -208,7 +210,7 @@ fn nullifier_args<R: Rng + CryptoRng>(
         merkle_membership,
         query,
         key_material,
-        rp_nullifier_key,
+        oprf_public_key,
         signal_hash,
         id_commitment_r,
     };
@@ -219,8 +221,8 @@ fn nullifier_args<R: Rng + CryptoRng>(
 async fn run_nullifier(
     services: &[String],
     threshold: usize,
-    rp_id: RpId,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_key_id: OprfKeyId,
+    oprf_public_key: OprfPublicKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
     query_material: &CircomGroth16Material,
@@ -229,8 +231,8 @@ async fn run_nullifier(
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
     let args = nullifier_args(
-        rp_id,
-        rp_nullifier_key,
+        oprf_key_id,
+        oprf_public_key,
         merkle_membership,
         key_material,
         &mut rng,
@@ -253,7 +255,7 @@ async fn run_nullifier(
 }
 
 fn prepare_nullifier_stress_test_oprf_request(
-    rp_id: RpId,
+    oprf_key_id: OprfKeyId,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
     query_material: &CircomGroth16Material,
@@ -271,7 +273,7 @@ fn prepare_nullifier_stress_test_oprf_request(
     let signature = k256::ecdsa::SigningKey::from(MOCK_RP_SECRET_KEY.clone()).sign(&msg);
 
     let query = OprfQuery {
-        rp_id,
+        oprf_key_id,
         share_epoch: ShareEpoch::default(),
         action: ark_babyjubjub::Fq::rand(&mut rng),
         nonce,
@@ -316,8 +318,8 @@ async fn stress_test(
     cmd: StressTestCommand,
     services: &[String],
     threshold: usize,
-    rp_id: RpId,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_key_id: OprfKeyId,
+    oprf_public_key: OprfPublicKey,
     merkle_membership: MerkleMembership,
     key_material: UserKeyMaterial,
     query_material: &CircomGroth16Material,
@@ -329,7 +331,7 @@ async fn stress_test(
 
     for idx in 0..cmd.nullifier_num {
         let (query, req) = prepare_nullifier_stress_test_oprf_request(
-            rp_id,
+            oprf_key_id,
             merkle_membership.clone(),
             key_material.clone(),
             query_material,
@@ -383,7 +385,7 @@ async fn stress_test(
                 oprf_client::compute_challenges(
                     oprf_queries.remove(idx).expect("is there"),
                     sessions,
-                    rp_nullifier_key,
+                    oprf_public_key,
                 )?,
             ))
         })
@@ -477,22 +479,20 @@ async fn main() -> eyre::Result<()> {
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
 
-    let (rp_id, rp_nullifier_key) = if let Some(rp_id) = config.rp_id {
-        let rp_id = RpId::new(rp_id);
-        let rp_nullifier_key = fetch_rp_nullifier_key(rp_id, &wallet, &config).await?;
-        (rp_id, rp_nullifier_key)
+    let (oprf_key_id, oprf_public_key) = if let Some(oprf_key_id) = config.oprf_key_id {
+        let oprf_key_id = OprfKeyId::new(oprf_key_id);
+        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+        (oprf_key_id, oprf_public_key)
     } else {
-        let rp_pk = Types::EcDsaPubkeyCompressed::try_from(MOCK_RP_SECRET_KEY.public_key())?;
-        let rp_id = rp_registry_scripts::init_key_gen(
+        let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
             config.chain_ws_rpc_url.expose_secret(),
-            config.rp_registry_contract,
-            rp_pk,
+            config.oprf_key_registry_contract,
             config.taceo_private_key.expose_secret(),
         );
-        tracing::info!("registered rp with rp_id: {rp_id}");
+        tracing::info!("registered OPRF key with: {oprf_key_id}");
 
-        let rp_nullifier_key = fetch_rp_nullifier_key(rp_id, &wallet, &config).await?;
-        (rp_id, rp_nullifier_key)
+        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+        (oprf_key_id, oprf_public_key)
     };
 
     tracing::info!("creating account..");
@@ -526,8 +526,8 @@ async fn main() -> eyre::Result<()> {
             run_nullifier(
                 &config.services,
                 config.threshold,
-                rp_id,
-                rp_nullifier_key,
+                oprf_key_id,
+                oprf_public_key,
                 merkle_membership,
                 key_material,
                 &query_material,
@@ -542,8 +542,8 @@ async fn main() -> eyre::Result<()> {
                 cmd,
                 &config.services,
                 config.threshold,
-                rp_id,
-                rp_nullifier_key,
+                oprf_key_id,
+                oprf_public_key,
                 merkle_membership,
                 key_material,
                 &query_material,

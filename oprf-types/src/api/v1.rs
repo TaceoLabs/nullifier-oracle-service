@@ -15,24 +15,8 @@ use oprf_core::ddlog_equality::shamir::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-use crate::{
-    RpId, ShareEpoch,
-    crypto::{PartyId, RpNullifierKey},
-};
+use crate::{OprfKeyId, ShareEpoch, crypto::PartyId};
 use ark_serde_compat::babyjubjub;
-
-/// The public components of the `RpMaterial`.
-///
-/// This contains
-/// * ECDSA `VerifyingKey`
-/// * [`RpNullifierKey`]
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PublicRpMaterial {
-    /// The public key used to verify the nonces of an Rp
-    pub public_key: k256::ecdsa::VerifyingKey,
-    /// The public part of the Nullifier Key.
-    pub nullifier_key: RpNullifierKey,
-}
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
@@ -47,17 +31,17 @@ where
     #[serde(serialize_with = "babyjubjub::serialize_affine")]
     #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     pub blinded_query: ark_babyjubjub::EdwardsAffine,
-    /// Identifies the relying party’s and the epoch of the used share
-    pub rp_identifier: NullifierShareIdentifier,
+    /// Identifies the OPRF public-key and the epoch of the used share
+    pub share_identifier: ShareIdentifier,
     /// The additional authentication info for this request
     pub auth: OprfRequestAuth,
 }
 
-/// Identifies the nullifier share to use for the OPRF computation by relying party ([`RpId`]) and [`ShareEpoch`].
+/// Identifies the nullifier share to use for the OPRF computation by relying party ([`OprfKeyId`]) and [`ShareEpoch`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NullifierShareIdentifier {
-    /// ID of the relying party.
-    pub rp_id: RpId,
+pub struct ShareIdentifier {
+    /// ID of OPRF public-key
+    pub oprf_key_id: OprfKeyId,
     /// Epoch of the key.
     pub share_epoch: ShareEpoch,
 }
@@ -81,7 +65,7 @@ pub struct ChallengeRequest {
     /// The challenge to respond to.
     pub challenge: DLogCommitmentsShamir,
     /// Identifies the relying party’s and the epoch of the used share
-    pub rp_identifier: NullifierShareIdentifier,
+    pub share_identifier: ShareIdentifier,
 }
 
 /// Server response to a [`ChallengeRequest`].
@@ -101,7 +85,7 @@ where
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)
             .field("blinded_query", &self.blinded_query.to_string())
-            .field("rp_identifier", &self.rp_identifier)
+            .field("share_identifier", &self.share_identifier)
             .finish()
     }
 }
