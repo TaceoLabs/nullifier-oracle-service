@@ -9,6 +9,13 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
+interface IRpRegistry {
+    function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data) external;
+    function addRound2Contribution(uint128 rpId, Types.Round2Contribution calldata data) external;
+    function addRound3Contribution(uint128 rpId) external;
+    // TODO: Add the other RpRegistry functions
+}
+
 /**
  * @title OprfPeerAccount
  * @notice Simplified Smart Contract Account for OPRF peers to interact with RpRegistry via ERC-4337
@@ -17,39 +24,47 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
-    
+
+    using Types for Types.BabyJubJubElement;
+    using Types for Types.EcDsaPubkeyCompressed;
+    using Types for Types.OprfPeer;
+    using Types for Types.Round1Contribution;
+    using Types for Types.RpMaterial;
+    using Types for Types.RpNullifierGenState;
+    using Types for Types.Groth16Proof;
+
     // Account state
     address public owner;
     IEntryPoint private immutable _entryPoint;
-    
+
     // Events
     event OwnerChanged(address indexed previousOwner, address indexed newOwner);
     event CallExecuted(address indexed target, uint256 value, bytes data, bool success);
-    
+
     // Errors
     error OnlyOwner();
     error OnlyOwnerOrEntryPoint();
     error CallFailed();
-    
+
     // Modifiers
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
         _;
     }
-    
+
     modifier onlyOwnerOrEntryPoint() {
         if (msg.sender != owner && msg.sender != address(_entryPoint)) {
             revert OnlyOwnerOrEntryPoint();
         }
         _;
     }
-    
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(IEntryPoint anEntryPoint) {
         _entryPoint = anEntryPoint;
         _disableInitializers();
     }
-    
+
     /**
      * @notice Initialize the account
      * @param anOwner The owner of this account (the OPRF peer)
@@ -57,18 +72,18 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     function initialize(address anOwner) public virtual initializer {
         owner = anOwner;
     }
-    
+
     // =============================================
     //           ERC-4337 Implementation
     // =============================================
-    
+
     /**
      * @notice Return the EntryPoint address
      */
     function entryPoint() public view virtual override returns (IEntryPoint) {
         return _entryPoint;
     }
-    
+
     /**
      * @notice Validate the signature of a user operation
      * @param userOp The user operation
@@ -81,23 +96,23 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     ) internal virtual override returns (uint256 validationData) {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
         address recovered = hash.recover(userOp.signature);
-        
+
         // Only the owner can sign operations
         if (recovered == owner) {
             return 0; // Valid signature
         }
-        
+
         return 1; // Invalid signature
     }
-    
+
     // =============================================
     //           Transaction Execution
     // =============================================
-    
+
     /**
      * @notice Execute a transaction from the EntryPoint
      * @param dest Destination address
-     * @param value ETH value to send
+     * @param value ETH value to send Note That this is always 0 for a non-payable function
      * @param func Function calldata
      */
     function execute(
@@ -108,11 +123,11 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         _call(dest, value, func);
         emit CallExecuted(dest, value, func, true);
     }
-    
+
     /**
      * @notice Execute a batch of transactions
      * @param dest Array of destination addresses
-     * @param value Array of ETH values
+     * @param value Array of ETH values Note That this is always 0 for a non-payable function
      * @param func Array of function calldata
      */
     function executeBatch(
@@ -124,17 +139,17 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
             dest.length == func.length && dest.length == value.length,
             "Length mismatch"
         );
-        
+
         for (uint256 i = 0; i < dest.length; i++) {
             _call(dest[i], value[i], func[i]);
             emit CallExecuted(dest[i], value[i], func[i], true);
         }
     }
-    
+
     /**
      * @notice Internal call function
      * @param target Target address
-     * @param value ETH value
+     * @param value ETH value Note That this is always 0 for a non-payable function
      * @param data Call data
      */
     function _call(address target, uint256 value, bytes memory data) internal {
@@ -151,43 +166,30 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
             }
         }
     }
-    
+
     // =============================================
     //      RpRegistry Specific Helper Functions
     // =============================================
-    
+
     /**
      * @notice Submit Round 1 contribution to RpRegistry
      * @param rpRegistryProxy The proxy address of RpRegistry
      * @param rpId The RP identifier
-     * @param commShareX Commitment share X coordinate
-     * @param commShareY Commitment share Y coordinate
-     * @param commCoeffs Commitment coefficients
-     * @param ephPubKeyX Ephemeral public key X coordinate
-     * @param ephPubKeyY Ephemeral public key Y coordinate
+     * @param data The Round 1 contribution data
      */
     function submitRound1Contribution(
         address rpRegistryProxy,
         uint128 rpId,
-        uint256 commShareX,
-        uint256 commShareY,
-        uint256 commCoeffs,
-        uint256 ephPubKeyX,
-        uint256 ephPubKeyY
+        Types.Round1Contribution calldata data
     ) external onlyOwner {
-        bytes memory callData = abi.encodeWithSignature(
-            "addRound1Contribution(uint128,(uint256,uint256,uint256,(uint256,uint256)))",
-            rpId,
-            commShareX,
-            commShareY,
-            commCoeffs,
-            ephPubKeyX,
-            ephPubKeyY
+        bytes memory callData = abi.encodeCall(
+            IRpRegistry.addRound1Contribution,
+            (rpId, data)
         );
-        
+
         _call(rpRegistryProxy, 0, callData);
     }
-    
+
     /**
      * @notice Submit Round 2 contribution with proof to RpRegistry
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -198,29 +200,16 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     function submitRound2Contribution(
         address rpRegistryProxy,
         uint128 rpId,
-        bytes calldata ciphers,  // Pre-encoded array of SecretGenCiphertext
-        uint256[2] calldata proofA,
-        uint256[2][2] calldata proofB,
-        uint256[2] calldata proofC
+        Types.Round2Contribution calldata data
     ) external onlyOwner {
-        // Note: The ciphers parameter should be pre-encoded as it contains complex nested structures
-        // This avoids stack too deep issues and complex encoding
-        bytes memory callData = abi.encodeWithSignature(
-            "addRound2Contribution(uint128,((uint256,(uint256,uint256),uint256)[],(uint256[2],uint256[2][2],uint256[2])))",
-            rpId
+        bytes memory callData = abi.encodeCall(
+            IRpRegistry.addRound2Contribution,
+            (rpId, data)
         );
-        
-        // Append the pre-encoded data
-        bytes memory fullCallData = abi.encodePacked(
-            callData[:4], // Function selector
-            abi.encode(rpId),
-            ciphers,
-            abi.encode(proofA, proofB, proofC)
-        );
-        
-        _call(rpRegistryProxy, 0, fullCallData);
+
+        _call(rpRegistryProxy, 0, callData);
     }
-    
+
     /**
      * @notice Submit Round 3 contribution (acknowledgment) to RpRegistry
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -230,14 +219,15 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         address rpRegistryProxy,
         uint128 rpId
     ) external onlyOwner {
-        bytes memory callData = abi.encodeWithSignature(
-            "addRound3Contribution(uint128)",
-            rpId
+        bytes memory callData = abi.encodeCall(
+            IRpRegistry.addRound3Contribution,
+            (rpId)
         );
-        
+
         _call(rpRegistryProxy, 0, callData);
     }
-    
+
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Check if this account is a participant and get party ID
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -252,7 +242,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(success, "Failed to check participant status");
         return abi.decode(result, (uint256));
     }
-    
+
     /**
      * @notice Get ephemeral public keys from Round 1
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -272,7 +262,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(success, "Failed to get ephemeral keys");
         return result; // Return raw bytes as the structure is complex
     }
-    
+
     /**
      * @notice Get Round 2 ciphertexts for this peer
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -292,7 +282,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(success, "Failed to get Round 2 ciphers");
         return result; // Return raw bytes as the structure is complex
     }
-    
+
     /**
      * @notice Get the nullifier key for a specific RP
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -310,7 +300,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(success, "Failed to get nullifier key");
         (x, y) = abi.decode(result, (uint256, uint256));
     }
-    
+
     /**
      * @notice Get complete RP material (ECDSA key and nullifier key)
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -327,11 +317,11 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(success, "Failed to get RP material");
         return result;
     }
-    
+
     // =============================================
     //      Batch Operation Helpers
     // =============================================
-    
+
     /**
      * @notice Execute multiple RpRegistry operations in one transaction
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -345,7 +335,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
             _call(rpRegistryProxy, 0, callDatas[i]);
         }
     }
-    
+
     /**
      * @notice Submit Round 1 contributions for multiple RPs
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -358,17 +348,18 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         bytes[] calldata contributions
     ) external onlyOwner {
         require(rpIds.length == contributions.length, "Length mismatch");
-        
+
         for (uint256 i = 0; i < rpIds.length; i++) {
-            bytes memory callData = abi.encodePacked(
-                bytes4(keccak256("addRound1Contribution(uint128,(uint256,uint256,uint256,(uint256,uint256)))")),
-                abi.encode(rpIds[i]),
-                contributions[i]
+            bytes memory callData = abi.encodeCall(
+                IRpRegistry.addRound1Contribution,
+                (rpIds[i], contributions[i])
             );
             _call(rpRegistryProxy, 0, callData);
         }
     }
-    
+
+    // TODO: Add batching function for Round 2 contributions
+
     /**
      * @notice Submit Round 3 acknowledgments for multiple RPs
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -379,38 +370,38 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         uint128[] calldata rpIds
     ) external onlyOwner {
         for (uint256 i = 0; i < rpIds.length; i++) {
-            bytes memory callData = abi.encodeWithSignature(
-                "addRound3Contribution(uint128)",
-                rpIds[i]
+            bytes memory callData = abi.encodeCall(
+                IRpRegistry.addRound3Contribution,
+                (rpIds[i])
             );
             _call(rpRegistryProxy, 0, callData);
         }
     }
-    
+
     // =============================================
     //           Account Management
     // =============================================
-    
+
     /**
      * @notice Transfer ownership of the account
      * @param newOwner The new owner address
      */
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "Invalid new owner");
-        
+
         address previousOwner = owner;
         owner = newOwner;
-        
+
         emit OwnerChanged(previousOwner, newOwner);
     }
-    
+
     /**
      * @notice Deposit funds to the EntryPoint
      */
     function addDeposit() external payable {
         entryPoint().depositTo{value: msg.value}(address(this));
     }
-    
+
     /**
      * @notice Withdraw funds from the EntryPoint
      * @param withdrawAddress Address to withdraw to
@@ -422,7 +413,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     ) external onlyOwner {
         entryPoint().withdrawTo(withdrawAddress, amount);
     }
-    
+
     /**
      * @notice Get the current deposit in EntryPoint
      * @return The current deposit amount
@@ -430,21 +421,21 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     function getDeposit() external view returns (uint256) {
         return entryPoint().balanceOf(address(this));
     }
-    
+
     // =============================================
     //           Upgrade Functions
     // =============================================
-    
+
     /**
      * @notice Authorize an upgrade (only owner can upgrade)
      * @param newImplementation The new implementation address
      */
     function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {}
-    
+
     // =============================================
     //           Receive and Fallback
     // =============================================
-    
+
     /**
      * @notice Receive ETH
      */
