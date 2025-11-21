@@ -44,10 +44,10 @@ use oprf_core::oprf::{self, BlindedOprfRequest, BlindingFactor};
 use ark_ec::AffineRepr;
 use groth16_material::Groth16Error;
 use oprf_types::api::v1::{
-    ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
+    ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, OprfShareIdentifier,
 };
-use oprf_types::crypto::{PartyId, RpNullifierKey};
-use oprf_types::{RpId, ShareEpoch};
+use oprf_types::crypto::{OprfPublicKey, PartyId};
+use oprf_types::{OprfKeyId, ShareEpoch};
 use oprf_world_types::api::v1::OprfRequestAuth;
 use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
 use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
@@ -127,14 +127,14 @@ pub enum Error {
 
 /// The basic request a client sends to the OPRF service.
 ///
-/// It contains the relying party’s ID, the share epoch, the action
+/// It contains the OPRF public-key id, the share epoch, the action
 /// the user wants to compute a nullifier for, and a fresh nonce.
 /// The RP signs `(nonce || timestamp)` (both in little-endian byte encoding)
 /// to prevent replay. That signature is included here.
 #[derive(Clone)]
 pub struct OprfQuery {
     /// The ID of the RP that issued the nonce.
-    pub rp_id: RpId,
+    pub oprf_key_id: OprfKeyId,
     /// The epoch of the DLog share (currently always `0`).
     pub share_epoch: ShareEpoch,
     /// The action the user wants to compute a nullifier for.
@@ -212,7 +212,7 @@ impl OprfSessions {
 ///   peer commitments.
 /// - `query_input`: Input data used to generate the OPRFQuery proof.
 /// - `query_hash`: The hash of the query used in proofs.
-/// - `rp_nullifier_key`: The RP-specific nullifier public-key.
+/// - `oprf_public_key`: The OPRF public-key.
 pub struct Challenge {
     request_id: Uuid,
     challenge_request: ChallengeRequest,
@@ -220,7 +220,7 @@ pub struct Challenge {
     blinded_response: ark_babyjubjub::EdwardsAffine,
     query_input: QueryProofInput<TREE_DEPTH>,
     blinding_factor: BlindingFactor,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_public_key: OprfPublicKey,
 }
 
 /// Arguments required to generate a nullifier proof.
@@ -237,8 +237,8 @@ pub struct NullifierArgs {
     pub query: OprfQuery,
     /// User's key material (private and public keys, batch index, etc.).
     pub key_material: UserKeyMaterial,
-    /// RP-specific nullifier key.
-    pub rp_nullifier_key: RpNullifierKey,
+    /// The OPRF public-key.
+    pub oprf_public_key: OprfPublicKey,
     /// Signal hash as in semaphore
     pub signal_hash: ark_babyjubjub::Fq,
     /// Commitment to the id
@@ -384,7 +384,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
         merkle_membership,
         query,
         key_material,
-        rp_nullifier_key,
+        oprf_public_key,
         signal_hash,
         id_commitment_r,
     } = args;
@@ -404,7 +404,7 @@ pub async fn nullifier<R: Rng + CryptoRng>(
     let req = signed_query.get_request();
     let sessions = nonblocking::init_sessions(&client, services, threshold, req).await?;
 
-    let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
+    let challenges = compute_challenges(signed_query, &sessions, oprf_public_key)?;
     let req = challenges.get_request();
     let responses = nonblocking::finish_sessions(&client, sessions, req).await?;
     verify_challenges(
@@ -465,7 +465,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
 
     let query_hash = oprf::client::generate_query(
         merkle_membership.mt_index.into(),
-        query.rp_id.into_inner().into(),
+        query.oprf_key_id.into(),
         query.action,
     );
     let (blinded_request, blinding_factor) = oprf::client::blind_query(query_hash, rng);
@@ -489,7 +489,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         mt_index: merkle_membership.mt_index.into(),
         siblings: merkle_membership.siblings,
         beta: blinding_factor.beta(),
-        rp_id: query.rp_id.into_inner().into(),
+        rp_id: query.oprf_key_id.into(),
         action: query.action,
         nonce: query.nonce,
     };
@@ -504,8 +504,8 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
         oprf_request: OprfRequest {
             request_id,
             blinded_query: blinded_request.blinded_query(),
-            rp_identifier: NullifierShareIdentifier {
-                rp_id: query.rp_id,
+            oprf_share_identifier: OprfShareIdentifier {
+                oprf_key_id: query.oprf_key_id,
                 share_epoch: query.share_epoch,
             },
             auth: OprfRequestAuth {
@@ -539,7 +539,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
 ///
 /// * `query` - The signed OPRF query produced by [`sign_oprf_query`].
 /// * `sessions` - Active OPRF sessions containing the party IDs and commitments.
-/// * `rp_nullifier_key` - The RP-specific nullifier key used for challenge computation.
+/// * `oprf_public_key` - The RP-specific nullifier key used for challenge computation.
 ///
 /// # Errors
 ///
@@ -547,7 +547,7 @@ pub fn sign_oprf_query<R: Rng + CryptoRng>(
 pub fn compute_challenges(
     query: SignedOprfQuery,
     sessions: &OprfSessions,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_public_key: OprfPublicKey,
 ) -> Result<Challenge> {
     let contributing_parties = sessions
         .party_ids
@@ -564,12 +564,12 @@ pub fn compute_challenges(
         request_id: query.request_id,
         blinded_request: query.blinded_request,
         blinded_response,
-        rp_nullifier_key,
+        oprf_public_key,
         challenge_request: ChallengeRequest {
             request_id: query.request_id,
             challenge,
-            rp_identifier: NullifierShareIdentifier {
-                rp_id: query.query.rp_id,
+            oprf_share_identifier: OprfShareIdentifier {
+                oprf_key_id: query.query.oprf_key_id,
                 share_epoch: query.query.share_epoch,
             },
         },
@@ -634,12 +634,12 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
         challenges.request_id,
         &party_ids,
         &proofs,
-        challenges.rp_nullifier_key.inner(),
+        challenges.oprf_public_key.inner(),
         challenges.blinded_request.blinded_query(),
     );
     dlog_proof
         .verify(
-            challenges.rp_nullifier_key.inner(),
+            challenges.oprf_public_key.inner(),
             challenges.blinded_request.blinded_query(),
             challenges.blinded_response,
             ark_babyjubjub::EdwardsAffine::generator(),
@@ -649,7 +649,7 @@ pub fn verify_challenges<R: Rng + CryptoRng>(
     let nullifier_input = NullifierProofInput::new(
         challenges.query_input,
         dlog_proof,
-        challenges.rp_nullifier_key.inner(),
+        challenges.oprf_public_key.inner(),
         challenges.blinded_response,
         signal_hash,
         id_commitment_r,

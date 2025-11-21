@@ -55,9 +55,9 @@
     "name": "addRound1Contribution",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       },
       {
         "name": "data",
@@ -114,9 +114,9 @@
     "name": "addRound2Contribution",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       },
       {
         "name": "data",
@@ -190,9 +190,9 @@
     "name": "addRound3Contribution",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -216,9 +216,9 @@
     "name": "checkIsParticipantAndReturnEphemeralPublicKeys",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -260,9 +260,9 @@
     "name": "checkIsParticipantAndReturnRound2Ciphers",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -305,12 +305,12 @@
   },
   {
     "type": "function",
-    "name": "deleteRpMaterial",
+    "name": "deleteOprfPublicKey",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -318,67 +318,12 @@
   },
   {
     "type": "function",
-    "name": "getRpMaterial",
+    "name": "getOprfPublicKey",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct Types.RpMaterial",
-        "components": [
-          {
-            "name": "ecdsaKey",
-            "type": "tuple",
-            "internalType": "struct Types.EcDsaPubkeyCompressed",
-            "components": [
-              {
-                "name": "x",
-                "type": "bytes32",
-                "internalType": "bytes32"
-              },
-              {
-                "name": "yParity",
-                "type": "uint256",
-                "internalType": "uint256"
-              }
-            ]
-          },
-          {
-            "name": "nullifierKey",
-            "type": "tuple",
-            "internalType": "struct Types.BabyJubJubElement",
-            "components": [
-              {
-                "name": "x",
-                "type": "uint256",
-                "internalType": "uint256"
-              },
-              {
-                "name": "y",
-                "type": "uint256",
-                "internalType": "uint256"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getRpNullifierKey",
-    "inputs": [
-      {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -407,26 +352,9 @@
     "name": "initKeyGen",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
-        "internalType": "uint128"
-      },
-      {
-        "name": "ecdsaPubKey",
-        "type": "tuple",
-        "internalType": "struct Types.EcDsaPubkeyCompressed",
-        "components": [
-          {
-            "name": "x",
-            "type": "bytes32",
-            "internalType": "bytes32"
-          },
-          {
-            "name": "yParity",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -666,10 +594,10 @@
     "name": "KeyDeletion",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
+        "name": "oprfKeyId",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint128"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -743,10 +671,10 @@
     "name": "SecretGenFinalize",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
+        "name": "oprfKeyId",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint128"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -756,10 +684,10 @@
     "name": "SecretGenRound1",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
+        "name": "oprfKeyId",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint128"
+        "internalType": "uint160"
       },
       {
         "name": "threshold",
@@ -775,10 +703,10 @@
     "name": "SecretGenRound2",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
+        "name": "oprfKeyId",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint128"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -788,10 +716,10 @@
     "name": "SecretGenRound3",
     "inputs": [
       {
-        "name": "rpId",
-        "type": "uint128",
+        "name": "oprfKeyId",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint128"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -836,8 +764,8 @@
     "inputs": [
       {
         "name": "id",
-        "type": "uint128",
-        "internalType": "uint128"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
@@ -962,8 +890,8 @@
     "inputs": [
       {
         "name": "id",
-        "type": "uint128",
-        "internalType": "uint128"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },

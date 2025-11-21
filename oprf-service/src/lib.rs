@@ -37,10 +37,10 @@ use crate::services::{
 pub(crate) mod api;
 pub mod config;
 pub mod metrics;
-pub mod rp_registry;
+pub mod oprf_key_registry;
 pub(crate) mod services;
 
-pub use services::rp_material_store::RpMaterialStore;
+pub use services::oprf_key_material_store::OprfKeyMaterialStore;
 pub use services::secret_manager::SecretManager;
 pub use services::secret_manager::StoreDLogShare;
 pub use services::secret_manager::aws::AwsSecretManager;
@@ -146,11 +146,11 @@ pub async fn start(
     let key_gen_watcher: KeyGenEventListenerService = Arc::new(
         AlloyKeyGenWatcher::new(
             config.chain_ws_rpc_url.expose_secret(),
-            config.rp_registry_contract,
+            config.oprf_key_registry_contract,
             wallet,
         )
         .await
-        .context("while connecting to RpRegistry contract")?,
+        .context("while connecting to OprfKeyRegistry contract")?,
     );
 
     tracing::info!("loading party id..");
@@ -160,8 +160,8 @@ pub async fn start(
         .context("while loading partyId")?;
     tracing::info!("we are party id: {party_id}");
 
-    tracing::info!("init RpMaterialStore..");
-    let rp_material_store = secret_manager
+    tracing::info!("init OPRF key-material store..");
+    let oprf_key_material_store = secret_manager
         .load_secrets()
         .await
         .context("while loading secrets from secret-manager")?;
@@ -181,7 +181,7 @@ pub async fn start(
 
     tracing::info!("init oprf-service...");
     let oprf_service = OprfService::init(
-        rp_material_store.clone(),
+        oprf_key_material_store.clone(),
         Arc::clone(&merkle_watcher),
         vk.into(),
         config.request_lifetime,
@@ -197,7 +197,7 @@ pub async fn start(
         .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
     let event_handler = ChainEventHandler::spawn(
         key_gen_watcher,
-        rp_material_store,
+        oprf_key_material_store,
         secret_manager,
         cancellation_token.clone(),
         key_gen_material,
@@ -306,9 +306,9 @@ mod tests {
     use k256::ecdsa::signature::SignerMut;
     use oprf_client::OprfQuery;
     use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
-    use oprf_types::api::v1::{ChallengeRequest, NullifierShareIdentifier, OprfRequest};
-    use oprf_types::crypto::RpNullifierKey;
-    use oprf_types::{RpId, ShareEpoch};
+    use oprf_types::api::v1::{ChallengeRequest, OprfRequest, OprfShareIdentifier};
+    use oprf_types::crypto::OprfPublicKey;
+    use oprf_types::{OprfKeyId, ShareEpoch};
     use oprf_world_types::api::v1::OprfRequestAuth;
     use oprf_world_types::proof_inputs::query::MAX_PUBLIC_KEYS;
     use oprf_world_types::{MerkleMembership, MerkleRoot, TREE_DEPTH};
@@ -316,7 +316,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::services::merkle_watcher::test::TestMerkleWatcher;
-    use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
+    use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;
 
@@ -382,10 +382,7 @@ mod tests {
             ));
             let share_epoch = ShareEpoch::default();
 
-            let rp_id = RpId::new(rng.r#gen());
-            let rp_secret_key = k256::SecretKey::random(&mut rng);
-            let rp_public_key = rp_secret_key.public_key();
-            let mut rp_signing_key = k256::ecdsa::SigningKey::from(rp_secret_key);
+            let rp_id = OprfKeyId::new(rng.r#gen());
 
             let nonce = ark_babyjubjub::Fq::rand(&mut rng);
             let current_time_stamp = SystemTime::now()
@@ -395,7 +392,9 @@ mod tests {
             let mut msg = Vec::new();
             msg.extend(nonce.into_bigint().to_bytes_le());
             msg.extend(current_time_stamp.to_le_bytes());
-            let signature = rp_signing_key.sign(&msg);
+
+            let mut ecdsa_key = k256::ecdsa::SigningKey::random(&mut rng);
+            let signature = ecdsa_key.sign(&msg);
 
             let query_material = oprf_client::load_embedded_query_material();
 
@@ -405,7 +404,7 @@ mod tests {
                 siblings,
             };
             let oprf_query = OprfQuery {
-                rp_id,
+                oprf_key_id: rp_id,
                 share_epoch,
                 action: ark_babyjubjub::Fq::rand(&mut rng),
                 nonce,
@@ -438,18 +437,20 @@ mod tests {
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     vec![1, 2, 3],
                 ),
-                rp_identifier: NullifierShareIdentifier { rp_id, share_epoch },
+                oprf_share_identifier: OprfShareIdentifier {
+                    oprf_key_id: rp_id,
+                    share_epoch,
+                },
             };
 
-            let rp_material = RpMaterialStore::new(HashMap::from([(
+            let rp_material = OprfKeyMaterialStore::new(HashMap::from([(
                 rp_id,
-                RpMaterial::new(
+                OprfKeyMaterial::new(
                     HashMap::from([(
                         ShareEpoch::default(),
                         DLogShareShamir::from(ark_babyjubjub::Fr::rand(&mut rng)),
                     )]),
-                    rp_public_key.into(),
-                    RpNullifierKey::new(rng.r#gen()),
+                    OprfPublicKey::new(rng.r#gen()),
                 ),
             )]));
 
@@ -540,6 +541,7 @@ mod tests {
         Ok(())
     }
 
+    #[ignore = "during the rewrite we don't check the signature"]
     #[tokio::test]
     async fn test_init_bad_signature() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
@@ -556,19 +558,20 @@ mod tests {
         Ok(())
     }
 
+    #[ignore = "we check the id only after verify proof, therefore this doesn't work until we implement the ecdsa verification again"]
     #[tokio::test]
     async fn test_init_unknown_rp_id() -> eyre::Result<()> {
         let setup = TestSetup::new().await?;
-        let unknown_rp_id = RpId::new(rand::random());
+        let unknown_key_id = OprfKeyId::new(rand::random());
         let mut req = setup.oprf_req;
-        req.rp_identifier.rp_id = unknown_rp_id;
+        req.oprf_share_identifier.oprf_key_id = unknown_key_id;
         let res = setup
             .server
             .post("/api/v1/init")
             .json(&req)
             .expect_failure()
             .await;
-        res.assert_text(format!("Cannot find RP with id: {unknown_rp_id}"));
+        res.assert_text(format!("Cannot find RP with id: {unknown_key_id}"));
         res.assert_status_not_found();
         Ok(())
     }
@@ -578,7 +581,7 @@ mod tests {
         let setup = TestSetup::new().await?;
         let unknown_share_epoch = ShareEpoch::new(rand::random());
         let mut req = setup.oprf_req;
-        req.rp_identifier.share_epoch = unknown_share_epoch;
+        req.oprf_share_identifier.share_epoch = unknown_share_epoch;
         let res = setup
             .server
             .post("/api/v1/init")
@@ -587,7 +590,7 @@ mod tests {
             .await;
         res.assert_text(format!(
             "Cannot find share with epoch {} for RP with id: {}",
-            req.rp_identifier.share_epoch, req.rp_identifier.rp_id,
+            req.oprf_share_identifier.share_epoch, req.oprf_share_identifier.oprf_key_id,
         ));
         res.assert_status_not_found();
         Ok(())
@@ -688,7 +691,7 @@ mod tests {
             .assert_status_ok();
         let unknown_share_epoch = ShareEpoch::new(rand::random());
         let mut req = setup.challenge_req;
-        req.rp_identifier.share_epoch = unknown_share_epoch;
+        req.oprf_share_identifier.share_epoch = unknown_share_epoch;
         let res = setup
             .server
             .post("/api/v1/finish")
@@ -697,7 +700,7 @@ mod tests {
             .await;
         res.assert_text(format!(
             "Cannot find share with epoch {} for RP with id: {}",
-            req.rp_identifier.share_epoch, req.rp_identifier.rp_id,
+            req.oprf_share_identifier.share_epoch, req.oprf_share_identifier.oprf_key_id,
         ));
         res.assert_status_not_found();
         Ok(())

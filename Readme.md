@@ -50,8 +50,8 @@ This command does multiple things in order:
 
 1. start `localstack` docker container
 2. start `anvil` docker container
-3. deploy the `AccountRegistry` and `RpRegistry` smart contracts
-4. register the OPRF nodes at the `RpRegistry` contract
+3. deploy the `AccountRegistry` and `OprfKeyRegistry` smart contracts
+4. register the OPRF nodes at the `OprfKeyRegistry` contract
 5. start `postgres` and `world-id-indexer` docker containers
 6. start 3 OPRF nodes
 

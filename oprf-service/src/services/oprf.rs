@@ -2,7 +2,7 @@
 //!
 //! Responsibilities:
 //! - Verify client Groth16 proofs and signature verification on session init.
-//! - Produce partial discrete-log equality commitments via the [`RpMaterialStore`].
+//! - Produce partial discrete-log equality commitments via the [`OprfKeyMaterialStore`].
 //! - Persist per-session randomness in the [`SessionStore`] for later challenge completion.
 //!
 //! The service exposes two main flows:
@@ -33,7 +33,7 @@ use crate::{
     metrics::METRICS_KEY_OPRF_SUCCESS,
     services::{
         merkle_watcher::{MerkleWatcherError, MerkleWatcherService},
-        rp_material_store::{RpMaterialStore, RpMaterialStoreError},
+        oprf_key_material_store::{OprfKeyMaterialStore, OprfKeyMaterialStoreError},
         session_store::SessionStore,
         signature_history::{DuplicateSignatureError, SignatureHistory},
     },
@@ -51,9 +51,9 @@ pub(crate) enum OprfServiceError {
     /// The request ID is unknown or has already been finalized.
     #[error("unknown request id: {0}")]
     UnknownRequestId(Uuid),
-    /// Error from RpMaterialStore
+    /// Error from OprfKeyMaterialStore
     #[error(transparent)]
-    RpMaterialStoreError(#[from] RpMaterialStoreError),
+    OprfKeyMaterialStoreError(#[from] OprfKeyMaterialStoreError),
     /// An error returned from the merkle watcher service during merkle look-up.
     #[error(transparent)]
     MerkleWatcherError(#[from] MerkleWatcherError),
@@ -78,7 +78,7 @@ pub(crate) enum OprfServiceError {
 /// tasks and API handlers.
 #[derive(Clone)]
 pub(crate) struct OprfService {
-    pub(crate) rp_material_store: RpMaterialStore,
+    pub(crate) oprf_key_material_store: OprfKeyMaterialStore,
     pub(crate) session_store: SessionStore,
     merkle_watcher: MerkleWatcherService,
     signature_history: SignatureHistory,
@@ -89,7 +89,7 @@ pub(crate) struct OprfService {
 impl OprfService {
     /// Builds an [`OprfService`] from its core services and config values.
     pub(crate) fn init(
-        rp_material_store: RpMaterialStore,
+        rp_material_store: OprfKeyMaterialStore,
         merkle_watcher: MerkleWatcherService,
         vk: ark_groth16::VerifyingKey<Bn254>,
         request_lifetime: Duration,
@@ -98,7 +98,7 @@ impl OprfService {
         signature_history_cleanup_interval: Duration,
     ) -> Self {
         Self {
-            rp_material_store,
+            oprf_key_material_store: rp_material_store,
             signature_history: SignatureHistory::init(
                 current_time_stamp_max_difference * 2,
                 signature_history_cleanup_interval,
@@ -113,10 +113,10 @@ impl OprfService {
     /// Initializes an OPRF session for the given request.
     ///
     /// This method executes the first step of the OPRF protocol:
-    /// 1. Verifies the RP's nonce signature via the [`RpMaterialStore`]. **The nonce is converted to le_bytes representation for signature verification**.
+    /// 1. Verifies the RP's nonce signature via the [`OprfKeyMaterialStore`]. **The nonce is converted to le_bytes representation for signature verification**.
     /// 2. Check the Merkle root for the epoch specified in the request via the [`MerkleWatcherService`].
     /// 3. Verifies the client's Groth16 proof.
-    /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`RpMaterialStore`].
+    /// 4. If verification succeeds, computes partial discrete-log equality commitments using the [`OprfKeyMaterialStore`].
     /// 5. Stores the generated session randomness in the [`SessionStore`] for use during the challenge/finalization phase.
     ///
     /// Returns the compressed Base64-encoded [`PartialDLogCommitmentsShamir`] if successful.
@@ -126,7 +126,7 @@ impl OprfService {
         request: OprfRequest<OprfRequestAuth>,
     ) -> Result<PartialDLogCommitmentsShamir, OprfServiceError> {
         tracing::debug!("handling session request: {}", request.request_id);
-        let rp_id = request.rp_identifier.rp_id;
+        let rp_id = request.oprf_share_identifier.oprf_key_id;
 
         // check the time stamp against system time +/- difference
         let req_time_stamp = Duration::from_secs(request.auth.current_time_stamp);
@@ -144,7 +144,7 @@ impl OprfService {
 
         // check the RP nonce signature - this also lightens the threat
         // of DoS attack that force the service to always check the merkle roots from chain
-        self.rp_material_store.verify_nonce_signature(
+        self.oprf_key_material_store.verify_nonce_signature(
             rp_id,
             request.auth.nonce,
             request.auth.current_time_stamp,
@@ -173,7 +173,7 @@ impl OprfService {
             request.auth.current_time_stamp.into(),
             request.auth.merkle_root.into_inner(),
             ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
-            request.rp_identifier.rp_id.into(),
+            request.oprf_share_identifier.oprf_key_id.into(),
             request.auth.action,
             request.auth.nonce,
         ];
@@ -181,8 +181,8 @@ impl OprfService {
 
         // Partial commit through the crypto device
         let (session, comm) = self
-            .rp_material_store
-            .partial_commit(request.blinded_query, &request.rp_identifier)?;
+            .oprf_key_material_store
+            .partial_commit(request.blinded_query, &request.oprf_share_identifier)?;
 
         // Store the randomness for finalize request
         self.session_store.insert(request.request_id, session);
@@ -193,7 +193,7 @@ impl OprfService {
     /// Finalizes an OPRF session for a client challenge request.
     ///
     /// - Retrieves the stored randomness from [`SessionStore`].
-    /// - Computes the final discrete-log equality proof share using [`RpMaterialStore`].
+    /// - Computes the final discrete-log equality proof share using [`OprfKeyMaterialStore`].
     /// - Returns the proof share or an error if the session or share cannot be found.
     #[instrument(level = "debug", skip_all, fields(request_id = %request.request_id))]
     pub(crate) fn finalize_oprf_session(
@@ -208,12 +208,12 @@ impl OprfService {
             .remove(request.request_id)
             .ok_or_else(|| OprfServiceError::UnknownRequestId(request.request_id))?;
         // Consume the randomness, produce the final proof share
-        let proof_share = self.rp_material_store.challenge(
+        let proof_share = self.oprf_key_material_store.challenge(
             request.request_id,
             my_party_id,
             session,
             request.challenge,
-            &request.rp_identifier,
+            &request.oprf_share_identifier,
         )?;
         metrics::counter!(METRICS_KEY_OPRF_SUCCESS).increment(1);
         tracing::debug!("finished challenge");

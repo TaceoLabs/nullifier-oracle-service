@@ -1,8 +1,7 @@
 use std::{path::PathBuf, process::Command, str::FromStr as _};
 
-use crate::EcDsaPubkeyCompressed;
-use alloy::primitives::Address;
-use oprf_types::RpId;
+use alloy::primitives::{Address, U160};
+use oprf_types::OprfKeyId;
 use regex::Regex;
 
 use crate::{OPRF_PEER_ADDRESS_0, OPRF_PEER_ADDRESS_1, OPRF_PEER_ADDRESS_2};
@@ -37,7 +36,7 @@ pub fn deploy_test_setup(
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let re = Regex::new(r"RpRegistry deployed to:\s*(0x[0-9a-fA-F]{40})").unwrap();
+    let re = Regex::new(r"OprfKeyRegistry deployed to:\s*(0x[0-9a-fA-F]{40})").unwrap();
     let addr = re
         .captures(&stdout)
         .and_then(|c| c.get(1))
@@ -49,23 +48,18 @@ pub fn deploy_test_setup(
 pub fn init_key_gen(
     rpc_url: &str,
     rp_registry_contract: Address,
-    ecdsa_key: EcDsaPubkeyCompressed,
     taceo_admin_private_key: &str,
-) -> RpId {
-    let pk_x = ecdsa_key.x.to_string();
-    let pk_y_parity = ecdsa_key.yParity.to_string();
+) -> OprfKeyId {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rp_id = rand::random::<u128>();
-    tracing::debug!("init key gen with rp_id: {rp_id}");
+    let oprf_key_id = rand::random::<u32>();
+    tracing::debug!("init key gen with oprf_key_id: {oprf_key_id}");
     tracing::debug!("with rpc url: {rpc_url}");
     tracing::debug!("on contract: {rp_registry_contract}");
     let cmd = cmd
         .current_dir(dir.join("../contracts/script/deploy/"))
-        .env("RP_REGISTRY_PROXY", rp_registry_contract.to_string())
-        .env("SESSION_ID", rp_id.to_string())
-        .env("ECDSA_X", pk_x)
-        .env("ECDSA_Y_PARITY", pk_y_parity)
+        .env("OPRF_KEY_REGISTRY_PROXY", rp_registry_contract.to_string())
+        .env("OPRF_KEY_ID", oprf_key_id.to_string())
         .arg("script")
         .arg("InitKeyGen.s.sol")
         .arg("--rpc-url")
@@ -80,23 +74,26 @@ pub fn init_key_gen(
         "forge script failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    RpId::new(rp_id)
+    OprfKeyId::new(U160::from(oprf_key_id))
 }
 
-pub fn delete_rp_material(
+pub fn delete_oprf_key_material(
     rpc_url: &str,
-    rp_registry_contract: Address,
-    rp_id: RpId,
+    oprf_key_registry_contract: Address,
+    oprf_key_id: OprfKeyId,
     taceo_admin_private_key: &str,
 ) {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let cmd = cmd
         .current_dir(dir.join("../contracts/script/"))
-        .env("RP_REGISTRY_PROXY", rp_registry_contract.to_string())
-        .env("RP_ID", rp_id.to_string())
+        .env(
+            "OPRF_KEY_REGISTRY_PROXY",
+            oprf_key_registry_contract.to_string(),
+        )
+        .env("OPRF_KEY_ID", oprf_key_id.to_string())
         .arg("script")
-        .arg("DeleteRpMaterial.s.sol")
+        .arg("DeleteOprfKey.s.sol")
         .arg("--rpc-url")
         .arg(rpc_url)
         .arg("--broadcast")

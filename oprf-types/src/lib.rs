@@ -17,6 +17,7 @@
 
 use std::fmt;
 
+use alloy::primitives::{U160, U256};
 use serde::{Deserialize, Serialize};
 
 pub mod api;
@@ -33,7 +34,7 @@ pub struct ShareEpoch(u128);
 /// The id of a relying party.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RpId(u128);
+pub struct OprfKeyId(U160);
 
 impl ShareEpoch {
     /// Converts the key epoch to an u128
@@ -47,25 +48,25 @@ impl ShareEpoch {
     }
 }
 
-impl RpId {
+impl OprfKeyId {
     /// Converts the RP id to an u128
-    pub fn into_inner(self) -> u128 {
+    pub fn into_inner(self) -> U160 {
         self.0
     }
 
-    /// Creates a new `RpId` by wrapping a `u128`
-    pub fn new(value: u128) -> Self {
+    /// Creates a new `OprfKeyId` by wrapping a `U160`
+    pub fn new(value: U160) -> Self {
         Self(value)
     }
 }
 
-impl From<u128> for RpId {
-    fn from(value: u128) -> Self {
+impl From<U160> for OprfKeyId {
+    fn from(value: U160) -> Self {
         Self(value)
     }
 }
 
-impl fmt::Display for RpId {
+impl fmt::Display for OprfKeyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!("{}", self.0))
     }
@@ -77,8 +78,10 @@ impl fmt::Display for ShareEpoch {
     }
 }
 
-impl From<RpId> for ark_babyjubjub::Fq {
-    fn from(value: RpId) -> Self {
-        Self::from(value.0)
+impl From<OprfKeyId> for ark_babyjubjub::Fq {
+    fn from(value: OprfKeyId) -> Self {
+        let u256 = U256::from(value.0);
+        // this works because we now that key-id has 160 bits
+        ark_babyjubjub::Fq::new(ark_ff::BigInt(u256.into_limbs()))
     }
 }

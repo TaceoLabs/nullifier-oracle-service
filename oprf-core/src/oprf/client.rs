@@ -32,22 +32,22 @@ pub fn get_id_commitment_ds() -> BaseField {
     BaseField::from_be_bytes_mod_order(ID_COMMITMENT_DS)
 }
 
-/// Generates a domain-separated query field element from the provided `index`, `rp_id`, and `action` using the Poseidon2 permutation.
+/// Generates a domain-separated query field element from the provided `index`, `oprf_key_id`, and `action` using the Poseidon2 permutation.
 ///
-/// Computes `P(b"World ID Query", index, rp_id, action)` with a domain separator, and returns the first output element (index 1) as the query input.
+/// Computes `P(b"World ID Query", index, oprf_key_id, action)` with a domain separator, and returns the first output element (index 1) as the query input.
 ///
 /// # Arguments
 ///
 /// * `index` - User or credential index.
-/// * `rp_id` - Relying party identifier.
+/// * `oprf_key_id` - OPRF public-key identifier.
 /// * `action` - Action code.
 ///
 /// # Returns
 ///
 /// A `BaseField` element representing the domain-separated OPRF query input.
-pub fn generate_query(index: BaseField, rp_id: BaseField, action: BaseField) -> BaseField {
+pub fn generate_query(index: BaseField, oprf_key_id: BaseField, action: BaseField) -> BaseField {
     // capacity of the sponge has domain separator
-    let input = [get_query_ds(), index, rp_id, action];
+    let input = [get_query_ds(), index, oprf_key_id, action];
     poseidon2::bn254::t4::permutation(&input)[1]
 }
 

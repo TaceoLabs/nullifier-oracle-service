@@ -1,12 +1,12 @@
-use std::{slice::from_ref, vec};
+use std::vec;
 
 use ark_babyjubjub::{EdwardsAffine, EdwardsProjective};
 use ark_bn254::Bn254;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::UniformRand;
-use ark_groth16::{Groth16, Proof};
+use ark_groth16::{Groth16, Proof as ArkProof};
 use ark_serialize::CanonicalDeserialize;
-use circom_types::groth16::JsonPublicInput;
+use circom_types::groth16::{Proof as CircomProof, PublicInput};
 use criterion::*;
 use oprf_core::{
     ddlog_equality::{
@@ -19,7 +19,6 @@ use oprf_core::{
     },
     shamir,
 };
-use oprf_zk::groth16_serde::Groth16Proof;
 use rand::seq::IteratorRandom;
 use uuid::Uuid;
 
@@ -27,14 +26,14 @@ const VK_BYTES: &[u8] = include_bytes!("vk.bin");
 const PROOF_JSON: &str = include_str!("proof.json");
 const PUBLIC_JSON: &str = include_str!("public.json");
 
-fn groth16_proof() -> Groth16Proof {
+fn groth16_proof() -> CircomProof<Bn254> {
     serde_json::from_str(PROOF_JSON).expect("works")
 }
 
 fn groth16_public() -> Vec<ark_bn254::Fr> {
-    serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(PUBLIC_JSON)
+    serde_json::from_str::<PublicInput<ark_bn254::Fr>>(PUBLIC_JSON)
         .expect("works")
-        .values
+        .into_inner()
 }
 
 fn vk() -> ark_groth16::PreparedVerifyingKey<Bn254> {
@@ -50,7 +49,7 @@ fn oprf_bench(c: &mut Criterion) {
     });
 
     c.bench_function("OPRF Client Proof Verify", |b| {
-        let proof = Proof::<Bn254>::from(groth16_proof());
+        let proof = ArkProof::<Bn254>::from(groth16_proof());
         let public = groth16_public();
         let vk = vk();
 

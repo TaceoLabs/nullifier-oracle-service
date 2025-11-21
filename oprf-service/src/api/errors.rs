@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::services::{
     merkle_watcher::MerkleWatcherError, oprf::OprfServiceError,
-    rp_material_store::RpMaterialStoreError,
+    oprf_key_material_store::OprfKeyMaterialStoreError,
 };
 
 /// A structured API error returned to clients.
@@ -79,7 +79,7 @@ impl From<OprfServiceError> for ApiErrors {
                 ApiErrors::BadRequest("blinded query not allowed to be identity".to_string())
             }
             OprfServiceError::UnknownRequestId(request) => ApiErrors::NotFound(request.to_string()),
-            OprfServiceError::RpMaterialStoreError(rp_material_error) => {
+            OprfServiceError::OprfKeyMaterialStoreError(rp_material_error) => {
                 Self::from(rp_material_error)
             }
             OprfServiceError::TimeStampDifference => {
@@ -99,19 +99,19 @@ impl From<OprfServiceError> for ApiErrors {
     }
 }
 
-impl From<RpMaterialStoreError> for ApiErrors {
-    fn from(value: RpMaterialStoreError) -> Self {
+impl From<OprfKeyMaterialStoreError> for ApiErrors {
+    fn from(value: OprfKeyMaterialStoreError) -> Self {
         match value {
-            RpMaterialStoreError::NoSuchRp(rp_id) => {
+            OprfKeyMaterialStoreError::NoSuchRp(rp_id) => {
                 ApiErrors::NotFound(format!("Cannot find RP with id: {rp_id}"))
             }
-            RpMaterialStoreError::NonceSignatureError(error) => {
+            OprfKeyMaterialStoreError::NonceSignatureError(error) => {
                 ApiErrors::BadRequest(format!("Invalid signature: {error}"))
             }
-            RpMaterialStoreError::UnknownRpShareEpoch(key_identifier) => {
+            OprfKeyMaterialStoreError::UnknownKeyShareEpoch(share_identifier) => {
                 ApiErrors::NotFound(format!(
                     "Cannot find share with epoch {} for RP with id: {}",
-                    key_identifier.share_epoch, key_identifier.rp_id
+                    share_identifier.share_epoch, share_identifier.oprf_key_id
                 ))
             }
         }
