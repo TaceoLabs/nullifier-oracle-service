@@ -30,7 +30,7 @@ dev-down:
 
 [group('build')]
 export-contract-abi:
-    cd contracts && forge build --silent && jq '.abi' out/RpRegistry.sol/RpRegistry.json > RpRegistry.json
+    cd contracts && forge build --silent && jq '.abi' out/OprfKeyRegistry.sol/OprfKeyRegistry.json > OprfKeyRegistry.json
 
 [group('build')]
 [working-directory('circom')]
@@ -113,28 +113,28 @@ run-setup:
     echo "starting AccountRegistry contract..."
     just deploy-account-registry-anvil | tee logs/deploy_account_registry.log
     account_registry=$(grep -oP 'AccountRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_account_registry.log)
-    echo "starting RpRegistry contract.."
-    just deploy-rp-registry-with-deps-anvil | tee logs/deploy_rp_registry.log
-    rp_registry=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_rp_registry.log)
+    echo "starting OprfKeyRegistry contract.."
+    just deploy-oprf-key-registry-with-deps-anvil | tee logs/deploy_oprf_key_registry.log
+    oprf_key_registry=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_oprf_key_registry.log)
     echo "register oprf-nodes..."
-    RP_REGISTRY_PROXY=$rp_registry just register-participants-anvil
+    OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
     echo "starting indexer..."
     REGISTRY_ADDRESS=$account_registry just dev-up postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_RP_REGISTRY_CONTRACT=$rp_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services
+    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services
     echo "stoping containers..."
     just dev-down
 
 [group('local-setup')]
-run-rp-registry-and-services account_registry:
+run-oprf-key-registry-and-services account_registry:
     #!/usr/bin/env bash
     mkdir -p logs
-    echo "starting RpRegistry contract.."
-    just deploy-rp-registry-with-deps-anvil | tee logs/rp_registry.log
-    address=$(grep -oP 'RpRegistry deployed to: \K0x[a-fA-F0-9]+' logs/rp_registry.log)
+    echo "starting OprfKeyRegistry contract.."
+    just deploy-oprf-key-registry-with-deps-anvil | tee logs/oprf_key_registry.log
+    address=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/oprf_key_registry.log)
     sleep 1
     echo "starting OPRF services..."
-    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_SERVICE_RP_REGISTRY_CONTRACT=$address just run-services
+    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services
 
 [group('dev-client')]
 run-dev-client *args:
@@ -143,31 +143,31 @@ run-dev-client *args:
 
 [working-directory('contracts')]
 show-contract-errors:
-    forge inspect src/RpRegistry.sol:RpRegistry errors
+    forge inspect src/OprfKeyRegistry.sol:OprfKeyRegistry errors
 
 [working-directory('contracts')]
 show-contract-methods:
-    forge inspect src/RpRegistry.sol:RpRegistry methodIdentifiers
+    forge inspect src/OprfKeyRegistry.sol:OprfKeyRegistry methodIdentifiers
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry-with-deps-dry-run *args:
-    forge script RpRegistryWithDeps.s.sol -vvvvv {{ args }}
+deploy-oprf-key-registry-with-deps-dry-run *args:
+    forge script OprfKeyRegistryWithDeps.s.sol -vvvvv {{ args }}
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry-with-deps *args:
-    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+deploy-oprf-key-registry-with-deps *args:
+    forge script OprfKeyRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry-dry-run *args:
-    forge script RpRegistry.s.sol -vvvvv {{ args }}
+deploy-oprf-key-registry-dry-run *args:
+    forge script OprfKeyRegistry.s.sol -vvvvv {{ args }}
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry *args:
-    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+deploy-oprf-key-registry *args:
+    forge script OprfKeyRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
 [working-directory('contracts/script/test')]
@@ -221,13 +221,13 @@ register-key-gen-admin *args:
 
 [group('anvil')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry-with-deps-anvil:
-    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script RpRegistryWithDeps.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+deploy-oprf-key-registry-with-deps-anvil:
+    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script OprfKeyRegistryWithDeps.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group('anvil')]
 [working-directory('contracts/script/deploy')]
-deploy-rp-registry-anvil:
-    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script RpRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+deploy-oprf-key-registry-anvil:
+    TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script OprfKeyRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group('anvil')]
 [working-directory('contracts/script/test')]
