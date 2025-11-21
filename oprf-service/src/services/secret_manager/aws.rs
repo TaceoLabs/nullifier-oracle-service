@@ -19,13 +19,13 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::types::{Filter, FilterNameStringType};
 use eyre::{Context, ContextCompat};
-use oprf_types::crypto::RpNullifierKey;
-use oprf_types::{RpId, ShareEpoch};
+use oprf_types::crypto::OprfPublicKey;
+use oprf_types::{OprfKeyId, ShareEpoch};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::services::rp_material_store::{RpMaterial, RpMaterialStore};
+use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 use crate::services::secret_manager::{SecretManager, StoreDLogShare};
 
 /// AWS Secret Manager client wrapper.
@@ -61,9 +61,8 @@ impl AwsSecretManager {
 /// Stores the current and optionally previous epoch.
 #[derive(Serialize, Deserialize)]
 struct AwsRpSecret {
-    rp_id: RpId,
-    rp_public: k256::PublicKey,
-    rp_nullifier_key: RpNullifierKey,
+    oprf_key_id: OprfKeyId,
+    oprf_public_key: OprfPublicKey,
     current: EpochSecret,
     // Is none for first secret
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -78,19 +77,17 @@ struct EpochSecret {
 }
 
 impl AwsRpSecret {
-    /// Creates a new secret for a given `RpId`.
+    /// Creates a new secret for a given `OprfKeyId`.
     ///
     /// Current epoch is set to 0, previous is `None`.
     pub fn new(
-        rp_id: RpId,
-        rp_public: k256::PublicKey,
-        rp_nullifier_key: RpNullifierKey,
+        oprf_key_id: OprfKeyId,
+        oprf_public_key: OprfPublicKey,
         secret: DLogShareShamir,
     ) -> Self {
         Self {
-            rp_id,
-            rp_public,
-            rp_nullifier_key,
+            oprf_key_id,
+            oprf_public_key,
             current: EpochSecret {
                 epoch: ShareEpoch::default(),
                 secret,
@@ -100,8 +97,8 @@ impl AwsRpSecret {
     }
 }
 
-impl From<AwsRpSecret> for RpMaterial {
-    /// Converts an [`AwsRpSecret`] into [`RpMaterial`].
+impl From<AwsRpSecret> for OprfKeyMaterial {
+    /// Converts an [`AwsRpSecret`] into [`OprfKeyMaterial`].
     ///
     /// Includes both current and previous epoch secrets if available.
     fn from(value: AwsRpSecret) -> Self {
@@ -110,7 +107,7 @@ impl From<AwsRpSecret> for RpMaterial {
         if let Some(previous) = value.previous {
             shares.insert(previous.epoch, previous.secret);
         }
-        Self::new(shares, value.rp_public.into(), value.rp_nullifier_key)
+        Self::new(shares, value.oprf_public_key)
     }
 }
 
@@ -161,17 +158,16 @@ impl SecretManager for AwsSecretManager {
         Ok(hex_private_key)
     }
 
-    /// Loads all RP secrets from AWS Secrets Manager.
+    /// Loads all secrets from AWS Secrets Manager.
     ///
-    /// Iterates through all secrets with the configured prefix and deserializes
-    /// them into an [`RpMaterialStore`].
+    /// Iterates through all secrets with the configured prefix and deserializes them into an [`OprfKeyMaterialStore`].
     #[instrument(level = "info", skip_all)]
-    async fn load_secrets(&self) -> eyre::Result<RpMaterialStore> {
+    async fn load_secrets(&self) -> eyre::Result<OprfKeyMaterialStore> {
         tracing::debug!(
             "loading rp secrets with prefix: {}",
             self.rp_secret_id_prefix
         );
-        let mut rp_materials = HashMap::new();
+        let mut oprf_key_materials = HashMap::new();
         let mut next_token = None;
         loop {
             let secrets = self
@@ -203,8 +199,8 @@ impl SecretManager for AwsSecretManager {
                             .to_owned();
                         let rp_secret: AwsRpSecret = serde_json::from_str(&secret_value)
                             .context("Cannot deserialize AWS Secret")?;
-                        tracing::debug!("loaded secret for rp_id: {}", rp_secret.rp_id);
-                        rp_materials.insert(rp_secret.rp_id, rp_secret.into());
+                        tracing::debug!("loaded secret for oprf_key_id: {}", rp_secret.oprf_key_id);
+                        oprf_key_materials.insert(rp_secret.oprf_key_id, rp_secret.into());
                     }
                 }
             }
@@ -216,7 +212,7 @@ impl SecretManager for AwsSecretManager {
                 break;
             }
         }
-        Ok(RpMaterialStore::new(rp_materials))
+        Ok(OprfKeyMaterialStore::new(oprf_key_materials))
     }
 
     /// Stores a new DLog share for an RP in AWS Secrets Manager.
@@ -225,13 +221,12 @@ impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip_all)]
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
         let StoreDLogShare {
-            rp_id,
-            public_key,
-            rp_nullifier_key,
+            oprf_key_id,
+            oprf_public_key,
             share,
         } = store;
-        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
-        let secret = AwsRpSecret::new(rp_id, public_key, rp_nullifier_key, share);
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, oprf_key_id);
+        let secret = AwsRpSecret::new(oprf_key_id, oprf_public_key, share);
         self.client
             .create_secret()
             .name(secret_id)
@@ -239,7 +234,7 @@ impl SecretManager for AwsSecretManager {
             .send()
             .await
             .context("while creating secret")?;
-        tracing::info!("created new rp secret for {rp_id}");
+        tracing::info!("created new rp secret for {oprf_key_id}");
         Ok(())
     }
 
@@ -247,8 +242,8 @@ impl SecretManager for AwsSecretManager {
     ///
     /// Permanently deletes the secret without recovery period.
     #[instrument(level = "info", skip(self))]
-    async fn remove_dlog_share(&self, rp_id: RpId) -> eyre::Result<()> {
-        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
+    async fn remove_dlog_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<()> {
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, oprf_key_id);
         self.client
             .delete_secret()
             .secret_id(secret_id)
@@ -256,7 +251,7 @@ impl SecretManager for AwsSecretManager {
             .send()
             .await
             .context("while deleting DLog Share")?;
-        tracing::info!("deleted secret from AWS {rp_id}");
+        tracing::info!("deleted secret from AWS {oprf_key_id}");
         Ok(())
     }
 
@@ -267,12 +262,12 @@ impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip(self, share))]
     async fn update_dlog_share(
         &self,
-        rp_id: RpId,
+        oprf_key_id: OprfKeyId,
         epoch: ShareEpoch,
         share: DLogShareShamir,
     ) -> eyre::Result<()> {
         // Load old secret to preserve previous epoch
-        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, rp_id);
+        let secret_id = to_rp_secret_id(&self.rp_secret_id_prefix, oprf_key_id);
         tracing::info!("loading old secret first at {secret_id}");
         let secret_value = self
             .client
@@ -304,7 +299,7 @@ impl SecretManager for AwsSecretManager {
             .await
             .context("while storing new secret")?;
         tracing::debug!(
-            "updated rp secret for {rp_id} with current: {epoch}, previous: {prev_epoch}"
+            "updated rp secret for {oprf_key_id} with current: {epoch}, previous: {prev_epoch}"
         );
         Ok(())
     }
@@ -314,7 +309,7 @@ impl SecretManager for AwsSecretManager {
 ///
 /// Combines the prefix with the RP ID.
 #[inline(always)]
-fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: RpId) -> String {
+fn to_rp_secret_id(rp_secret_id_prefix: &str, rp: OprfKeyId) -> String {
     format!("{}/{}", rp_secret_id_prefix, rp.into_inner())
 }
 

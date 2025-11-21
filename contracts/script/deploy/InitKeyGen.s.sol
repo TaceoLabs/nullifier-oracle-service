@@ -8,11 +8,11 @@ contract InitKeyGenScript is Script {
     OprfKeyRegistry public oprfKeyRegistry;
 
     function setUp() public {
-        oprfKeyRegistry = OprfKeyRegistry(vm.envAddress("OPRF_KEY_REGISTRY"));
+        oprfKeyRegistry = OprfKeyRegistry(vm.envAddress("OPRF_KEY_REGISTRY_PROXY"));
     }
 
     function run() external {
-        uint256 keyId = vm.envUint("OPRF_KEY_ID");
+        uint160 keyId = uint160(vm.envUint("OPRF_KEY_ID"));
 
         vm.startBroadcast();
         oprfKeyRegistry.initKeyGen(keyId);

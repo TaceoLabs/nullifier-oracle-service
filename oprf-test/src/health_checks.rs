@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use oprf_types::{RpId, api::v1::PublicRpMaterial};
+use oprf_types::{OprfKeyId, crypto::OprfPublicKey};
 use reqwest::StatusCode;
 use tokio::task::JoinSet;
 
@@ -29,12 +29,12 @@ pub async fn services_health_check(
     Ok(())
 }
 
-async fn load_public_rp_material(rp_material_url: String) -> PublicRpMaterial {
+async fn load_oprf_public_key(oprf_key_url: String) -> OprfPublicKey {
     loop {
-        if let Ok(response) = reqwest::get(&rp_material_url)
+        if let Ok(response) = reqwest::get(&oprf_key_url)
             .await
             .and_then(|response| response.error_for_status())
-            && let Ok(material) = response.json::<PublicRpMaterial>().await
+            && let Ok(material) = response.json::<OprfPublicKey>().await
         {
             return material;
         }
@@ -42,16 +42,16 @@ async fn load_public_rp_material(rp_material_url: String) -> PublicRpMaterial {
     }
 }
 
-pub async fn rp_material_from_services(
-    rp_id: RpId,
+pub async fn oprf_public_key_from_services(
+    oprf_key_id: OprfKeyId,
     services: &[String],
     max_wait_time: Duration,
-) -> eyre::Result<PublicRpMaterial> {
-    let rp_material_checks = services
+) -> eyre::Result<OprfPublicKey> {
+    let oprf_public_key_checks = services
         .iter()
-        .map(|service| load_public_rp_material(format!("{service}/rp/{rp_id}")))
+        .map(|service| load_oprf_public_key(format!("{service}/oprf_pub/{oprf_key_id}")))
         .collect::<JoinSet<_>>();
-    match tokio::time::timeout(max_wait_time, rp_material_checks.join_all())
+    match tokio::time::timeout(max_wait_time, oprf_public_key_checks.join_all())
         .await
         .map_err(|_| eyre::eyre!("could not load rp material in provided time: {max_wait_time:?}"))
     {
@@ -66,7 +66,7 @@ pub async fn rp_material_from_services(
         Err(_) => eyre::bail!("couldn't load rp material within time"),
     }
 }
-async fn rp_material_not_known_check(health_url: String) {
+async fn oprf_public_key_not_known_check(health_url: String) {
     loop {
         if let Err(err) = reqwest::get(&health_url)
             .await
@@ -80,18 +80,20 @@ async fn rp_material_not_known_check(health_url: String) {
 }
 
 pub async fn assert_rp_unknown(
-    rp_id: RpId,
+    oprf_key_id: OprfKeyId,
     services: &[String],
     max_wait_time: Duration,
 ) -> eyre::Result<()> {
     let health_checks = services
         .iter()
-        .map(|service| rp_material_not_known_check(format!("{service}/rp/{rp_id}")))
+        .map(|service| oprf_public_key_not_known_check(format!("{service}/oprf_pub/{oprf_key_id}")))
         .collect::<JoinSet<_>>();
     tokio::time::timeout(max_wait_time, health_checks.join_all())
         .await
         .map_err(|_| {
-            eyre::eyre!("services still have RpMaterial {rp_id} after: {max_wait_time:?}")
+            eyre::eyre!(
+                "services still have OPRF public-key {oprf_key_id} after: {max_wait_time:?}"
+            )
         })?;
     Ok(())
 }

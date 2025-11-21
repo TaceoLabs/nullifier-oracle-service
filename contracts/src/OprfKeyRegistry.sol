@@ -178,7 +178,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
     /// @notice Initializes the key generation process. Tries to use the provided oprfKeyId as identifier. If the identifier is already taken, reverts the transaction.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
-    function initKeyGen(uint256 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
+    function initKeyGen(uint160 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
         // Check that this oprfKeyId was not used already
         Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
         if (st.exists) revert AlreadySubmitted();
@@ -197,7 +197,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
     /// @notice Deletes the OPRF public-key and its associated material. Works during key-gen or afterwards.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
-    function deleteOprfPublicKey(uint256 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
+    function deleteOprfPublicKey(uint160 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
         // try to delete the runningKeyGen data
         Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
         bool needToEmitEvent = false;
@@ -236,7 +236,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @notice Adds a Round 1 contribution to the key generation process. Only callable by registered OPRF peers.
     /// @param oprfKeyId The unique identifier for the key-gen.
     /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
-    function addRound1Contribution(uint256 oprfKeyId, Types.Round1Contribution calldata data)
+    function addRound1Contribution(uint160 oprfKeyId, Types.Round1Contribution calldata data)
         external
         virtual
         onlyProxy
@@ -269,7 +269,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @param oprfKeyId The unique identifier for the key-gen.
     /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
     /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
-    function addRound2Contribution(uint256 oprfKeyId, Types.Round2Contribution calldata data)
+    function addRound2Contribution(uint160 oprfKeyId, Types.Round2Contribution calldata data)
         external
         virtual
         onlyProxy
@@ -336,7 +336,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @notice Adds a Round 3 contribution to the key generation process. Only callable by registered OPRF peers.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
-    function addRound3Contribution(uint256 oprfKeyId) external virtual onlyProxy isReady {
+    function addRound3Contribution(uint160 oprfKeyId) external virtual onlyProxy isReady {
         // check that we started the key-gen for this OPRF public-key.
         Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
         if (!st.exists) revert UnknownId(oprfKeyId);
@@ -384,7 +384,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided oprfKeyId.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return The ephemeral public keys generated in round 1
-    function checkIsParticipantAndReturnEphemeralPublicKeys(uint256 oprfKeyId)
+    function checkIsParticipantAndReturnEphemeralPublicKeys(uint160 oprfKeyId)
         external
         view
         virtual
@@ -406,7 +406,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return An array of Round 2 ciphertexts belonging to the caller.
-    function checkIsParticipantAndReturnRound2Ciphers(uint256 oprfKeyId)
+    function checkIsParticipantAndReturnRound2Ciphers(uint160 oprfKeyId)
         external
         view
         virtual
@@ -430,7 +430,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     /// @notice Retrieves the specified OPRF public-key.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return The BabyJubJub element representing the nullifier public key.
-    function getOprfPublicKey(uint256 oprfKeyId)
+    function getOprfPublicKey(uint160 oprfKeyId)
         public
         view
         virtual
@@ -479,7 +479,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return pubKeyList;
     }
 
-    function _tryEmitRound2Event(uint256 oprfKeyId, Types.OprfKeyGenState storage st) internal virtual {
+    function _tryEmitRound2Event(uint160 oprfKeyId, Types.OprfKeyGenState storage st) internal virtual {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
 
@@ -487,7 +487,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         emit Types.SecretGenRound2(oprfKeyId);
     }
 
-    function _tryEmitRound3Event(uint256 oprfKeyId, Types.OprfKeyGenState storage st) internal virtual {
+    function _tryEmitRound3Event(uint160 oprfKeyId, Types.OprfKeyGenState storage st) internal virtual {
         if (st.round3EventEmitted) return;
         if (!allRound2Submitted(st)) return;
 

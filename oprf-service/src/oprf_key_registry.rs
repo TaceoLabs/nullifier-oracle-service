@@ -1,21 +1,20 @@
-//! This module includes the alloy types for the RpRegistry.
+//! This module includes the alloy types for the OprfKeyRegistry.
 //!
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
 use alloy::sol;
 use ark_bn254::Bn254;
 use circom_types::groth16::Proof;
-use k256::EncodedPoint;
 use oprf_types::crypto::{
-    PeerPublicKey, RpSecretGenCiphertext, RpSecretGenCiphertexts, RpSecretGenCommitment,
+    PeerPublicKey, SecretGenCiphertext, SecretGenCiphertexts, SecretGenCommitment,
 };
 
 // Codegen from ABI file to interact with the contract.
 sol!(
     #[allow(missing_docs, clippy::too_many_arguments)]
     #[sol(rpc)]
-    RpRegistry,
-    "../contracts/RpRegistry.json"
+    OprfKeyRegistry,
+    "../contracts/OprfKeyRegistry.json"
 );
 
 impl From<PeerPublicKey> for Types::BabyJubJubElement {
@@ -57,8 +56,8 @@ impl From<ark_babyjubjub::EdwardsAffine> for Types::BabyJubJubElement {
     }
 }
 
-impl From<RpSecretGenCommitment> for Types::Round1Contribution {
-    fn from(value: RpSecretGenCommitment) -> Self {
+impl From<SecretGenCommitment> for Types::Round1Contribution {
+    fn from(value: SecretGenCommitment) -> Self {
         Self {
             commShare: value.comm_share.into(),
             commCoeffs: value.comm_coeffs.into(),
@@ -81,8 +80,8 @@ impl From<Proof<Bn254>> for Types::Groth16Proof {
     }
 }
 
-impl From<RpSecretGenCiphertext> for Types::SecretGenCiphertext {
-    fn from(value: RpSecretGenCiphertext) -> Self {
+impl From<SecretGenCiphertext> for Types::SecretGenCiphertext {
+    fn from(value: SecretGenCiphertext) -> Self {
         Self {
             nonce: value.nonce.into(),
             cipher: value.cipher.into(),
@@ -91,7 +90,7 @@ impl From<RpSecretGenCiphertext> for Types::SecretGenCiphertext {
     }
 }
 
-impl TryFrom<Types::SecretGenCiphertext> for RpSecretGenCiphertext {
+impl TryFrom<Types::SecretGenCiphertext> for SecretGenCiphertext {
     type Error = eyre::Report;
 
     fn try_from(value: Types::SecretGenCiphertext) -> Result<Self, Self::Error> {
@@ -103,36 +102,11 @@ impl TryFrom<Types::SecretGenCiphertext> for RpSecretGenCiphertext {
     }
 }
 
-impl From<RpSecretGenCiphertexts> for Types::Round2Contribution {
-    fn from(value: RpSecretGenCiphertexts) -> Self {
+impl From<SecretGenCiphertexts> for Types::Round2Contribution {
+    fn from(value: SecretGenCiphertexts) -> Self {
         Self {
             proof: value.proof.into(),
             ciphers: value.ciphers.into_iter().map(Into::into).collect(),
         }
-    }
-}
-
-impl TryFrom<Types::EcDsaPubkeyCompressed> for k256::PublicKey {
-    type Error = eyre::Report;
-
-    fn try_from(value: Types::EcDsaPubkeyCompressed) -> Result<Self, Self::Error> {
-        let mut bytes = vec![u8::try_from(value.yParity)?];
-        bytes.extend(value.x);
-        Ok(Self::from_sec1_bytes(&bytes)?)
-    }
-}
-
-impl TryFrom<k256::PublicKey> for Types::EcDsaPubkeyCompressed {
-    type Error = eyre::Report;
-
-    fn try_from(value: k256::PublicKey) -> Result<Self, Self::Error> {
-        let encoded_point = EncodedPoint::from(value).compress();
-        let bytes = encoded_point.as_bytes();
-        let x = &bytes[1..];
-        let y_parity = bytes[0];
-        Ok(Self {
-            x: x.try_into()?,
-            yParity: y_parity.try_into()?,
-        })
     }
 }

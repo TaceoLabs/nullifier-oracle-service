@@ -1,6 +1,6 @@
 //! This module provides [`ChainEventHandler`], a service that subscribes
 //! to key generation events via [`KeyGenEventListenerService`].
-//! It processes each event sequentially using [`DLogSecretGenService`] and [`RpMaterialStore`], then reports results back.
+//! It processes each event sequentially using [`DLogSecretGenService`] and [`OprfKeyMaterialStore`], then reports results back.
 //!
 //! **Event Flow:**
 //! 1. Subscribes to event stream.
@@ -28,7 +28,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::services::key_event_watcher::KeyGenEventListenerService;
-use crate::services::rp_material_store::RpMaterialStore;
+use crate::services::oprf_key_material_store::OprfKeyMaterialStore;
 use crate::services::secret_gen::DLogSecretGenService;
 use crate::services::secret_manager::SecretManagerService;
 
@@ -44,7 +44,7 @@ impl ChainEventHandler {
     ///
     /// # Arguments
     /// * `watcher` - The [`KeyGenEventListenerService`] used to read and report events from the chain.
-    /// * `rp_material_store` - Holds the [`crate::services::rp_material_store::RpMaterial`] for all RPs.
+    /// * `oprf_key_material_store` - Holds the [`crate::services::oprf_key_material_store::OprfKeyMaterial`] for all RPs.
     /// * `secret_manager` - An instance of [`SecretManagerService`] needed for storage/deletion of shares.
     /// * `cancellation_token` - Token used to signal shutdown of the handler task.
     /// * `key_gen_material` - The ZK material for computing the proofs for key generation.
@@ -53,13 +53,13 @@ impl ChainEventHandler {
     /// A [`ChainEventHandler`] that can be awaited for graceful shutdown.
     pub(crate) fn spawn(
         watcher: KeyGenEventListenerService,
-        rp_material_store: RpMaterialStore,
+        oprf_key_material_store: OprfKeyMaterialStore,
         secret_manager: SecretManagerService,
         cancellation_token: CancellationToken,
         key_gen_material: CircomGroth16Material,
     ) -> ChainEventHandler {
         let dlog_secret_gen_service =
-            DLogSecretGenService::init(rp_material_store, key_gen_material);
+            DLogSecretGenService::init(oprf_key_material_store, key_gen_material);
 
         Self(tokio::task::spawn(async move {
             match run(
@@ -142,20 +142,23 @@ pub(crate) async fn handle_chain_event(
     event: ChainEvent,
 ) -> eyre::Result<()> {
     match event {
-        ChainEvent::SecretGenRound1(SecretGenRound1Event { rp_id, threshold }) => {
+        ChainEvent::SecretGenRound1(SecretGenRound1Event {
+            oprf_key_id,
+            threshold,
+        }) => {
             let event = tokio::task::block_in_place(|| {
-                ChainEventResult::SecretGenRound1(secret_gen.round1(rp_id, threshold))
+                ChainEventResult::SecretGenRound1(secret_gen.round1(oprf_key_id, threshold))
             });
             event_listener
                 .report_result(event)
                 .await
                 .context("while reporting chain result")
         }
-        ChainEvent::SecretGenRound2(SecretGenRound2Event { rp_id, peers }) => {
+        ChainEvent::SecretGenRound2(SecretGenRound2Event { oprf_key_id, peers }) => {
             let event = tokio::task::block_in_place(|| {
                 eyre::Ok(ChainEventResult::SecretGenRound2(
                     secret_gen
-                        .round2(rp_id, peers)
+                        .round2(oprf_key_id, peers)
                         .context("while doing round2")?,
                 ))
             })?;
@@ -164,10 +167,13 @@ pub(crate) async fn handle_chain_event(
                 .await
                 .context("while reporting chain result")
         }
-        ChainEvent::SecretGenRound3(SecretGenRound3Event { rp_id, ciphers }) => {
+        ChainEvent::SecretGenRound3(SecretGenRound3Event {
+            oprf_key_id,
+            ciphers,
+        }) => {
             let event = ChainEventResult::SecretGenRound3(
                 secret_gen
-                    .round3(rp_id, ciphers)
+                    .round3(oprf_key_id, ciphers)
                     .context("while doing round3")?,
             );
             event_listener
@@ -176,23 +182,22 @@ pub(crate) async fn handle_chain_event(
                 .context("while reporting chain result")
         }
         ChainEvent::SecretGenFinalize(SecretGenFinalizeEvent {
-            rp_id,
-            rp_public_key,
-            rp_nullifier_key,
+            oprf_key_id,
+            oprf_public_key,
         }) => {
             let store_dlog_share = secret_gen
-                .finalize(rp_id, rp_public_key, rp_nullifier_key)
+                .finalize(oprf_key_id, oprf_public_key)
                 .context("while finalizing secret-gen")?;
             secret_manager
                 .store_dlog_share(store_dlog_share)
                 .await
                 .context("while storing share to secret manager")
         }
-        ChainEvent::DeleteRpMaterial(rp_id) => {
+        ChainEvent::DeleteOprfKeyMaterial(oprf_key_id) => {
             // we need to delete all the toxic waste associated with the rp id
-            secret_gen.delete_rp_material(rp_id);
+            secret_gen.delete_oprf_key_material(oprf_key_id);
             secret_manager
-                .remove_dlog_share(rp_id)
+                .remove_dlog_share(oprf_key_id)
                 .await
                 .context("while storing share to secret manager")
         }

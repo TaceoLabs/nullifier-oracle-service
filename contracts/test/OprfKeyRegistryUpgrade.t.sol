@@ -112,7 +112,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
     function testUpgrade() public {
         // start key generation process for oprfKeyId 42
         // see testE2E in OprfKeyRegistry.t.sol for the full process
-        uint256 oprfKeyId = 42;
+        uint160 oprfKeyId = 42;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(oprfKeyId, THRESHOLD);
@@ -200,7 +200,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
         assertEq(oprfKeyRegistryV2.newFeature(), 42);
 
         // Verify old functionality still works
-        uint256 newOprfKeyId = 43;
+        uint160 newOprfKeyId = 43;
         vm.prank(taceoAdmin);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound1(newOprfKeyId, 2);

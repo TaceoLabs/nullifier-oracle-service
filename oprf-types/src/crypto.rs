@@ -8,9 +8,9 @@
 //! * [`PartyId`]
 //! * [`PeerPublicKey`]
 //! * [`PeerPublicKeyList`]
-//! * [`RpNullifierKey`]
-//! * [`RpSecretGenCommitment`]
-//! * [`RpSecretGenCiphertexts`] / [`RpSecretGenCiphertext`]
+//! * [`OprfPublicKey`]
+//! * [`SecretGenCommitment`]
+//! * [`SecretGenCiphertexts`] / [`SecretGenCiphertext`]
 
 use std::{fmt, ops::Index};
 
@@ -43,7 +43,7 @@ pub struct PeerPublicKeyList(Vec<PeerPublicKey>);
 /// Constructed by multiplying the BabyJubJub generator with the secret shared among the OPRF peers.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct RpNullifierKey(
+pub struct OprfPublicKey(
     #[serde(serialize_with = "babyjubjub::serialize_affine")]
     #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     ark_babyjubjub::EdwardsAffine,
@@ -59,7 +59,7 @@ pub struct RpNullifierKey(
 /// See [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf)
 /// for more information about the OPRF-nullifier generation protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RpSecretGenCommitment {
+pub struct SecretGenCommitment {
     #[serde(serialize_with = "babyjubjub::serialize_affine")]
     #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
     /// The commitment to the random value sampled by the peer.
@@ -78,18 +78,18 @@ pub struct RpSecretGenCommitment {
 /// of the polynomial generated in the first round. The ciphertexts of the peers
 /// is sorted according to their respective party ID.  
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RpSecretGenCiphertexts {
+pub struct SecretGenCiphertexts {
     /// The proof that the ciphertexts were computed correctly
     pub proof: Proof<Bn254>,
     /// All ciphers for peers (including peer itself).
-    pub ciphers: Vec<RpSecretGenCiphertext>,
+    pub ciphers: Vec<SecretGenCiphertext>,
 }
 
 /// A ciphertext for an OPRF peer used in round 2 of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`PeerPublicKey`] of the sender, the ciphertext itself, and a nonce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RpSecretGenCiphertext {
+pub struct SecretGenCiphertext {
     #[serde(serialize_with = "babyjubjub::serialize_fq")]
     #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
     /// The nonce used during encryption.
@@ -112,14 +112,14 @@ impl PartyId {
     }
 }
 
-impl From<ark_babyjubjub::EdwardsAffine> for RpNullifierKey {
+impl From<ark_babyjubjub::EdwardsAffine> for OprfPublicKey {
     fn from(value: ark_babyjubjub::EdwardsAffine) -> Self {
         Self(value)
     }
 }
 
-impl RpNullifierKey {
-    /// Create a new `RpNullifierKey` by wrapping an BabyJubJub Point.
+impl OprfPublicKey {
+    /// Create a new `NullifierKey` by wrapping an BabyJubJub Point.
     pub fn new(value: ark_babyjubjub::EdwardsAffine) -> Self {
         Self::from(value)
     }
@@ -168,9 +168,9 @@ impl TryFrom<ark_babyjubjub::EdwardsAffine> for PeerPublicKey {
     }
 }
 
-impl fmt::Display for RpNullifierKey {
+impl fmt::Display for OprfPublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&format!("NullifierPublicKey({})", self.0))
+        f.write_str(&format!("OprfPublicKey({})", self.0))
     }
 }
 
@@ -216,14 +216,14 @@ impl PeerPublicKeyList {
     }
 }
 
-impl RpSecretGenCiphertexts {
+impl SecretGenCiphertexts {
     /// Creates a new instance by wrapping the provided value.
-    pub fn new(proof: Proof<Bn254>, ciphers: Vec<RpSecretGenCiphertext>) -> Self {
+    pub fn new(proof: Proof<Bn254>, ciphers: Vec<SecretGenCiphertext>) -> Self {
         Self { proof, ciphers }
     }
 }
 
-impl RpSecretGenCiphertext {
+impl SecretGenCiphertext {
     /// Creates a new ciphertext contribution for an OPRF-Peer by wrapping a nonce, a ciphertext and a commitment to the plain text.
     pub fn new(
         cipher: ark_babyjubjub::Fq,

@@ -56,8 +56,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       },
       {
         "name": "data",
@@ -115,8 +115,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       },
       {
         "name": "data",
@@ -191,8 +191,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -217,8 +217,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -261,8 +261,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -309,8 +309,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -322,8 +322,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [
@@ -353,8 +353,8 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ],
     "outputs": [],
@@ -595,9 +595,9 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -672,9 +672,9 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -685,9 +685,9 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "uint160"
       },
       {
         "name": "threshold",
@@ -704,9 +704,9 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false
@@ -717,9 +717,9 @@
     "inputs": [
       {
         "name": "oprfKeyId",
-        "type": "uint256",
+        "type": "uint160",
         "indexed": true,
-        "internalType": "uint256"
+        "internalType": "uint160"
       }
     ],
     "anonymous": false

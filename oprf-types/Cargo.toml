@@ -26,6 +26,8 @@ circom-types = { workspace = true, features = [
   "proof",
   "zkey"
 ] }
+ark-ff = { workspace = true }
+alloy = { workspace = true }
 eyre = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "pem", "serde"] }
 oprf-core = { workspace = true }
