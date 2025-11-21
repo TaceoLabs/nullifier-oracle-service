@@ -2,31 +2,22 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {RpRegistry} from "../../src/RpRegistry.sol";
-import {Types} from "../../src/Types.sol";
+import {OprfKeyRegistry} from "../../src/OprfKeyRegistry.sol";
 
 contract InitKeyGenScript is Script {
-    using Types for Types.EcDsaPubkeyCompressed;
-
-    RpRegistry public rpRegistry;
+    OprfKeyRegistry public oprfKeyRegistry;
 
     function setUp() public {
-        rpRegistry = RpRegistry(vm.envAddress("RP_REGISTRY_PROXY"));
+        oprfKeyRegistry = OprfKeyRegistry(vm.envAddress("OPRF_KEY_REGISTRY"));
     }
 
     function run() external {
-        uint128 sessionId = uint128(vm.envUint("SESSION_ID"));
-        uint256 ecdsaKeyX = vm.envUint("ECDSA_X");
-        uint256 ecdsaKeyYParity = vm.envUint("ECDSA_Y_PARITY");
+        uint256 keyId = vm.envUint("OPRF_KEY_ID");
 
-        Types.EcDsaPubkeyCompressed memory ecdsaPubKey =
-            Types.EcDsaPubkeyCompressed({x: bytes32(ecdsaKeyX), yParity: ecdsaKeyYParity});
-
-        console.log("init key-gen with sessionId", sessionId);
         vm.startBroadcast();
-        rpRegistry.initKeyGen(sessionId, ecdsaPubKey);
+        oprfKeyRegistry.initKeyGen(keyId);
         vm.stopBroadcast();
 
-        console.log("Initialized new key gen session with ID:", sessionId);
+        console.log("Initialized new key gen session with ID:", keyId);
     }
 }
