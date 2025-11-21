@@ -4764,7 +4764,6 @@ dependencies = [
  "eyre",
  "futures",
  "k256",
- "oprf-types",
  "oprf-world-types",
  "rand 0.8.5",
  "reqwest",
@@ -4773,6 +4772,7 @@ dependencies = [
  "taceo-groth16",
  "taceo-groth16-material",
  "taceo-oprf-core",
+ "taceo-oprf-types",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -4793,7 +4793,6 @@ dependencies = [
  "oprf-client",
  "oprf-service",
  "oprf-test",
- "oprf-types",
  "oprf-world-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4802,6 +4801,7 @@ dependencies = [
  "secrecy",
  "taceo-ark-babyjubjub",
  "taceo-eddsa-babyjubjub",
+ "taceo-oprf-types",
  "tokio",
  "tracing",
  "uuid",
@@ -4834,7 +4834,6 @@ dependencies = [
  "nodes-telemetry",
  "oprf-client",
  "oprf-test",
- "oprf-types",
  "oprf-world-types",
  "parking_lot",
  "rand 0.8.5",
@@ -4848,6 +4847,7 @@ dependencies = [
  "taceo-groth16",
  "taceo-groth16-material",
  "taceo-oprf-core",
+ "taceo-oprf-types",
  "taceo-poseidon2 0.2.0",
  "testcontainers-modules",
  "thiserror 2.0.17",
@@ -4874,7 +4874,6 @@ dependencies = [
  "k256",
  "oprf-client",
  "oprf-service",
- "oprf-types",
  "oprf-world-types",
  "parking_lot",
  "rand 0.8.5",
@@ -4888,26 +4887,13 @@ dependencies = [
  "taceo-eddsa-babyjubjub",
  "taceo-groth16",
  "taceo-oprf-core",
+ "taceo-oprf-types",
  "taceo-poseidon2 0.2.0",
  "testcontainers",
  "testcontainers-modules",
  "tokio",
  "tracing",
  "world-id-primitives",
-]
-
-[[package]]
-name = "oprf-types"
-version = "0.1.0"
-dependencies = [
- "eyre",
- "k256",
- "serde",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat 0.2.1",
- "taceo-circom-types",
- "taceo-oprf-core",
- "uuid",
 ]
 
 [[package]]
@@ -6944,6 +6930,20 @@ dependencies = [
  "taceo-poseidon2 0.2.0",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "taceo-oprf-types"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "k256",
+ "serde",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat 0.2.1",
+ "taceo-circom-types",
+ "taceo-oprf-core",
+ "uuid",
 ]
 
 [[package]]
