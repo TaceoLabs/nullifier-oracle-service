@@ -1,7 +1,6 @@
 [package]
 name = "oprf-world-types"
 version = "0.1.0"
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
@@ -14,6 +13,7 @@ publish.workspace = true
 alloy = { workspace = true }
 ark-babyjubjub = { workspace = true }
 ark-ff.workspace = true
+ark-serde-compat = { workspace = true, features = ["babyjubjub"] }
 circom-types = { workspace = true, features = ["bn254", "groth16", "proof"] }
 eddsa-babyjubjub = { workspace = true }
 groth16-material = { workspace = true }
@@ -21,4 +21,3 @@ k256 = { workspace = true, features = ["ecdsa", "serde"] }
 oprf-core = { workspace = true }
 ruint = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-taceo-ark-serde-compat = { workspace = true, features = ["babyjubjub"] }

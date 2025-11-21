@@ -1833,7 +1833,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2210,55 +2210,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "circom-types"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-groth16",
- "ark-poly",
- "ark-relations",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
- "byteorder",
- "num-traits",
- "rayon",
- "serde",
- "serde_json",
- "taceo-ark-serde-compat 0.2.0",
- "thiserror 2.0.17",
- "tracing",
-]
-
-[[package]]
 name = "circom-witness-rs"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4ffb423ecdfea516ad77c12a0a4b6e7a52b42656fe5b31df151ca2abc44545f"
-dependencies = [
- "ark-bn254",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "byteorder",
- "cxx",
- "cxx-build",
- "eyre",
- "hex",
- "num-bigint",
- "num-traits",
- "postcard",
- "rand 0.8.5",
- "ruint",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "circom-witness-rs"
-version = "0.2.1"
-source = "git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=ee9a648dcc54048ad9ba3a8ab2c8843f359ff024#ee9a648dcc54048ad9ba3a8ab2c8843f359ff024"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.5.0",
@@ -3398,46 +3353,6 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
-
-[[package]]
-name = "groth16"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/groth16.git#6529e47b7a9a792cf92425f2a9682ab4d4c433df"
-dependencies = [
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-groth16",
- "ark-poly",
- "ark-relations",
- "eyre",
- "num-traits",
- "rayon",
- "tracing",
-]
-
-[[package]]
-name = "groth16-material"
-version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-groth16",
- "ark-relations",
- "ark-serialize 0.5.0",
- "circom-types",
- "circom-witness-rs 0.2.1 (git+https://github.com/TaceoLabs/circom-witness-rs.git?rev=ee9a648dcc54048ad9ba3a8ab2c8843f359ff024)",
- "eyre",
- "groth16",
- "hex",
- "rand 0.8.5",
- "ruint",
- "sha2",
- "taceo-ark-babyjubjub",
- "thiserror 2.0.17",
- "tracing",
-]
 
 [[package]]
 name = "group"
@@ -4846,47 +4761,22 @@ name = "oprf-client"
 version = "0.1.0"
 dependencies = [
  "ark-ec",
- "circom-types",
  "eyre",
  "futures",
- "groth16",
- "groth16-material",
  "k256",
- "oprf-core",
  "oprf-types",
  "oprf-world-types",
  "rand 0.8.5",
  "reqwest",
  "taceo-ark-babyjubjub",
+ "taceo-circom-types",
+ "taceo-groth16",
+ "taceo-groth16-material",
+ "taceo-oprf-core",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "oprf-core"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-groth16",
- "ark-serialize 0.5.0",
- "blake3",
- "circom-types",
- "criterion",
- "itertools 0.14.0",
- "num-bigint",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "subtle",
- "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat 0.2.0",
- "taceo-poseidon2",
- "uuid",
- "zeroize",
 ]
 
 [[package]]
@@ -4931,14 +4821,11 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "axum",
  "axum-test",
- "circom-types",
- "circom-witness-rs 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "circom-witness-rs",
  "clap",
  "eyre",
  "futures",
  "git-version",
- "groth16",
- "groth16-material",
  "http 1.3.1",
  "humantime",
  "itertools 0.14.0",
@@ -4946,7 +4833,6 @@ dependencies = [
  "metrics",
  "nodes-telemetry",
  "oprf-client",
- "oprf-core",
  "oprf-test",
  "oprf-types",
  "oprf-world-types",
@@ -4957,8 +4843,12 @@ dependencies = [
  "serde",
  "serde_json",
  "taceo-ark-babyjubjub",
+ "taceo-circom-types",
  "taceo-eddsa-babyjubjub",
- "taceo-poseidon2",
+ "taceo-groth16",
+ "taceo-groth16-material",
+ "taceo-oprf-core",
+ "taceo-poseidon2 0.2.0",
  "testcontainers-modules",
  "thiserror 2.0.17",
  "tokio",
@@ -4980,11 +4870,9 @@ dependencies = [
  "async-trait",
  "eyre",
  "futures",
- "groth16",
  "itertools 0.14.0",
  "k256",
  "oprf-client",
- "oprf-core",
  "oprf-service",
  "oprf-types",
  "oprf-world-types",
@@ -4998,7 +4886,9 @@ dependencies = [
  "serial_test",
  "taceo-ark-babyjubjub",
  "taceo-eddsa-babyjubjub",
- "taceo-poseidon2",
+ "taceo-groth16",
+ "taceo-oprf-core",
+ "taceo-poseidon2 0.2.0",
  "testcontainers",
  "testcontainers-modules",
  "tokio",
@@ -5010,13 +4900,13 @@ dependencies = [
 name = "oprf-types"
 version = "0.1.0"
 dependencies = [
- "circom-types",
  "eyre",
  "k256",
- "oprf-core",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat 0.2.0",
+ "taceo-ark-serde-compat 0.2.1",
+ "taceo-circom-types",
+ "taceo-oprf-core",
  "uuid",
 ]
 
@@ -5026,15 +4916,15 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "ark-ff 0.5.0",
- "circom-types",
- "groth16-material",
  "k256",
- "oprf-core",
  "ruint",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-ark-serde-compat 0.2.0",
+ "taceo-ark-serde-compat 0.2.1",
+ "taceo-circom-types",
  "taceo-eddsa-babyjubjub",
+ "taceo-groth16-material",
+ "taceo-oprf-core",
 ]
 
 [[package]]
@@ -6935,14 +6825,39 @@ dependencies = [
 
 [[package]]
 name = "taceo-ark-serde-compat"
-version = "0.2.0"
-source = "git+https://github.com/TaceoLabs/circom-helpers.git?rev=6e12729dc3a35425c152e474e8e9b48f73da75b5#6e12729dc3a35425c152e474e8e9b48f73da75b5"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9085f4762d38839ca1ab55c7eab2a24961b8eb1fdb639fabd1d015703a389f13"
 dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff 0.5.0",
  "serde",
  "taceo-ark-babyjubjub",
+]
+
+[[package]]
+name = "taceo-circom-types"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3561b87890d0e3f4787fd08fc07d96c7457139b22b64fa22b6a61e8d8e16cd4"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-poly",
+ "ark-relations",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "byteorder",
+ "num-traits",
+ "rayon",
+ "serde",
+ "serde_json",
+ "taceo-ark-serde-compat 0.2.1",
+ "thiserror 2.0.17",
+ "tracing",
 ]
 
 [[package]]
@@ -6961,7 +6876,70 @@ dependencies = [
  "serde",
  "taceo-ark-babyjubjub",
  "taceo-ark-serde-compat 0.1.0",
- "taceo-poseidon2",
+ "taceo-poseidon2 0.1.0",
+ "zeroize",
+]
+
+[[package]]
+name = "taceo-groth16"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3efa0cf1b7e336c54092e291fbc8403cccc89947737a6fb6f97398882bef9c6"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-poly",
+ "ark-relations",
+ "eyre",
+ "num-traits",
+ "rayon",
+ "tracing",
+]
+
+[[package]]
+name = "taceo-groth16-material"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b682faa8b0a508f140527b21a9e96627105a2cee8c365ec210c26ddb6e61965"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-relations",
+ "eyre",
+ "hex",
+ "rand 0.8.5",
+ "sha2",
+ "taceo-circom-types",
+ "taceo-groth16",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "taceo-oprf-core"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-serialize 0.5.0",
+ "blake3",
+ "criterion",
+ "itertools 0.14.0",
+ "num-bigint",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "subtle",
+ "taceo-ark-babyjubjub",
+ "taceo-ark-serde-compat 0.2.1",
+ "taceo-circom-types",
+ "taceo-poseidon2 0.2.0",
+ "uuid",
  "zeroize",
 ]
 
@@ -6972,6 +6950,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5f09fc2f1c68aafd3f544313fe7e34d33b35aa666bc9e6b7a22e94b9833140"
 dependencies = [
  "ark-bn254",
+ "ark-ff 0.5.0",
+ "ark-std 0.5.0",
+ "num-bigint",
+ "num-traits",
+]
+
+[[package]]
+name = "taceo-poseidon2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fbf106fb8682ee4e057872a18f431828bd467c28d2ead469e4c84dbf6ce5ec6"
+dependencies = [
  "ark-ff 0.5.0",
  "ark-std 0.5.0",
  "num-bigint",
