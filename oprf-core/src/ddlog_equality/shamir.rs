@@ -24,9 +24,9 @@ use crate::dlog_equality::DLogEqualityProof;
 use ark_ec::CurveGroup;
 use ark_ec::{AffineRepr, VariableBaseMSM};
 use ark_ff::Zero;
+use ark_serde_compat::babyjubjub;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use taceo_ark_serde_compat::babyjubjub;
 use uuid::Uuid;
 use zeroize::ZeroizeOnDrop;
 

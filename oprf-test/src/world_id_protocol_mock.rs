@@ -16,7 +16,6 @@ use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey};
 use oprf_world_types::{
     MerkleMembership, MerkleRoot, TREE_DEPTH, UserKeyMaterial, UserPublicKeyBatch,
 };
-use poseidon2::Poseidon2;
 use regex::Regex;
 use reqwest::StatusCode;
 use world_id_primitives::merkle::AccountInclusionProof;
@@ -64,7 +63,6 @@ pub fn deploy_account_registry(rpc_url: &str) -> Address {
 }
 
 fn leaf_hash(pk: &UserPublicKeyBatch) -> ark_babyjubjub::Fq {
-    let poseidon2_16: Poseidon2<ark_babyjubjub::Fq, 16, 5> = Poseidon2::default();
     let mut input = [ark_babyjubjub::Fq::ZERO; 16];
     #[allow(clippy::unwrap_used)]
     {
@@ -74,7 +72,7 @@ fn leaf_hash(pk: &UserPublicKeyBatch) -> ark_babyjubjub::Fq {
         input[i * 2 + 1] = pk.values[i].x;
         input[i * 2 + 2] = pk.values[i].y;
     }
-    poseidon2_16.permutation(&input)[1]
+    poseidon2::bn254::t16::permutation(&input)[1]
 }
 
 pub fn offchain_public_key_compress(pk: &EdDSAPublicKey) -> eyre::Result<U256> {

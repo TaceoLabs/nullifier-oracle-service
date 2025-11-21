@@ -19,7 +19,7 @@ use crate::{
     RpId, ShareEpoch,
     crypto::{PartyId, RpNullifierKey},
 };
-use taceo_ark_serde_compat::babyjubjub;
+use ark_serde_compat::babyjubjub;
 
 /// The public components of the `RpMaterial`.
 ///

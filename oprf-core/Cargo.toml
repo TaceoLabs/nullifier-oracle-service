@@ -32,7 +32,7 @@ ark-serialize = { workspace = true }
 blake3 = { workspace = true }
 itertools = { workspace = true }
 num-bigint.workspace = true
-poseidon2 = { workspace = true }
+poseidon2 = { workspace = true, features = ["bn254", "t3", "t4", "t16"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 subtle = "2"

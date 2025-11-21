@@ -108,7 +108,6 @@ impl BlindedOprfResponse {
 #[cfg(test)]
 #[cfg(feature = "server")]
 mod tests {
-    use poseidon2::Poseidon2;
 
     use crate::oprf::{
         self,
@@ -136,8 +135,7 @@ mod tests {
         let response = oprf::client::finalize_query(response, blinding_factor.prepare());
 
         let expected_response = &service.key * mappings::encode_to_curve(query);
-        let poseidon = Poseidon2::<_, 4, 5>::default();
-        let out = poseidon.permutation(&[
+        let out = poseidon2::bn254::t4::permutation(&[
             oprf::client::get_oprf_ds(),
             query,
             expected_response.x,
@@ -179,8 +177,7 @@ mod tests {
         .unwrap();
 
         let expected_response = &service.key * mappings::encode_to_curve(query);
-        let poseidon = Poseidon2::<_, 4, 5>::default();
-        let out = poseidon.permutation(&[
+        let out = poseidon2::bn254::t4::permutation(&[
             oprf::client::get_oprf_ds(),
             query,
             expected_response.x,

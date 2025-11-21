@@ -9,7 +9,6 @@
 use ark_ec::{AffineRepr, CurveGroup, VariableBaseMSM as _};
 use ark_ff::{PrimeField, UniformRand, Zero};
 use itertools::izip;
-use poseidon2::Poseidon2;
 use rand::{CryptoRng, Rng};
 use zeroize::ZeroizeOnDrop;
 
@@ -106,15 +105,13 @@ fn dh_key_derivation(my_sk: &ScalarField, their_pk: Affine) -> BaseField {
 
 // Use Poseidon2 for symmetric encryption.
 fn sym_encrypt(key: BaseField, msg: ScalarField, nonce: BaseField) -> BaseField {
-    let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
-    let ks = poseidon2_3.permutation(&[get_t1_ds(), key, nonce]);
+    let ks = poseidon2::bn254::t3::permutation(&[get_t1_ds(), key, nonce]);
     ks[1] + interpret_scalarfield_as_basefield(msg)
 }
 
 // Use Poseidon2 for symmetric decryption.
 fn sym_decrypt(key: BaseField, ciphertext: BaseField, nonce: BaseField) -> Option<ScalarField> {
-    let poseidon2_3 = Poseidon2::<_, 3, 5>::default();
-    let ks = poseidon2_3.permutation(&[get_t1_ds(), key, nonce]);
+    let ks = poseidon2::bn254::t3::permutation(&[get_t1_ds(), key, nonce]);
     let msg = ciphertext - ks[1];
     basefield_as_scalarfield_if_fits(msg)
 }
@@ -200,14 +197,13 @@ impl KeyGenPoly {
         let comm_share = Affine::generator() * poly[0];
 
         // Sponge mode for hashing
-        let poseidon2_4 = Poseidon2::<BaseField, 4, 5>::default();
         let mut state = [BaseField::zero(); 4];
         state[0] = get_coeff_ds(); // domain separator in capacity
         for coeffs_ in poly[1..].chunks(3) {
             for (s, c) in izip!(state.iter_mut().skip(1), coeffs_) {
                 *s += interpret_scalarfield_as_basefield(*c);
             }
-            poseidon2_4.permutation_in_place(&mut state);
+            poseidon2::bn254::t4::permutation_in_place(&mut state);
         }
         let comm_coeffs = state[1];
         (comm_share.into_affine(), comm_coeffs)

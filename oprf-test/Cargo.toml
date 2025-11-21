@@ -28,7 +28,7 @@ oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
 parking_lot = { workspace = true }
-poseidon2 = { workspace = true }
+poseidon2 = { workspace = true, features=["t8", "t16"] }
 rand.workspace = true
 rand_chacha.workspace = true
 regex.workspace = true

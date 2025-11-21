@@ -63,5 +63,5 @@ axum-test = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
-poseidon2 = { workspace = true }
+poseidon2 = { workspace = true, features=["t2","t16"] }
 testcontainers-modules = { version = "0.13", features = ["localstack"] }

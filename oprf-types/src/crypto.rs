@@ -14,9 +14,9 @@
 
 use std::{fmt, ops::Index};
 
+use ark_serde_compat::babyjubjub;
 use circom_types::{ark_bn254::Bn254, groth16::Proof};
 use serde::{Deserialize, Serialize};
-use taceo_ark_serde_compat::babyjubjub;
 
 /// The party id of the OPRF-Peer.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

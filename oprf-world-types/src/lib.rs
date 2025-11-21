@@ -2,9 +2,9 @@ use std::{fmt, str::FromStr};
 
 use alloy::primitives::U256;
 use ark_ff::PrimeField;
+use ark_serde_compat::babyjubjub;
 use eddsa_babyjubjub::{EdDSAPrivateKey, EdDSAPublicKey, EdDSASignature};
 use serde::{Deserialize, Serialize};
-use taceo_ark_serde_compat::babyjubjub;
 
 pub mod api;
 pub mod proof_inputs;
