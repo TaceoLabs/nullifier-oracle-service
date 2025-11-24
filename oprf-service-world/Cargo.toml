@@ -22,7 +22,6 @@ clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
 humantime = { workspace = true }
-metrics = { workspace = true }
 nodes-telemetry = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }

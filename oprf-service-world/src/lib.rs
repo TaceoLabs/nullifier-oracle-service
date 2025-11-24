@@ -26,7 +26,6 @@ use crate::{
 };
 
 pub mod config;
-pub mod metrics;
 pub(crate) mod services;
 
 /// Main entry point for the OPRF service.

@@ -18,7 +18,6 @@ async fn main() -> eyre::Result<ExitCode> {
     let tracing_config = nodes_telemetry::TracingConfig::try_from_env()?;
     let _tracing_handle = nodes_telemetry::initialize_tracing(&tracing_config)?;
     oprf_service::metrics::describe_metrics();
-    oprf_service_world::metrics::describe_metrics();
 
     tracing::info!("{}", oprf_service::version_info());
 

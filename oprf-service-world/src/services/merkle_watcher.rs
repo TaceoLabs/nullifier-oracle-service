@@ -23,8 +23,6 @@ use oprf_world_types::MerkleRoot;
 use parking_lot::Mutex;
 use tracing::instrument;
 
-use crate::metrics::METRICS_MERKLE_COUNT;
-
 sol! {
     #[sol(rpc)]
     contract AccountRegistry {
@@ -174,7 +172,6 @@ impl MerkleRootStore {
         if store.len() > max_merkle_store_size {
             eyre::bail!("initial store must be smaller than max");
         }
-        metrics::counter!(METRICS_MERKLE_COUNT).absolute(store.len() as u64);
         tracing::info!("starting with store size: {}", store.len());
         Ok(Self {
             store,
@@ -204,8 +201,6 @@ impl MerkleRootStore {
                 // drop the oldest root
                 let dropped = self.store.remove(&oldest_root).expect("store not empty");
                 tracing::trace!("dropped {dropped}");
-            } else {
-                metrics::counter!(METRICS_MERKLE_COUNT).increment(1);
             }
         }
     }
