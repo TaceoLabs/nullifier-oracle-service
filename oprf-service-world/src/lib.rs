@@ -60,6 +60,7 @@ pub async fn start(
         config.account_registry_contract,
         service_config.chain_ws_rpc_url.expose_secret(),
         config.max_merkle_store_size,
+        cancellation_token.clone(),
     )
     .await
     .context("while starting merkle watcher")?;

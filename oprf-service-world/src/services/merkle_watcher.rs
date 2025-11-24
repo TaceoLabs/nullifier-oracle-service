@@ -21,6 +21,7 @@ use eyre::Context as _;
 use futures::StreamExt as _;
 use oprf_world_types::MerkleRoot;
 use parking_lot::Mutex;
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 sol! {
@@ -57,11 +58,13 @@ impl MerkleWatcher {
     /// * `contract_address` - Address of the AccountRegistry contract
     /// * `ws_rpc_url` - WebSocket RPC URL for blockchain connection
     /// * `max_merkle_store_size` - Maximum number of merkle roots to store
+    /// * `cancellation_token` - CancellationToken to cancel the service in case of an error
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn init(
         contract_address: Address,
         ws_rpc_url: &str,
         max_merkle_store_size: usize,
+        cancellation_token: CancellationToken,
     ) -> eyre::Result<Self> {
         tracing::info!("creating provider...");
         let ws = WsConnect::new(ws_rpc_url);
@@ -89,6 +92,8 @@ impl MerkleWatcher {
         let sub = provider.subscribe_logs(&filter).await?;
         let mut stream = sub.into_stream();
         tokio::spawn(async move {
+            // shutdown service if merkle watcher encounters an error and drops this guard
+            let _drop_guard = cancellation_token.drop_guard();
             while let Some(log) = stream.next().await {
                 match RootRecorded::decode_log(log.as_ref()) {
                     Ok(event) => {

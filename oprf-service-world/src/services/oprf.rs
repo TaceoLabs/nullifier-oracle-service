@@ -126,15 +126,13 @@ impl OprfReqAuthenticator for WorldOprfReqAuthenticator {
 
         // add signature to history to check if the nonces where only used once
         self.signature_history
-            .add_signature(request.auth.signature.to_vec(), req_time_stamp)
-            .unwrap();
+            .add_signature(request.auth.signature.to_vec(), req_time_stamp)?;
 
         // check if the merkle root is valid
         let valid = self
             .merkle_watcher
             .is_root_valid(request.auth.merkle_root)
-            .await
-            .unwrap();
+            .await?;
         if !valid {
             return Err(WorldOprfReqAuthError::InvalidMerkleRoot)?;
         }

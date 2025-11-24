@@ -37,6 +37,8 @@ pub(crate) async fn key_event_watcher_task(
     dlog_secret_gen_service: DLogSecretGenService,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
+    // shutdown service if event watcher encounters an error and drops this guard
+    let _drop_guard = cancellation_token.drop_guard_ref();
     tracing::info!("checking OprfKeyRegistry ready state at address {contract_address}..");
     let contract = OprfKeyRegistry::new(contract_address, provider.clone());
     if !contract.isContractReady().call().await? {
@@ -55,11 +57,7 @@ pub(crate) async fn key_event_watcher_task(
     .await
     {
         Ok(_) => tracing::info!("stopped key event watcher"),
-        Err(err) => {
-            tracing::error!("key event watcher encountered an error: {err}");
-            // cancel token to shutdown service if event watcher encountered an error
-            cancellation_token.cancel();
-        }
+        Err(err) => tracing::error!("key event watcher encountered an error: {err}"),
     }
     Ok(())
 }
