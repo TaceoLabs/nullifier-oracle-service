@@ -6,13 +6,13 @@ use std::{
 use ark_bn254::Bn254;
 use async_trait::async_trait;
 use axum::{http::StatusCode, response::IntoResponse};
-use oprf_service::services::oprf::OprfReqAuthenticator;
+use oprf_service::OprfReqAuthenticator;
 use oprf_types::api::v1::OprfRequest;
 use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
 use uuid::Uuid;
 
 use crate::services::{
-    merkle_watcher::{MerkleWatcherError, MerkleWatcherService},
+    merkle_watcher::{MerkleWatcher, MerkleWatcherError},
     signature_history::{DuplicateSignatureError, SignatureHistory},
 };
 
@@ -74,7 +74,7 @@ impl IntoResponse for WorldOprfReqAuthError {
 }
 
 pub(crate) struct WorldOprfReqAuthenticator {
-    merkle_watcher: MerkleWatcherService,
+    merkle_watcher: MerkleWatcher,
     signature_history: SignatureHistory,
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
     current_time_stamp_max_difference: Duration,
@@ -82,7 +82,7 @@ pub(crate) struct WorldOprfReqAuthenticator {
 
 impl WorldOprfReqAuthenticator {
     pub(crate) fn init(
-        merkle_watcher: MerkleWatcherService,
+        merkle_watcher: MerkleWatcher,
         vk: ark_groth16::VerifyingKey<Bn254>,
         current_time_stamp_max_difference: Duration,
         signature_history_cleanup_interval: Duration,

@@ -20,11 +20,13 @@ aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { workspace = true }
 axum = { workspace = true }
 circom-types = { workspace = true, features = ["bn254", "groth16", "zkey"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
 groth16-material = { workspace = true }
 http = { workspace = true }
+humantime.workspace = true
 itertools = { workspace = true }
 k256 = { workspace = true, features = ["ecdsa", "serde"] }
 metrics = { workspace = true }
@@ -55,5 +57,5 @@ axum-test = { workspace = true }
 eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
-poseidon2 = { workspace = true, features=["t2","t16"] }
+poseidon2 = { workspace = true, features = ["t2", "t16"] }
 testcontainers-modules = { version = "0.13", features = ["localstack"] }

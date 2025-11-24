@@ -103,11 +103,13 @@ impl OprfKeyMaterialStore {
         tracing::debug!("computing partial commitment");
         let share = self
             .get(share_identifier.oprf_key_id)
-            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?
+            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+                share_identifier.oprf_key_id,
+            ))?
             .get_share(share_identifier.share_epoch)
-            .ok_or_else(|| {
-                OprfKeyMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch)
-            })?;
+            .ok_or(OprfKeyMaterialStoreError::UnknownShareEpoch(
+                share_identifier.share_epoch,
+            ))?;
         Ok(DLogSessionShamir::partial_commitments(
             point_b,
             share,
@@ -132,14 +134,18 @@ impl OprfKeyMaterialStore {
         tracing::debug!("finalizing proof share");
         let rp_nullifier_key = self
             .get_oprf_public_key(share_identifier.oprf_key_id)
-            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?;
+            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+                share_identifier.oprf_key_id,
+            ))?;
         let share = self
             .get(share_identifier.oprf_key_id)
-            .ok_or_else(|| OprfKeyMaterialStoreError::UnknownRp(share_identifier.oprf_key_id))?
+            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+                share_identifier.oprf_key_id,
+            ))?
             .get_share(share_identifier.share_epoch)
-            .ok_or_else(|| {
-                OprfKeyMaterialStoreError::UnknownShareEpoch(share_identifier.share_epoch)
-            })?;
+            .ok_or(OprfKeyMaterialStoreError::UnknownShareEpoch(
+                share_identifier.share_epoch,
+            ))?;
         let lagrange_coefficient = shamir::single_lagrange_from_coeff(
             my_party_id.into_inner() + 1,
             challenge.get_contributing_parties(),

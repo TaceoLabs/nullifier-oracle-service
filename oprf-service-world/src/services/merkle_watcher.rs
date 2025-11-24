@@ -7,30 +7,146 @@
 //! - alloy (uses the alloy crate to interact with smart contracts)
 //! - test (contains initially provided merkle roots)
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 
-use async_trait::async_trait;
+use alloy::{
+    eips::BlockNumberOrTag,
+    primitives::Address,
+    providers::{DynProvider, Provider as _, ProviderBuilder, WsConnect},
+    rpc::types::Filter,
+    sol,
+    sol_types::SolEvent as _,
+};
+use eyre::Context as _;
+use futures::StreamExt as _;
 use oprf_world_types::MerkleRoot;
+use parking_lot::Mutex;
 use tracing::instrument;
 
 use crate::metrics::METRICS_MERKLE_COUNT;
 
-pub(crate) mod alloy_merkle_watcher;
-
-/// Dyn trait for the watcher service. Must be `Send` + `Sync` to work with Axum.
-pub(crate) type MerkleWatcherService = Arc<dyn MerkleWatcher + Send + Sync>;
+sol! {
+    #[sol(rpc)]
+    contract AccountRegistry {
+        function isValidRoot(uint256 root) external view returns (bool);
+        function currentRoot() external view returns (uint256);
+    }
+    event RootRecorded(uint256 indexed root, uint256 timestamp, uint256 indexed rootEpoch);
+}
 
 /// Error returned by the [`MerkleWatcher`] implementation.
 #[derive(Debug, thiserror::Error)]
 #[error("chain communication error: {0}")]
 pub(crate) struct MerkleWatcherError(pub String);
 
-/// Trait for services that watch blockchains for merkle root updates
-/// and provide functionality to check if a given root is valid,
-#[async_trait]
-pub(crate) trait MerkleWatcher {
-    /// Check if a merkle root is valid.
-    async fn is_root_valid(&self, root: MerkleRoot) -> Result<bool, MerkleWatcherError>;
+/// Monitors merkle roots from an on-chain AccountRegistry contract.
+///
+/// Subscribes to blockchain events and maintains a store of valid merkle roots.
+#[derive(Clone)]
+pub(crate) struct MerkleWatcher {
+    merkle_root_store: Arc<Mutex<MerkleRootStore>>,
+    provider: DynProvider, // do not drop provider while we want to stay subscribed
+    contract_address: Address,
+}
+
+impl MerkleWatcher {
+    /// Initializes the merkle watcher and starts listening for events.
+    ///
+    /// Connects to the blockchain via WebSocket, fetches the current merkle root,
+    /// and spawns a background task to monitor for new `RootRecorded` events.
+    ///
+    /// # Arguments
+    /// * `contract_address` - Address of the AccountRegistry contract
+    /// * `ws_rpc_url` - WebSocket RPC URL for blockchain connection
+    /// * `max_merkle_store_size` - Maximum number of merkle roots to store
+    #[instrument(level = "info", skip_all)]
+    pub(crate) async fn init(
+        contract_address: Address,
+        ws_rpc_url: &str,
+        max_merkle_store_size: usize,
+    ) -> eyre::Result<Self> {
+        tracing::info!("creating provider...");
+        let ws = WsConnect::new(ws_rpc_url);
+        let provider = ProviderBuilder::new().connect_ws(ws).await?;
+        let contract = AccountRegistry::new(contract_address, provider.clone());
+
+        tracing::info!("get current root...");
+        let current_root = contract.currentRoot().call().await?;
+        tracing::info!("root = {current_root}");
+
+        let merkle_root_store = Arc::new(Mutex::new(
+            MerkleRootStore::new(
+                HashMap::from([(current_root.into(), 0)]), // insert current root with 0 timestamp so it is oldest
+                max_merkle_store_size,
+            )
+            .context("while building merkle root store")?,
+        ));
+        let merkle_root_store_clone = Arc::clone(&merkle_root_store);
+
+        tracing::info!("listening for events...");
+        let filter = Filter::new()
+            .address(contract_address)
+            .from_block(BlockNumberOrTag::Latest)
+            .event_signature(RootRecorded::SIGNATURE_HASH);
+        let sub = provider.subscribe_logs(&filter).await?;
+        let mut stream = sub.into_stream();
+        tokio::spawn(async move {
+            while let Some(log) = stream.next().await {
+                match RootRecorded::decode_log(log.as_ref()) {
+                    Ok(event) => {
+                        tracing::info!("got root {} timestamp {}", event.root, event.timestamp);
+                        if let Ok(timestamp) = u64::try_from(event.timestamp) {
+                            merkle_root_store_clone
+                                .lock()
+                                .insert(event.root.into(), timestamp);
+                        } else {
+                            tracing::warn!("AccountRegistry send root with timestamp > u64");
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!("failed to decode contract event: {err:?}");
+                    }
+                }
+            }
+        });
+
+        Ok(Self {
+            merkle_root_store,
+            provider: provider.erased(),
+            contract_address,
+        })
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub(crate) async fn is_root_valid(&self, root: MerkleRoot) -> Result<bool, MerkleWatcherError> {
+        {
+            let store = self.merkle_root_store.lock();
+            // first check if the merkle root is already registered
+            if store.contains_root(root) {
+                tracing::trace!("root was in store");
+                tracing::trace!("root valid: true");
+                return Ok(true);
+            }
+        }
+        tracing::debug!("check in contract");
+        let contract = AccountRegistry::new(self.contract_address, self.provider.clone());
+        let valid = contract
+            .isValidRoot(root.into())
+            .call()
+            .await
+            .map_err(|err| MerkleWatcherError(err.to_string()))?;
+        {
+            tracing::debug!("add root to store");
+            let mut store = self.merkle_root_store.lock();
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("system time is after unix epoch")
+                .as_secs();
+            store.insert(root, timestamp);
+        }
+        tracing::debug!("root valid: {valid}");
+        return Ok(valid);
+    }
 }
 
 /// Stores Merkle roots with associated timestamps.

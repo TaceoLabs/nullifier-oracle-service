@@ -17,10 +17,9 @@
 //! - [`secret_manager`] – stores and retrieves secrets (AWS or local file based).
 //! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
 //! - [`signature_history`] – keeps track of nonce + time_stamp signatures to detect replays
-pub mod event_handler;
-pub mod key_event_watcher;
-pub mod oprf;
+pub(crate) mod key_event_watcher;
+pub(crate) mod oprf;
 pub mod oprf_key_material_store;
-pub mod secret_gen;
+pub(crate) mod secret_gen;
 pub mod secret_manager;
-pub mod session_store;
+pub(crate) mod session_store;

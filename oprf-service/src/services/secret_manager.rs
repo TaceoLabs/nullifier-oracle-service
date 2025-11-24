@@ -41,6 +41,7 @@ pub trait SecretManager {
     ///
     /// If the secret-manager can't find a secret, it shall create a new one, store it and then return the new one.
     async fn load_or_insert_wallet_private_key(&self) -> eyre::Result<PrivateKeySigner>;
+
     /// Loads the DLog secrets and creates a [`OprfKeyMaterialStore`].
     async fn load_secrets(&self) -> eyre::Result<OprfKeyMaterialStore>;
 

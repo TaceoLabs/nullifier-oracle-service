@@ -54,23 +54,25 @@ async fn start_world_service(
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
-    let config = oprf_service_world::config::OprfPeerConfig {
-        environment: oprf_service_world::config::Environment::Dev,
+    let config = oprf_service_world::config::WorldOprfPeerConfig {
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
-        request_lifetime: Duration::from_secs(5 * 60),
-        session_cleanup_interval: Duration::from_micros(1000000),
         max_wait_time_shutdown: Duration::from_secs(10),
         user_verification_key_path: dir.join("../circom/main/query/OPRFQuery.vk.json"),
-        rp_secret_id_prefix: format!("oprf/rp/n{id}"),
         max_merkle_store_size: 10,
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
-        oprf_key_registry_contract: rp_registry_contract,
         account_registry_contract,
-        chain_ws_rpc_url: chain_ws_rpc_url.into(),
-        key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
-        key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
-        wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+        service_config: oprf_service::config::OprfPeerConfig {
+            environment: oprf_service::config::Environment::Dev,
+            request_lifetime: Duration::from_secs(5 * 60),
+            session_cleanup_interval: Duration::from_micros(1000000),
+            rp_secret_id_prefix: format!("oprf/rp/n{id}"),
+            oprf_key_registry_contract: rp_registry_contract,
+            chain_ws_rpc_url: chain_ws_rpc_url.into(),
+            key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
+            key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
+            wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+        },
     };
     let never = async { futures::future::pending::<()>().await };
 
@@ -100,18 +102,20 @@ async fn start_example_service(
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
-    let config = oprf_service_example::config::OprfPeerConfig {
-        environment: oprf_service_example::config::Environment::Dev,
+    let config = oprf_service_example::config::ExampleOprfPeerConfig {
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
-        request_lifetime: Duration::from_secs(5 * 60),
-        session_cleanup_interval: Duration::from_micros(1000000),
         max_wait_time_shutdown: Duration::from_secs(10),
-        rp_secret_id_prefix: format!("oprf/rp/n{id}"),
-        oprf_key_registry_contract: rp_registry_contract,
-        chain_ws_rpc_url: chain_ws_rpc_url.into(),
-        key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
-        key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
-        wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+        service_config: oprf_service::config::OprfPeerConfig {
+            environment: oprf_service::config::Environment::Dev,
+            request_lifetime: Duration::from_secs(5 * 60),
+            session_cleanup_interval: Duration::from_micros(1000000),
+            rp_secret_id_prefix: format!("oprf/rp/n{id}"),
+            oprf_key_registry_contract: rp_registry_contract,
+            chain_ws_rpc_url: chain_ws_rpc_url.into(),
+            key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
+            key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
+            wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+        },
     };
     let never = async { futures::future::pending::<()>().await };
 

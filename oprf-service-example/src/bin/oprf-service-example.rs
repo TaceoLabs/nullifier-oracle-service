@@ -7,37 +7,33 @@
 use std::{process::ExitCode, sync::Arc};
 
 use clap::Parser;
-use oprf_service_example::config::{self, OprfPeerConfig};
-use oprf_service::services::secret_manager::aws::AwsSecretManager;
+use oprf_service::{config::Environment, secret_manager::aws::AwsSecretManager};
+use oprf_service_example::config::ExampleOprfPeerConfig;
 
 #[tokio::main]
 async fn main() -> eyre::Result<ExitCode> {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .expect("can install");
-
     let tracing_config = nodes_telemetry::TracingConfig::try_from_env()?;
     let _tracing_handle = nodes_telemetry::initialize_tracing(&tracing_config)?;
-
     oprf_service::metrics::describe_metrics();
 
     tracing::info!("{}", oprf_service::version_info());
 
-    let config = OprfPeerConfig::parse();
+    let config = ExampleOprfPeerConfig::parse();
 
-    let aws_config = match config.environment {
-        config::Environment::Prod => aws_config::load_from_env().await,
-        config::Environment::Dev => {
-            oprf_service::services::secret_manager::aws::localstack_aws_config().await
-        }
+    let aws_config = match config.service_config.environment {
+        Environment::Prod => aws_config::load_from_env().await,
+        Environment::Dev => oprf_service::secret_manager::aws::localstack_aws_config().await,
     };
 
     // Load the AWS secret manager.
     let secret_manager = Arc::new(
         AwsSecretManager::init(
             aws_config,
-            &config.rp_secret_id_prefix,
-            &config.wallet_private_key_secret_id,
+            &config.service_config.rp_secret_id_prefix,
+            &config.service_config.wallet_private_key_secret_id,
         )
         .await,
     );

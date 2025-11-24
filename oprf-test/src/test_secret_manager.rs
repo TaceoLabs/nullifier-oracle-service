@@ -4,7 +4,7 @@ use alloy::signers::local::PrivateKeySigner;
 use async_trait::async_trait;
 use itertools::Itertools;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
-use oprf_service::services::{
+use oprf_service::{
     oprf_key_material_store::OprfKeyMaterialStore,
     secret_manager::{SecretManager, StoreDLogShare},
 };

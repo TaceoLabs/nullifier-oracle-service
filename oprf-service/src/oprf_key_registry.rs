@@ -2,11 +2,12 @@
 //!
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
-use alloy::sol;
+use alloy::{primitives::Address, providers::DynProvider, sol};
 use ark_bn254::Bn254;
 use circom_types::groth16::Proof;
 use oprf_types::crypto::{
-    EphemeralEncryptionPublicKey, SecretGenCiphertext, SecretGenCiphertexts, SecretGenCommitment,
+    EphemeralEncryptionPublicKey, PartyId, SecretGenCiphertext, SecretGenCiphertexts,
+    SecretGenCommitment,
 };
 
 // Codegen from ABI file to interact with the contract.
@@ -109,4 +110,14 @@ impl From<SecretGenCiphertexts> for Types::Round2Contribution {
             ciphers: value.ciphers.into_iter().map(Into::into).collect(),
         }
     }
+}
+
+/// Loads the party ID for this peer from the OprfKeyRegistry contract.
+pub async fn load_party_id(
+    contract_address: Address,
+    provider: DynProvider,
+) -> eyre::Result<PartyId> {
+    let contract = OprfKeyRegistry::new(contract_address, provider);
+    let party_id = contract.checkIsParticipantAndReturnPartyId().call().await?;
+    Ok(PartyId(u16::try_from(party_id)?))
 }

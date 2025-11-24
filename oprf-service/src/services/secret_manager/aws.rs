@@ -33,6 +33,13 @@ use tracing::instrument;
 use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 use crate::services::secret_manager::{SecretManager, StoreDLogShare};
 
+/// Creates an AWS SDK configuration for connecting to a LocalStack instance.
+///
+/// This function is designed to facilitate testing and development by configuring
+/// an AWS SDK client to connect to a LocalStack instance. It sets the region to
+/// `us-east-1` and uses static test credentials. The endpoint URL can be customized
+/// via the `TEST_AWS_ENDPOINT_URL` environment variable; if not set, it defaults
+/// to `http://localhost:4566`.
 pub async fn localstack_aws_config() -> aws_config::SdkConfig {
     let region_provider = Region::new("us-east-1");
     let credentials = Credentials::new("test", "test", None, None, "Static");

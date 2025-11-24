@@ -25,9 +25,31 @@ use uuid::Uuid;
 use crate::services::oprf_key_material_store::{OprfKeyMaterialStore, OprfKeyMaterialStoreError};
 use crate::{metrics::METRICS_KEY_OPRF_SUCCESS, services::session_store::SessionStore};
 
+#[async_trait]
+
+/// Trait defining the authentication mechanism for OPRF requests.
+///
+/// This trait enables the verification of OPRF requests to ensure they are
+/// properly authenticated before processing. It is designed to be implemented
+/// by authentication services that can validate the authenticity of incoming
+/// OPRF requests.
+pub trait OprfReqAuthenticator: Send + Sync {
+    /// Represents the authentication data type included in the OPRF request.
+    type ReqAuth: Clone + Serialize + DeserializeOwned;
+    /// Represents the error type returned if authentication fails.
+    type ReqAuthError: axum::response::IntoResponse;
+
+    /// Verifies the authenticity of an OPRF request.
+    async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
+}
+
+/// Dynamic trait object for `OprfReqAuthenticator` service.
+pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
+    Arc<dyn OprfReqAuthenticator<ReqAuth = ReqAuth, ReqAuthError = ReqAuthError>>;
+
 /// Errors returned by the [`OprfService`].
 #[derive(Debug, thiserror::Error)]
-pub enum OprfServiceError {
+pub(crate) enum OprfServiceError {
     /// The blinded query is the identity element
     #[error("blinded query input is the identity element - not allowed")]
     BlindedQueryIsIdentity,
@@ -42,24 +64,13 @@ pub enum OprfServiceError {
     InternalServerError(#[from] eyre::Report),
 }
 
-#[async_trait]
-pub trait OprfReqAuthenticator: Send + Sync {
-    type ReqAuth: Clone + Serialize + DeserializeOwned;
-    type ReqAuthError: axum::response::IntoResponse;
-
-    async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
-}
-
-pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
-    Arc<dyn OprfReqAuthenticator<ReqAuth = ReqAuth, ReqAuthError = ReqAuthError>>;
-
 /// Main OPRF service managing session lifecycle and cryptographic operations.
 ///
 /// Holds references to the [`OprfKeyMaterialStore`], session store, merkle watcher,
 /// signature history, and verification key. Cloneable for use across multiple
 /// tasks and API handlers.
 #[derive(Clone)]
-pub struct OprfService {
+pub(crate) struct OprfService {
     pub(crate) oprf_material_store: OprfKeyMaterialStore,
     pub(crate) session_store: SessionStore,
     pub(crate) party_id: PartyId,
@@ -67,7 +78,7 @@ pub struct OprfService {
 
 impl OprfService {
     /// Builds an [`OprfService`] from its core services and config values.
-    pub fn init(
+    pub(crate) fn init(
         oprf_key_material_store: OprfKeyMaterialStore,
         request_lifetime: Duration,
         session_cleanup_interval: Duration,

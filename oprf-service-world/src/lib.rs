@@ -1,4 +1,4 @@
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 //! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
 //! nullifier oracle service. The service participates in multi-party key generation and provides
 //! partial OPRF evaluations for World ID protocol nullifiers.
@@ -14,21 +14,15 @@
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 use std::{fs::File, sync::Arc};
 
-use alloy::network::EthereumWallet;
 use ark_bn254::Bn254;
 use circom_types::groth16::VerificationKey;
 use eyre::Context;
-use groth16_material::circom::CircomGroth16MaterialBuilder;
-use oprf_service::services::{
-    event_handler::ChainEventHandler,
-    key_event_watcher::{KeyGenEventListenerService, alloy_key_gen_watcher::AlloyKeyGenWatcher},
-    oprf::OprfService,
-    secret_manager::SecretManagerService,
-};
+use oprf_service::secret_manager::SecretManagerService;
 use secrecy::ExposeSecret;
 
-use crate::services::{
-    merkle_watcher::alloy_merkle_watcher::AlloyMerkleWatcher, oprf::WorldOprfReqAuthenticator,
+use crate::{
+    config::WorldOprfPeerConfig,
+    services::{merkle_watcher::MerkleWatcher, oprf::WorldOprfReqAuthenticator},
 };
 
 pub mod config;
@@ -37,30 +31,22 @@ pub(crate) mod services;
 
 /// Main entry point for the OPRF service.
 ///
-/// Initializes all services, loads cryptographic material, and starts:
-/// - The Axum HTTP server for API endpoints
-/// - Chain event watcher for key generation
-/// - Merkle root watcher for account registry
-/// - Background cleanup tasks
-///
-/// The function blocks until the shutdown signal is triggered or an error occurs.
-///
-/// # Arguments
-/// * `config` - Service configuration from CLI or environment
-/// * `shutdown_signal` - Future that completes when shutdown is requested
-///
-/// # Errors
-/// Returns an error if:
-/// - Cryptographic material cannot be loaded
-/// - Blockchain connections fail
-/// - Secret manager initialization fails
-/// - Server binding fails
+/// This function initializes and starts the OPRF service, including its various components, and
+/// gracefully handles shutdown signals. The service performs the following tasks:
+/// - Loads the Groth16 verification key for user proof validation.
+/// - Initializes the Merkle watcher for monitoring on-chain events.
+/// - Sets up the OPRF request authentication service.
+/// - Initializes the OPRF service and its associated key event watcher.
+/// - Starts an Axum-based HTTP server for handling incoming requests.
 pub async fn start(
-    config: config::OprfPeerConfig,
+    config: WorldOprfPeerConfig,
     secret_manager: SecretManagerService,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
+    let service_config = config.service_config;
+    let cancellation_token = oprf_service::spawn_shutdown_task(shutdown_signal);
+
     tracing::info!(
         "loading Groth16 verification key from: {:?}",
         config.user_verification_key_path
@@ -70,61 +56,16 @@ pub async fn start(
     let vk: VerificationKey<Bn254> = serde_json::from_reader(vk)
         .context("while parsing Groth16 verification key for user proof")?;
 
-    let private_key = secret_manager
-        .load_or_insert_wallet_private_key()
-        .await
-        .context("while loading ETH private key from secret-manager")?;
-    let address = private_key.address();
-    tracing::info!("my wallet address: {address}");
+    tracing::info!("init merkle watcher..");
+    let merkle_watcher = MerkleWatcher::init(
+        config.account_registry_contract,
+        service_config.chain_ws_rpc_url.expose_secret(),
+        config.max_merkle_store_size,
+    )
+    .await
+    .context("while starting merkle watcher")?;
 
-    let wallet_address = private_key.address();
-    let wallet = EthereumWallet::from(private_key);
-
-    tracing::info!("spawning chain event listener..");
-    let key_gen_watcher: KeyGenEventListenerService = Arc::new(
-        AlloyKeyGenWatcher::new(
-            config.chain_ws_rpc_url.expose_secret(),
-            config.oprf_key_registry_contract,
-            wallet,
-        )
-        .await
-        .context("while connecting to OprfKeyRegistry contract")?,
-    );
-
-    tracing::info!("loading party id..");
-    let party_id = key_gen_watcher
-        .load_party_id()
-        .await
-        .context("while loading partyId")?;
-    tracing::info!("we are party id: {party_id}");
-
-    tracing::info!("init RpMaterialStore..");
-    let oprf_key_material_store = secret_manager
-        .load_secrets()
-        .await
-        .context("while loading secrets from secret-manager")?;
-
-    let cancellation_token = oprf_service::spawn_shutdown_task(shutdown_signal);
-
-    tracing::info!("spawning merkle watcher..");
-    let merkle_watcher = Arc::new(
-        AlloyMerkleWatcher::init(
-            config.account_registry_contract,
-            config.chain_ws_rpc_url.expose_secret(),
-            config.max_merkle_store_size,
-        )
-        .await
-        .context("while starting merkle watcher")?,
-    );
-
-    tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(
-        oprf_key_material_store.clone(),
-        config.request_lifetime,
-        config.session_cleanup_interval,
-        party_id,
-    );
-
+    tracing::info!("init oprf request auth service..");
     let oprf_req_auth_service = Arc::new(WorldOprfReqAuthenticator::init(
         merkle_watcher,
         vk.into(),
@@ -132,24 +73,16 @@ pub async fn start(
         config.signature_history_cleanup_interval,
     ));
 
-    tracing::info!("spawning chain event handler..");
-    let key_gen_material = CircomGroth16MaterialBuilder::new()
-        .bbf_inv()
-        .bbf_num_2_bits_helper()
-        .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
-    let event_handler = ChainEventHandler::spawn(
-        key_gen_watcher,
-        oprf_key_material_store,
+    tracing::info!("init oprf service..");
+    let (oprf_service_router, key_event_watcher) = oprf_service::init(
+        service_config,
         secret_manager,
+        oprf_req_auth_service,
         cancellation_token.clone(),
-        key_gen_material,
-    );
+    )
+    .await?;
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
-
-    let axum_rest_api =
-        oprf_service::api::routes(oprf_service, oprf_req_auth_service, wallet_address);
-
     let axum_cancel_token = cancellation_token.clone();
     let server = tokio::spawn(async move {
         tracing::info!(
@@ -160,7 +93,7 @@ pub async fn start(
                 .unwrap_or(String::from("invalid addr"))
         );
         let axum_shutdown_signal = axum_cancel_token.clone();
-        let axum_result = axum::serve(listener, axum_rest_api)
+        let axum_result = axum::serve(listener, oprf_service_router)
             .with_graceful_shutdown(async move { axum_shutdown_signal.cancelled().await })
             .await;
         tracing::info!("axum server shutdown");
@@ -179,7 +112,7 @@ pub async fn start(
         config.max_wait_time_shutdown
     );
     match tokio::time::timeout(config.max_wait_time_shutdown, async move {
-        tokio::join!(server, event_handler.wait())
+        tokio::join!(server, key_event_watcher)
     })
     .await
     {

@@ -1,4 +1,4 @@
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 //! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
 //! nullifier oracle service. The service participates in multi-party key generation and provides
 //! partial OPRF evaluations for World ID protocol nullifiers.
@@ -13,13 +13,132 @@
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 
+use alloy::{
+    network::EthereumWallet,
+    providers::{Provider as _, ProviderBuilder, WsConnect},
+};
+use axum::response::IntoResponse;
+use eyre::Context as _;
+use groth16_material::circom::CircomGroth16MaterialBuilder;
+use secrecy::ExposeSecret as _;
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
-pub mod api;
+use crate::{
+    config::OprfPeerConfig,
+    services::{
+        oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
+    },
+};
+
+pub(crate) mod api;
+pub mod config;
 pub mod metrics;
 pub mod oprf_key_registry;
-pub mod services;
+pub(crate) mod services;
+
+pub use services::oprf::{OprfReqAuthService, OprfReqAuthenticator};
+pub use services::oprf_key_material_store;
+pub use services::secret_manager;
+
+/// Initializes the OPRF service.
+///
+/// This function sets up the necessary components and services required for the OPRF peer
+/// to operate. It performs the following steps:
+///
+/// 1. Loads or generates the Ethereum wallet private key from the secret manager.
+/// 2. Initializes the Ethereum RPC provider using the wallet and the provided WebSocket RPC URL.
+/// 3. Loads the party ID from the OPRF key registry contract.
+/// 4. Loads cryptographic secrets from the secret manager.
+/// 5. Initializes the distributed logarithm (DLog) secret generation service using the key generation material.
+/// 6. Spawns a task to watch for key events from the OPRF key registry contract and updates the secret manager accordingly.
+/// 7. Initializes the OPRF service, which handles OPRF requests and session management.
+/// 8. Sets up the Axum-based REST API routes for the OPRF service.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+/// - An Axum `Router` instance with the configured REST API routes.
+/// - A `JoinHandle` for the key event watcher task.
+pub async fn init<
+    ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    ReqAuthError: IntoResponse + Send + Sync + 'static,
+>(
+    config: OprfPeerConfig,
+    secret_manager: SecretManagerService,
+    oprf_req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
+    cancellation_token: CancellationToken,
+) -> eyre::Result<(axum::Router, tokio::task::JoinHandle<eyre::Result<()>>)> {
+    tracing::info!("loading private from secret manager..");
+    let private_key = secret_manager
+        .load_or_insert_wallet_private_key()
+        .await
+        .context("while loading ETH private key from secret-manager")?;
+    let address = private_key.address();
+    tracing::info!("my wallet address: {address}");
+    let wallet_address = private_key.address();
+    let wallet = EthereumWallet::from(private_key);
+
+    tracing::info!("init rpc provider..");
+    let ws = WsConnect::new(config.chain_ws_rpc_url.expose_secret());
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect_ws(ws)
+        .await
+        .context("while connecting to RPC")?
+        .erased();
+
+    tracing::info!("loading party id..");
+    let party_id =
+        oprf_key_registry::load_party_id(config.oprf_key_registry_contract, provider.clone())
+            .await
+            .context("while loading partyId")?;
+    tracing::info!("we are party id: {party_id}");
+
+    tracing::info!("init OPRF material-store..");
+    let oprf_key_material_store = secret_manager
+        .load_secrets()
+        .await
+        .context("while loading secrets from secret-manager")?;
+
+    tracing::info!("init dlog secret gen service..");
+    let key_gen_material = CircomGroth16MaterialBuilder::new()
+        .bbf_inv()
+        .bbf_num_2_bits_helper()
+        .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
+    let dlog_secret_gen_service =
+        DLogSecretGenService::init(oprf_key_material_store.clone(), key_gen_material);
+
+    tracing::info!("spawning key event watcher..");
+    let key_event_watcher = tokio::spawn({
+        let provider = provider.clone();
+        let contract_address = config.oprf_key_registry_contract;
+        let cancellation_token = cancellation_token.clone();
+        async move {
+            services::key_event_watcher::key_event_watcher_task(
+                provider,
+                contract_address,
+                secret_manager,
+                dlog_secret_gen_service,
+                cancellation_token,
+            )
+            .await
+        }
+    });
+
+    tracing::info!("init oprf-service...");
+    let oprf_service = OprfService::init(
+        oprf_key_material_store.clone(),
+        config.request_lifetime,
+        config.session_cleanup_interval,
+        party_id,
+    );
+
+    let axum_rest_api = api::routes(oprf_service, oprf_req_auth_service, wallet_address);
+
+    Ok((axum_rest_api, key_event_watcher))
+}
 
 /// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
 pub fn version_info() -> String {

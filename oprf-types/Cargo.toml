@@ -8,17 +8,14 @@ readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-keywords = [
-  "cryptography",
-  "mpc",
-  "nullifier",
-  "oprf"
-]
+keywords = ["cryptography", "mpc", "nullifier", "oprf"]
 exclude = [".gitignore"]
 publish = true
 
 [dependencies]
+alloy = { workspace = true }
 ark-babyjubjub = { workspace = true }
+ark-ff = { workspace = true }
 ark-serde-compat = { workspace = true }
 circom-types = { workspace = true, features = [
   "bn254",
@@ -26,10 +23,7 @@ circom-types = { workspace = true, features = [
   "proof",
   "zkey"
 ] }
-ark-ff = { workspace = true }
-alloy = { workspace = true }
 eyre = { workspace = true }
-k256 = { workspace = true, features = ["ecdsa", "pem", "serde"] }
 oprf-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
