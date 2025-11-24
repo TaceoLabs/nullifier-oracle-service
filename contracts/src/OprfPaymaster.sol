@@ -3,9 +3,11 @@ pragma solidity ^0.8.20;
 
 import {IPaymaster} from "@account-abstraction/contracts/interfaces/IPaymaster.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
+import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+
+import {Types} from "./Types.sol";
 
 /**
  * @title OprfPaymaster
@@ -48,17 +50,11 @@ contract OprfPaymaster is IPaymaster, Ownable {
     error AccountNotAuthorized();
     error GasLimitExceeded();
     error OperationLimitExceeded();
-    error Paused();
+    error PaymasterPaused();
     error InvalidOperation();
     error GlobalGasLimitExceeded();
-    
-    // PostOp modes
-    enum PostOpMode {
-        opSucceeded,
-        opReverted,
-        postOpReverted
-    }
-    
+
+
     constructor(
         IEntryPoint _entryPoint,
         address _rpRegistry
@@ -77,7 +73,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
      * @return validationData 0 for valid, 1 for invalid
      */
     function validatePaymasterUserOp(
-        UserOperation calldata userOp,
+        PackedUserOperation calldata userOp,
         bytes32 userOpHash,
         uint256 maxCost
     ) external override returns (bytes memory context, uint256 validationData) {
@@ -85,7 +81,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         require(msg.sender == address(entryPoint), "Only EntryPoint");
         
         // Check if paused
-        if (isPaused) revert Paused();
+        if (isPaused) revert PaymasterPaused();
         
         // Verify the account is authorized
         if (!authorizedAccounts[userOp.sender]) {
@@ -140,9 +136,10 @@ contract OprfPaymaster is IPaymaster, Ownable {
      * @param actualGasCost Actual gas cost of the operation
      */
     function postOp(
-        PostOpMode mode,
+        IPaymaster.PostOpMode mode,
         bytes calldata context,
-        uint256 actualGasCost
+        uint256 actualGasCost,
+        uint256 actualUserOpFeePerGas
     ) external override {
         // Only EntryPoint can call this
         require(msg.sender == address(entryPoint), "Only EntryPoint");
@@ -174,7 +171,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
      * @param userOp The user operation to check
      * @return valid Whether the operation should be sponsored
      */
-    function _isValidOperation(UserOperation calldata userOp) internal view returns (bool) {
+    function _isValidOperation(PackedUserOperation calldata userOp) internal view returns (bool) {
         // Decode the calldata to check what's being called
         if (userOp.callData.length < 4) return false;
         

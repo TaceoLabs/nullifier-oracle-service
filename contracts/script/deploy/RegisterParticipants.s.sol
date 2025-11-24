@@ -33,7 +33,10 @@ contract RegisterParticipantScript is Script {
         console.log("bob address:", bobAddress);
         console.log("carol address:", carolAddress);
 
-        rpRegistry.registerOprfPeers(peerAddresses);
+        //TODO: Change to add some participants
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
+        rpRegistry.registerOprfPeers(peerAddresses, smartAccounts);
 
         // check that contract is ready
         assert(rpRegistry.isContractReady());

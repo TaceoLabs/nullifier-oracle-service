@@ -108,7 +108,11 @@ contract RpRegistryUpgradeTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        rpRegistry.registerOprfPeers(peerAddresses);
+
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
+        rpRegistry.registerOprfPeers(peerAddresses, smartAccounts);
     }
 
     function testUpgrade() public {

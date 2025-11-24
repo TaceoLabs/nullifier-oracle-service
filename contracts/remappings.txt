@@ -1,3 +1,4 @@
 @world-id-protocol/contracts/=lib/world-id-protocol/contracts/src/
 @openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+@account-abstraction/=lib/account-abstraction/

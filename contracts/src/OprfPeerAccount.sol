@@ -3,11 +3,13 @@ pragma solidity ^0.8.20;
 
 import {BaseAccount} from "@account-abstraction/contracts/core/BaseAccount.sol";
 import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
+import {PackedUserOperation} from "@account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
+import {Types} from "./Types.sol";
 
 interface IRpRegistry {
     function addRound1Contribution(uint128 rpId, Types.Round1Contribution calldata data) external;
@@ -91,7 +93,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
      * @return validationData 0 for success, 1 for failure
      */
     function _validateSignature(
-        UserOperation calldata userOp,
+        PackedUserOperation calldata userOp,
         bytes32 userOpHash
     ) internal virtual override returns (uint256 validationData) {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
@@ -119,7 +121,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         address dest,
         uint256 value,
         bytes calldata func
-    ) external onlyOwnerOrEntryPoint {
+    ) external override onlyOwnerOrEntryPoint {
         _call(dest, value, func);
         emit CallExecuted(dest, value, func, true);
     }
@@ -194,8 +196,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
      * @notice Submit Round 2 contribution with proof to RpRegistry
      * @param rpRegistryProxy The proxy address of RpRegistry
      * @param rpId The RP identifier
-     * @param ciphers Array of ciphertexts for each peer
-     * @param proof The Groth16 proof components
+     * @param data The Round 2 contribution data
      */
     function submitRound2Contribution(
         address rpRegistryProxy,
@@ -350,9 +351,10 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         require(rpIds.length == contributions.length, "Length mismatch");
 
         for (uint256 i = 0; i < rpIds.length; i++) {
-            bytes memory callData = abi.encodeCall(
-                IRpRegistry.addRound1Contribution,
-                (rpIds[i], contributions[i])
+           bytes memory callData = abi.encodePacked(
+                bytes4(keccak256("addRound1Contribution(uint128,(uint256,uint256,uint256,(uint256,uint256)))")),
+                abi.encode(rpIds[i]),
+                contributions[i]
             );
             _call(rpRegistryProxy, 0, callData);
         }

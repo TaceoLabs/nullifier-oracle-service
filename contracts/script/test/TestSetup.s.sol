@@ -54,7 +54,10 @@ contract TestSetupScript is Script {
         peerAddresses[1] = bobAddress;
         peerAddresses[2] = carolAddress;
 
-        rpRegistry.registerOprfPeers(peerAddresses);
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
+        rpRegistry.registerOprfPeers(peerAddresses, smartAccounts);
 
         // check that contract is ready
         assert(rpRegistry.isContractReady());

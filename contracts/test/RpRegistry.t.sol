@@ -84,7 +84,11 @@ contract RpRegistryTest is Test {
         peerAddresses[0] = alice;
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
-        rpRegistry.registerOprfPeers(peerAddresses);
+
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
+        rpRegistry.registerOprfPeers(peerAddresses, smartAccounts);
     }
 
     function testConstructedCorrectly() public {
@@ -121,9 +125,12 @@ contract RpRegistryTest is Test {
         peerAddresses[1] = bob;
         peerAddresses[2] = carol;
 
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
         // check that not ready
         assert(!rpRegistryTest.isContractReady());
-        rpRegistryTest.registerOprfPeers(peerAddresses);
+        rpRegistryTest.registerOprfPeers(peerAddresses, smartAccounts);
 
         // check that ready after call
         assert(rpRegistryTest.isContractReady());
@@ -168,7 +175,11 @@ contract RpRegistryTest is Test {
         // check that not ready
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
-        rpRegistryTest.registerOprfPeers(peerAddresses);
+
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
+        rpRegistryTest.registerOprfPeers(peerAddresses, smartAccounts);
     }
 
     function testUpdateParticipants() public {
@@ -190,8 +201,11 @@ contract RpRegistryTest is Test {
         peerAddresses[1] = carol;
         peerAddresses[2] = taceoAdmin;
 
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddresses.length);
+
         // update
-        rpRegistry.registerOprfPeers(peerAddresses);
+        rpRegistry.registerOprfPeers(peerAddresses, smartAccounts);
 
         vm.prank(bob);
         assertEq(rpRegistry.checkIsParticipantAndReturnPartyId(), 0);
@@ -225,8 +239,11 @@ contract RpRegistryTest is Test {
         peerAddressesWrong[0] = alice;
         peerAddressesWrong[1] = bob;
 
+        //TODO: Set these smart accounts when writing tests later...
+        address[] memory smartAccounts = new address[](peerAddressesWrong.length);
+
         vm.expectRevert(abi.encodeWithSelector(RpRegistry.UnexpectedAmountPeers.selector, 3));
-        rpRegistryTest.registerOprfPeers(peerAddressesWrong);
+        rpRegistryTest.registerOprfPeers(peerAddressesWrong, smartAccounts);
     }
 
     function testInitKeyGenResubmit() public {
