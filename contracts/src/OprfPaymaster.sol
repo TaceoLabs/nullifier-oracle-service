@@ -16,28 +16,28 @@ import {Types} from "./Types.sol";
  */
 contract OprfPaymaster is IPaymaster, Ownable {
     using ECDSA for bytes32;
-    
+
     IEntryPoint public immutable entryPoint;
     address public immutable rpRegistry;
-    
+
     // Track which smart accounts are authorized OPRF peer accounts
     mapping(address => bool) public authorizedAccounts;
-    
+
     // Track gas usage per account
     mapping(address => uint256) public gasUsedByAccount;
     mapping(address => uint256) public gasLimitByAccount;
-    
+
     // Global settings
     uint256 public maxGasPerOp = 1000000; // 1M gas max per operation
     uint256 public globalGasUsed;
     uint256 public globalGasLimit;
     bool public isPaused;
-    
+
     // Track operations per account (for rate limiting)
     // TODO: What to set these rate limits as..? How many calls do we expect in a given time frame?
     mapping(address => uint256) public operationCount;
     mapping(address => uint256) public maxOperationsPerAccount;
-    
+
     // Events
     event AccountAuthorized(address indexed account, bool authorized);
     event GasLimitSet(address indexed account, uint256 limit);
@@ -46,7 +46,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     event Paused(bool isPaused);
     event Deposited(address indexed from, uint256 amount);
     event Withdrawn(address indexed to, uint256 amount);
-    
+
     // Errors
     error AccountNotAuthorized();
     error GasLimitExceeded();
@@ -64,7 +64,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         rpRegistry = _rpRegistry;
         globalGasLimit = 100 ether; // Default global limit
     }
-    
+
     /**
      * @notice Validate a paymaster user operation
      * @param userOp The user operation
@@ -295,7 +295,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         isPaused = _paused;
         emit Paused(_paused);
     }
-    
+
     /**
      * @notice Reset gas usage for an account
      * @param account The account to reset
@@ -304,18 +304,18 @@ contract OprfPaymaster is IPaymaster, Ownable {
         gasUsedByAccount[account] = 0;
         operationCount[account] = 0;
     }
-    
+
     /**
      * @notice Reset global gas usage
      */
     function resetGlobalGasUsage() external onlyOwner {
         globalGasUsed = 0;
     }
-    
+
     // =============================================
     //           Deposit Management
     // =============================================
-    
+
     /**
      * @notice Add deposit to EntryPoint
      */
@@ -323,7 +323,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         entryPoint.depositTo{value: msg.value}(address(this));
         emit Deposited(msg.sender, msg.value);
     }
-    
+
     /**
      * @notice Withdraw from EntryPoint
      * @param to Recipient address
@@ -333,7 +333,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         entryPoint.withdrawTo(to, amount);
         emit Withdrawn(to, amount);
     }
-    
+
     /**
      * @notice Get current deposit balance
      * @return Current balance in EntryPoint
@@ -341,11 +341,11 @@ contract OprfPaymaster is IPaymaster, Ownable {
     function getDeposit() external view returns (uint256) {
         return entryPoint.balanceOf(address(this));
     }
-    
+
     // =============================================
     //           View Functions
     // =============================================
-    
+
     /**
      * @notice Check if account can be sponsored
      * @param account The account to check
@@ -360,32 +360,32 @@ contract OprfPaymaster is IPaymaster, Ownable {
         if (isPaused) {
             return (false, "Paymaster is paused");
         }
-        
+
         if (!authorizedAccounts[account]) {
             return (false, "Account not authorized");
         }
-        
+
         uint256 accountLimit = gasLimitByAccount[account];
         if (accountLimit > 0 && gasUsedByAccount[account] + estimatedGas > accountLimit) {
             return (false, "Account gas limit exceeded");
         }
-        
+
         if (globalGasUsed + estimatedGas > globalGasLimit) {
             return (false, "Global gas limit exceeded");
         }
-        
+
         uint256 maxOps = maxOperationsPerAccount[account];
         if (maxOps > 0 && operationCount[account] >= maxOps) {
             return (false, "Operation limit exceeded");
         }
-        
+
         if (entryPoint.balanceOf(address(this)) < estimatedGas * tx.gasprice) {
             return (false, "Insufficient paymaster balance");
         }
-        
+
         return (true, "Can sponsor");
     }
-    
+
     /**
      * @notice Get remaining sponsorship for account
      * @param account The account to check
@@ -404,7 +404,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
             uint256 globalUsed = globalGasUsed;
             remainingGas = globalUsed < globalGasLimit ? globalGasLimit - globalUsed : 0;
         }
-        
+
         uint256 maxOps = maxOperationsPerAccount[account];
         if (maxOps > 0) {
             uint256 opsUsed = operationCount[account];
