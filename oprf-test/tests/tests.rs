@@ -11,7 +11,6 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use eyre::Context as _;
-use oprf_client::{NullifierArgs, OprfQuery};
 use oprf_test::{
     MOCK_RP_SECRET_KEY, OprfKeyRegistry, TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY,
     anvil_testcontainer, health_checks, indexer_testcontainer, postgres_testcontainer,
@@ -23,6 +22,7 @@ use oprf_test::{
 };
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::OprfPublicKey;
+use oprf_world_client::{NullifierArgs, OprfQuery, VerifiableNullifier};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
@@ -117,8 +117,8 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
 
     println!();
     println!("Loading zkeys and matrices...");
-    let query_material = oprf_client::load_embedded_query_material();
-    let nullifier_material = oprf_client::load_embedded_nullifier_material();
+    let query_material = oprf_world_client::load_embedded_query_material();
+    let nullifier_material = oprf_world_client::load_embedded_nullifier_material();
 
     println!("Generating a random query...");
     let action = ark_babyjubjub::Fq::rand(&mut rng);
@@ -168,7 +168,7 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
 
     println!("Running OPRF client flow...");
     let args = NullifierArgs {
-        credential_signature: credential_signature.clone(),
+        credentials_signature: credential_signature.clone(),
         merkle_membership: merkle_membership.clone(),
         query,
         key_material,
@@ -178,7 +178,12 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
     };
 
     let time = Instant::now();
-    let (proof, public, nullifier, _id_commitment) = oprf_client::nullifier(
+    let VerifiableNullifier {
+        proof,
+        public_input,
+        nullifier,
+        id_commitment: _,
+    } = oprf_world_client::nullifier(
         oprf_services.as_slice(),
         2,
         &query_material,
@@ -190,7 +195,7 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
 
     println!("Verifying proof...");
     nullifier_material
-        .verify_proof(&proof.clone().into(), &public)
+        .verify_proof(&proof.clone().into(), &public_input)
         .expect("verifies");
 
     let elapsed = time.elapsed();

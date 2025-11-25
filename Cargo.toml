@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+  "oprf-world-client",
   "oprf-client",
   "oprf-core",
   "oprf-dev-client",
@@ -9,7 +10,7 @@ members = [
   "oprf-service-world",
   "oprf-test",
   "oprf-types",
-  "oprf-world-types"
+  "oprf-world-types",
 ]
 
 [workspace.package]
@@ -53,6 +54,7 @@ metrics = "0.24"
 nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd" }
 num-bigint = "0.4"
 oprf-client = { path = "oprf-client" }
+oprf-world-client = { path = "oprf-world-client" }
 oprf-core = { package = "taceo-oprf-core", path = "oprf-core", version = "0.1", default-features = false }
 oprf-service = { path = "oprf-service" }
 oprf-service-example = { path = "./oprf-service-example" }
@@ -81,7 +83,7 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "9cdaf09" }  # if this gets updated, also update indexer docker tags
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "9cdaf09" } # if this gets updated, also update indexer docker tags
 zeroize = "1"
 
 # This profile can be used for CI in pull requests.

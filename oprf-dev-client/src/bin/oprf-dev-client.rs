@@ -15,12 +15,16 @@ use clap::{Parser, Subcommand};
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use eyre::Context as _;
 use k256::ecdsa::signature::Signer as _;
-use oprf_client::{CircomGroth16Material, NullifierArgs, OprfQuery, SignedOprfQuery};
 use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{
     MOCK_RP_SECRET_KEY, health_checks, oprf_key_registry_scripts, world_id_protocol_mock,
 };
-use oprf_types::{OprfKeyId, ShareEpoch, api::v1::OprfRequest, crypto::OprfPublicKey};
+use oprf_types::{
+    OprfKeyId, ShareEpoch,
+    api::v1::{OprfRequest, ShareIdentifier},
+    crypto::OprfPublicKey,
+};
+use oprf_world_client::{CircomGroth16Material, NullifierArgs, OprfQuery, SignedOprfQuery};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use rand::{CryptoRng, Rng, SeedableRng};
 use secrecy::{ExposeSecret, SecretString};
@@ -196,7 +200,7 @@ fn nullifier_args<R: Rng + CryptoRng>(
         nonce_signature: signature,
     };
 
-    let credential_signature = oprf_test::credentials::random_credential_signature(
+    let credentials_signature = oprf_test::credentials::random_credential_signature(
         merkle_membership.mt_index,
         current_time_stamp,
         rng,
@@ -206,7 +210,7 @@ fn nullifier_args<R: Rng + CryptoRng>(
     let id_commitment_r = ark_babyjubjub::Fq::rand(rng);
 
     let args = NullifierArgs {
-        credential_signature,
+        credentials_signature,
         merkle_membership,
         query,
         key_material,
@@ -238,7 +242,7 @@ async fn run_nullifier(
         &mut rng,
     )?;
 
-    let (proof, public, _nullifier, _id_commitment) = oprf_client::nullifier(
+    let verifiable_nullifier = oprf_world_client::nullifier(
         services,
         threshold,
         query_material,
@@ -248,7 +252,10 @@ async fn run_nullifier(
     )
     .await?;
     nullifier_material
-        .verify_proof(&proof.into(), &public)
+        .verify_proof(
+            &verifiable_nullifier.proof.into(),
+            &verifiable_nullifier.public_input,
+        )
         .expect("verifies");
 
     Ok(())
@@ -288,7 +295,7 @@ fn prepare_nullifier_stress_test_oprf_request(
     );
 
     let request_id = Uuid::new_v4();
-    let signed_query = oprf_client::sign_oprf_query(
+    let signed_query = oprf_world_client::sign_oprf_query(
         credential_signature,
         merkle_membership,
         query_material,
@@ -380,13 +387,17 @@ async fn stress_test(
     let mut finish_challenges = sessions
         .iter()
         .map(|(idx, sessions)| {
+            let query = oprf_queries.get(idx).expect("is there");
             eyre::Ok((
                 *idx,
-                oprf_client::compute_challenges(
-                    oprf_queries.remove(idx).expect("is there"),
+                oprf_client::generate_challenge_request(
+                    query.get_request().request_id,
+                    ShareIdentifier {
+                        oprf_key_id,
+                        share_epoch: ShareEpoch::default(),
+                    },
                     sessions,
-                    oprf_public_key,
-                )?,
+                ),
             ))
         })
         .collect::<eyre::Result<HashMap<_, _>>>()?;
@@ -396,20 +407,24 @@ async fn stress_test(
 
     tracing::info!("start sending finish requests..");
     durations.clear();
-    let start = Instant::now();
     for (idx, sessions) in sessions {
         let client = client.clone();
+        let signed_query = oprf_queries.get(&idx).expect("is there").to_owned();
         let challenge = finish_challenges.remove(&idx).expect("is there");
         finish_results.spawn(async move {
             let finish_start = Instant::now();
-            let responses = oprf_client::nonblocking::finish_sessions(
-                &client,
-                sessions,
-                challenge.get_request(),
-            )
-            .await?;
+            let responses =
+                oprf_client::nonblocking::finish_sessions(&client, sessions, challenge.clone())
+                    .await?;
             let duration = finish_start.elapsed();
-            eyre::Ok((responses, challenge, duration))
+            let dlog_proof = oprf_client::verify_dlog_equality(
+                challenge.request_id,
+                oprf_public_key,
+                &signed_query.blinded_request,
+                responses,
+                challenge.challenge.clone(),
+            )?;
+            eyre::Ok((idx, dlog_proof, challenge, duration))
         });
         if cmd.sequential {
             finish_results.join_next().await;
@@ -423,23 +438,28 @@ async fn stress_test(
     }
     let finish_full_duration = start.elapsed();
 
-    // let mut sessions = Vec::with_capacity(cmd.nullifier_num);
     let mut durations = Vec::with_capacity(cmd.nullifier_num);
 
     let mut rng = rand::thread_rng();
     for result in finish_results {
         match result {
-            Ok((responses, challenge, duration)) => {
+            Ok((idx, dlog_proof, challenge, duration)) => {
                 if !cmd.skip_checks {
-                    let (proof, public, _, _) = oprf_client::verify_challenges(
+                    let signed_query = oprf_queries.remove(&idx).expect("is there");
+                    let verifiable_nullifier = oprf_world_client::compute_oprf_output(
+                        oprf_public_key,
+                        dlog_proof,
+                        challenge.challenge,
+                        signed_query,
+                        ark_babyjubjub::Fq::rand(&mut rng),
+                        ark_babyjubjub::Fq::rand(&mut rng),
                         nullifier_material,
-                        challenge,
-                        responses,
-                        ark_babyjubjub::Fq::rand(&mut rng),
-                        ark_babyjubjub::Fq::rand(&mut rng),
                         &mut rng,
                     )?;
-                    nullifier_material.verify_proof(&proof.into(), &public)?;
+                    nullifier_material.verify_proof(
+                        &verifiable_nullifier.proof.into(),
+                        &verifiable_nullifier.public_input,
+                    )?;
                 }
                 durations.push(duration);
             }
@@ -467,8 +487,8 @@ async fn main() -> eyre::Result<()> {
     let config = OprfDevClientConfig::parse();
     tracing::info!("starting oprf-dev-client with config: {config:#?}");
 
-    let query_material = oprf_client::load_embedded_query_material();
-    let nullifier_material = oprf_client::load_embedded_nullifier_material();
+    let query_material = oprf_world_client::load_embedded_query_material();
+    let nullifier_material = oprf_world_client::load_embedded_nullifier_material();
 
     tracing::info!("health check for all peers...");
     health_checks::services_health_check(&config.services, Duration::from_secs(5))

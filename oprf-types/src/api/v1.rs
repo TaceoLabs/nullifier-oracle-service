@@ -38,7 +38,7 @@ where
 }
 
 /// Identifies the nullifier share to use for the OPRF computation by relying party ([`OprfKeyId`]) and [`ShareEpoch`].
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ShareIdentifier {
     /// ID of OPRF public-key
     pub oprf_key_id: OprfKeyId,

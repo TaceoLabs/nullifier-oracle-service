@@ -27,9 +27,10 @@ oprf-service = { workspace = true }
 oprf-service-example = { workspace = true }
 oprf-service-world = { workspace = true }
 oprf-types = { workspace = true }
+oprf-world-client = { workspace = true }
 oprf-world-types = { workspace = true }
 parking_lot = { workspace = true }
-poseidon2 = { workspace = true, features=["t8", "t16"] }
+poseidon2 = { workspace = true, features = ["t8", "t16"] }
 rand.workspace = true
 rand_chacha.workspace = true
 regex.workspace = true
@@ -37,7 +38,7 @@ reqwest = { workspace = true }
 serde_json = { workspace = true }
 testcontainers = { version = "0.25.2", features = [
   "host-port-exposure",
-  "http_wait_plain"
+  "http_wait_plain",
 ] }
 testcontainers-modules = { version = "0.13", features = ["anvil", "postgres"] }
 tokio = { workspace = true, features = [
@@ -46,7 +47,7 @@ tokio = { workspace = true, features = [
   "signal",
   "sync",
   "time",
-  "tokio-macros"
+  "tokio-macros",
 ] }
 tracing.workspace = true
 world-id-primitives.workspace = true

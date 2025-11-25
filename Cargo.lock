@@ -4760,13 +4760,14 @@ dependencies = [
 name = "oprf-client"
 version = "0.1.0"
 dependencies = [
+ "ark-bn254",
  "ark-ec",
- "eyre",
  "futures",
  "k256",
  "oprf-world-types",
  "rand 0.8.5",
  "reqwest",
+ "serde",
  "taceo-ark-babyjubjub",
  "taceo-circom-types",
  "taceo-groth16",
@@ -4793,6 +4794,7 @@ dependencies = [
  "oprf-client",
  "oprf-service",
  "oprf-test",
+ "oprf-world-client",
  "oprf-world-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -4934,6 +4936,7 @@ dependencies = [
  "oprf-service",
  "oprf-service-example",
  "oprf-service-world",
+ "oprf-world-client",
  "oprf-world-types",
  "parking_lot",
  "rand 0.8.5",
@@ -4952,6 +4955,30 @@ dependencies = [
  "tokio",
  "tracing",
  "world-id-primitives",
+]
+
+[[package]]
+name = "oprf-world-client"
+version = "0.1.0"
+dependencies = [
+ "ark-ec",
+ "eyre",
+ "futures",
+ "k256",
+ "oprf-client",
+ "oprf-world-types",
+ "rand 0.8.5",
+ "reqwest",
+ "taceo-ark-babyjubjub",
+ "taceo-circom-types",
+ "taceo-groth16",
+ "taceo-groth16-material",
+ "taceo-oprf-core",
+ "taceo-oprf-types",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "oprf-dev-client"
+name = "oprf-world-client"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,26 +10,26 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
-ark-ff.workspace = true
-clap = { workspace = true, features = ["derive", "env"] }
-eddsa-babyjubjub.workspace = true
+ark-ec = { workspace = true }
+circom-types = { workspace = true, features = [
+  "bn254",
+  "groth16",
+  "proof",
+  "verification-key",
+] }
 eyre.workspace = true
-humantime.workspace = true
-k256 = { workspace = true, features = ["ecdsa"] }
-nodes-telemetry.workspace = true
+futures.workspace = true
+groth16 = { workspace = true }
+groth16-material = { workspace = true }
+k256 = { workspace = true, features = ["ecdsa", "serde"] }
+oprf-core = { workspace = true }
 oprf-client = { workspace = true }
-oprf-service = { workspace = true }
-oprf-test = { workspace = true }
 oprf-types = { workspace = true }
-oprf-world-client = { workspace = true }
 oprf-world-types = { workspace = true }
 rand.workspace = true
-rand_chacha.workspace = true
 reqwest = { workspace = true }
-rustls = { workspace = true }
-secrecy.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, features = [
   "net",
   "rt-multi-thread",
@@ -37,6 +37,12 @@ tokio = { workspace = true, features = [
   "sync",
   "time",
   "tokio-macros",
-] }
+], optional = true }
 tracing.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
+
+
+[features]
+default = ["embed-zkeys", "tokio"]
+embed-zkeys = []
+tokio = ["dep:tokio"]

@@ -208,7 +208,7 @@ mod tests {
     use axum_test::TestServer;
     use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
     use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
-    use oprf_types::crypto::{EphemeralEncryptionPublicKey, OprfPublicKey, PartyId};
+    use oprf_types::crypto::{OprfPublicKey, PartyId};
     use oprf_types::{OprfKeyId, ShareEpoch};
     use rand::Rng as _;
     use uuid::Uuid;
