@@ -17,7 +17,7 @@ use aws_sdk_secretsmanager::config::Credentials;
 use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
 use k256::ecdsa::SigningKey;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
-use oprf_types::crypto::{EphemeralEncryptionPublicKey, OprfPublicKey};
+use oprf_types::crypto::OprfPublicKey;
 use std::collections::HashMap;
 use std::str::FromStr as _;
 use zeroize::Zeroize as _;
@@ -342,7 +342,7 @@ fn to_key_secret_id(key_secret_id_prefix: &str, oprf_key_id: OprfKeyId) -> Strin
 }
 
 #[cfg(test)]
-pub mod tests {
+mod test {
     use std::str::FromStr as _;
 
     use alloy::signers::local::PrivateKeySigner;
@@ -368,7 +368,7 @@ pub mod tests {
         Ok((container, endpoint_url))
     }
 
-    pub async fn localstack_client(
+    async fn localstack_client(
         url: &str,
     ) -> (aws_sdk_secretsmanager::Client, aws_config::SdkConfig) {
         let region_provider = Region::new("us-east-1");
@@ -383,7 +383,7 @@ pub mod tests {
         (aws_sdk_secretsmanager::Client::new(&aws_config), aws_config)
     }
 
-    pub async fn load_secret(
+    async fn load_secret(
         client: aws_sdk_secretsmanager::Client,
         secret_id: &str,
     ) -> eyre::Result<String> {

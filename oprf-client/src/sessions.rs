@@ -1,11 +1,45 @@
 use super::Error;
+use oprf_core::ddlog_equality::shamir::PartialDLogCommitmentsShamir;
 use oprf_types::api::v1::OprfResponse;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest};
+use oprf_types::crypto::PartyId;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::task::JoinSet;
 use tracing::instrument;
 
-use crate::OprfSessions;
+/// Holds information about active OPRF sessions with multiple peers.
+///
+/// Tracks the peer services, their party IDs, and the partial DLog equality
+/// commitments received from each peer.
+pub struct OprfSessions {
+    pub(super) services: Vec<String>,
+    pub(super) party_ids: Vec<PartyId>,
+    pub(super) commitments: Vec<PartialDLogCommitmentsShamir>,
+}
+
+impl OprfSessions {
+    /// Creates an empty [`OprfSessions`] with preallocated capacity.
+    ///
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            services: Vec::with_capacity(capacity),
+            party_ids: Vec::with_capacity(capacity),
+            commitments: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Adds a peer's response to the sessions.
+    fn push(&mut self, service: String, response: OprfResponse) {
+        self.services.push(service);
+        self.party_ids.push(response.party_id);
+        self.commitments.push(response.commitments);
+    }
+
+    /// Returns the number of sessions currently stored.
+    fn len(&self) -> usize {
+        self.services.len()
+    }
+}
 
 /// Sends an `init` request to one OPRF peer.
 ///

@@ -357,8 +357,7 @@ async fn stress_test(
         let services = services.to_vec();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions =
-                oprf_client::nonblocking::init_sessions(&client, &services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&client, &services, threshold, req).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -414,8 +413,7 @@ async fn stress_test(
         finish_results.spawn(async move {
             let finish_start = Instant::now();
             let responses =
-                oprf_client::nonblocking::finish_sessions(&client, sessions, challenge.clone())
-                    .await?;
+                oprf_client::finish_sessions(&client, sessions, challenge.clone()).await?;
             let duration = finish_start.elapsed();
             let dlog_proof = oprf_client::verify_dlog_equality(
                 challenge.request_id,

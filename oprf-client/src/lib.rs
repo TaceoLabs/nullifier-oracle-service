@@ -1,20 +1,27 @@
+#![deny(missing_docs, clippy::unwrap_used)]
+//! This crate provides utility functions for clients of the distributed OPRF protocol.
+//!
+//! Most implementations will only need the [`distributed_oprf`] method. For more fine-grained workflows, we expose all necessary functions.
 use ark_ec::AffineRepr as _;
 use oprf_core::{
-    ddlog_equality::shamir::{DLogCommitmentsShamir, PartialDLogCommitmentsShamir},
-    dlog_equality::DLogEqualityProof,
+    ddlog_equality::shamir::DLogCommitmentsShamir, dlog_equality::DLogEqualityProof,
     oprf::BlindedOprfRequest,
 };
 use oprf_types::{
-    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, ShareIdentifier},
-    crypto::{OprfPublicKey, PartyId},
+    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, ShareIdentifier},
+    crypto::OprfPublicKey,
 };
 use reqwest::StatusCode;
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::instrument;
 use uuid::Uuid;
 
-pub mod nonblocking;
+mod sessions;
+pub use sessions::OprfSessions;
+pub use sessions::finish_sessions;
+pub use sessions::init_sessions;
 
+/// Errors returned by the distributed OPRF protocol.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// API error returned by the OPRF service.
@@ -41,40 +48,21 @@ pub enum Error {
     InvalidDLogProof,
 }
 
-/// Holds information about active OPRF sessions with multiple peers.
+/// Executes the distributed OPRF protocol.
 ///
-/// Tracks the peer services, their party IDs, and the partial DLog equality
-/// commitments received from each peer.
-pub struct OprfSessions {
-    services: Vec<String>,
-    party_ids: Vec<PartyId>,
-    commitments: Vec<PartialDLogCommitmentsShamir>,
-}
-
-impl OprfSessions {
-    /// Creates an empty [`OprfSessions`] with preallocated capacity.
-    ///
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            services: Vec::with_capacity(capacity),
-            party_ids: Vec::with_capacity(capacity),
-            commitments: Vec::with_capacity(capacity),
-        }
-    }
-
-    /// Adds a peer's response to the sessions.
-    fn push(&mut self, service: String, response: OprfResponse) {
-        self.services.push(service);
-        self.party_ids.push(response.party_id);
-        self.commitments.push(response.commitments);
-    }
-
-    /// Returns the number of sessions currently stored.
-    fn len(&self) -> usize {
-        self.services.len()
-    }
-}
-
+/// This part is agnostic to the concrete use-case and serves as a helper function for instantiations of the protocol. The method expects an [`OprfRequest`] with an `Auth` part that will be evaluated at the OPRF peers.
+///
+/// This method tries to initialize a session at each endpoint provided in `services`. It stops as soon as it receives `threshold` answers, the other connections are dropped (the servers are expected to handle that gracefully).
+///
+/// We then prepare challenges for the remaining peers and with their answers we compute the final [`DLogEqualityProof`].
+///
+/// Most implementations of TACEO:Oprf will only need this function. In case you want more fine-grained control, you can use the other exposed functions in this module.
+///
+/// # Returns
+/// The final [`DLogEqualityProof`] along with the created [`DLogCommitmentsShamir`].
+///
+/// # Errors
+/// See the [`Error`] enum for all potential errors of this function.
 #[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
 pub async fn distributed_oprf<Auth>(
     request_id: Uuid,
@@ -91,7 +79,7 @@ where
     // Init the sessions at the services
     tracing::debug!("initializing sessions at {} services", services.len());
     let reqwest_client = reqwest::Client::new();
-    let sessions = nonblocking::init_sessions(&reqwest_client, services, threshold, req).await?;
+    let sessions = sessions::init_sessions(&reqwest_client, services, threshold, req).await?;
 
     tracing::debug!("compute the challenges for the services..");
     let challenge_request = generate_challenge_request(request_id, share_identifier, &sessions);
@@ -99,8 +87,7 @@ where
     let challenge = challenge_request.challenge.clone();
 
     tracing::debug!("finishing the sessions at the remaining services..");
-    let responses =
-        nonblocking::finish_sessions(&reqwest_client, sessions, challenge_request).await?;
+    let responses = sessions::finish_sessions(&reqwest_client, sessions, challenge_request).await?;
 
     // verify the DLog Equality Proof
     let dlog_proof = verify_dlog_equality(
@@ -113,6 +100,9 @@ where
     Ok((challenge, dlog_proof))
 }
 
+/// Combines the [`ChallengeResponse`]s of the OPRF peers and computes the final [`DLogEqualityProof`].
+///
+/// Verifies the proof and returns an [`Error`] iff the proof is invalid.
 #[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
 pub fn verify_dlog_equality(
     request_id: Uuid,
@@ -145,6 +135,7 @@ pub fn verify_dlog_equality(
     Ok(dlog_proof)
 }
 
+/// Generates the [`ChallengeRequest`] for the OPRF peers used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
 #[instrument(level = "debug", skip(sessions))]
 pub fn generate_challenge_request(
     request_id: Uuid,

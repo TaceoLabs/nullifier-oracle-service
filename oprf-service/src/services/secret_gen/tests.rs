@@ -7,9 +7,8 @@
 use std::path::PathBuf;
 
 use ark_ec::{CurveGroup as _, PrimeGroup};
-use groth16_material::circom::{CircomGroth16Material, Validate};
+use groth16_material::circom::{CircomGroth16Material, CircomGroth16MaterialBuilder, Validate};
 use itertools::Itertools;
-use oprf_client::CircomGroth16MaterialBuilder;
 use oprf_types::crypto::{EphemeralEncryptionPublicKey, PeerPublicKeyList, SecretGenCiphertexts};
 use rand::Rng;
 
