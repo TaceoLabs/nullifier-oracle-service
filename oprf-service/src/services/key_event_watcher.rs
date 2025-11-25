@@ -1,10 +1,8 @@
 //! Alloy-based Key Generation Event Watcher
 //!
-//! This module provides [`key_event_watcher_task`], an task than can be spawned to
-//! monitor an on-chain OprfKeyRegistry contract for key generation events.
+//! This module provides [`key_event_watcher_task`], an task than can be spawned to monitor an on-chain OprfKeyRegistry contract for key generation events.
 //!
-//! The watcher subscribes to various key generation events (Round 1, 2, 3, and Finalize)
-//! and reports contributions back to the contract. It uses Alloy for blockchain interaction.
+//! The watcher subscribes to various key generation events and reports contributions back to the contract.
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -30,7 +28,7 @@ use crate::{
 /// Background task that subscribes to key generation events and handles them.
 ///
 /// Connects to the blockchain via WebSocket and verifies that the
-/// OprfKeyRegistry contract is ready.
+/// `OprfKeyRegistry` contract is ready.
 pub(crate) async fn key_event_watcher_task(
     provider: DynProvider,
     contract_address: Address,
