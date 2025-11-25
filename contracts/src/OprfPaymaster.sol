@@ -34,6 +34,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     bool public isPaused;
     
     // Track operations per account (for rate limiting)
+    // TODO: What to set these rate limits as..? How many calls do we expect in a given time frame?
     mapping(address => uint256) public operationCount;
     mapping(address => uint256) public maxOperationsPerAccount;
     
@@ -79,45 +80,45 @@ contract OprfPaymaster is IPaymaster, Ownable {
     ) external override returns (bytes memory context, uint256 validationData) {
         // Only EntryPoint can call this
         require(msg.sender == address(entryPoint), "Only EntryPoint");
-        
+
         // Check if paused
         if (isPaused) revert PaymasterPaused();
-        
+
         // Verify the account is authorized
         if (!authorizedAccounts[userOp.sender]) {
             revert AccountNotAuthorized();
         }
-        
+
         // Check per-account gas limit
         uint256 accountGasUsed = gasUsedByAccount[userOp.sender];
         uint256 accountLimit = gasLimitByAccount[userOp.sender];
-        
+
         if (accountLimit > 0 && accountGasUsed + maxCost > accountLimit) {
             revert GasLimitExceeded();
         }
-        
+
         // Check global gas limit
         if (globalGasUsed + maxCost > globalGasLimit) {
             revert GlobalGasLimitExceeded();
         }
-        
+
         // Check operation count limit
         uint256 opCount = operationCount[userOp.sender];
         uint256 maxOps = maxOperationsPerAccount[userOp.sender];
-        
+
         if (maxOps > 0 && opCount >= maxOps) {
             revert OperationLimitExceeded();
         }
-        
+
         // Verify the operation is calling RpRegistry functions
         if (!_isValidOperation(userOp)) {
             revert InvalidOperation();
         }
-        
+
         // Check we have enough deposit
         uint256 balance = entryPoint.balanceOf(address(this));
         require(balance >= maxCost, "Insufficient paymaster balance");
-        
+
         // Create context for postOp
         context = abi.encode(
             userOp.sender,
@@ -125,13 +126,13 @@ contract OprfPaymaster is IPaymaster, Ownable {
             opCount,
             globalGasUsed
         );
-        
+
         return (context, 0); // 0 = validation success
     }
-    
+
     /**
      * @notice Post-operation handler
-     * @param mode Result mode of the operation  
+     * @param mode Result mode of the operation
      * @param context Context from validatePaymasterUserOp
      * @param actualGasCost Actual gas cost of the operation
      */
@@ -143,7 +144,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     ) external override {
         // Only EntryPoint can call this
         require(msg.sender == address(entryPoint), "Only EntryPoint");
-        
+
         // Decode context
         (
             address account,
@@ -151,21 +152,21 @@ contract OprfPaymaster is IPaymaster, Ownable {
             uint256 previousOpCount,
             uint256 previousGlobalGas
         ) = abi.decode(context, (address, uint256, uint256, uint256));
-        
+
         // Update gas tracking
         gasUsedByAccount[account] = previousAccountGas + actualGasCost;
         globalGasUsed = previousGlobalGas + actualGasCost;
-        
+
         // Update operation count
         operationCount[account] = previousOpCount + 1;
-        
+
         emit GasSponsored(
             account,
             actualGasCost,
             gasUsedByAccount[account]
         );
     }
-    
+
     /**
      * @notice Check if the operation is valid for sponsorship
      * @param userOp The user operation to check
@@ -174,9 +175,9 @@ contract OprfPaymaster is IPaymaster, Ownable {
     function _isValidOperation(PackedUserOperation calldata userOp) internal view returns (bool) {
         // Decode the calldata to check what's being called
         if (userOp.callData.length < 4) return false;
-        
+
         bytes4 selector = bytes4(userOp.callData[:4]);
-        
+
         // Check for execute() or executeBatch()
         if (selector == bytes4(keccak256("execute(address,uint256,bytes)"))) {
             // Decode to check the target
@@ -184,29 +185,31 @@ contract OprfPaymaster is IPaymaster, Ownable {
                 userOp.callData[4:],
                 (address, uint256, bytes)
             );
-            
+
             // Must be calling RpRegistry
-            return target == rpRegistry;
-            
+            if (target != rpRegistry) return false;
+
+            return true;
+
         } else if (selector == bytes4(keccak256("executeBatch(address[],uint256[],bytes[])"))) {
             // For batch, decode and check all targets
             (address[] memory targets,,) = abi.decode(
                 userOp.callData[4:],
                 (address[], uint256[], bytes[])
             );
-            
+
             // All targets must be RpRegistry
             for (uint256 i = 0; i < targets.length; i++) {
                 if (targets[i] != rpRegistry) return false;
             }
             return true;
-            
+
         } else {
             // Check if it's one of the helper functions
             return _isHelperFunction(selector);
         }
     }
-    
+
     /**
      * @notice Check if selector is a valid helper function
      * @param selector The function selector
@@ -219,11 +222,11 @@ contract OprfPaymaster is IPaymaster, Ownable {
                selector == bytes4(keccak256("batchRound1Contributions(address,uint128[],bytes[])")) ||
                selector == bytes4(keccak256("batchRound3Contributions(address,uint128[])"));
     }
-    
+
     // =============================================
     //           Admin Functions
     // =============================================
-    
+
     /**
      * @notice Authorize or revoke a smart account
      * @param account The account address
@@ -236,7 +239,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         authorizedAccounts[account] = authorized;
         emit AccountAuthorized(account, authorized);
     }
-    
+
     /**
      * @notice Batch authorize accounts
      * @param accounts Array of account addresses
@@ -249,7 +252,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
             emit AccountAuthorized(accounts[i], true);
         }
     }
-    
+
     /**
      * @notice Set gas limit for an account
      * @param account The account address
@@ -262,7 +265,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         gasLimitByAccount[account] = limit;
         emit GasLimitSet(account, limit);
     }
-    
+
     /**
      * @notice Set operation limit for an account
      * @param account The account address
@@ -274,7 +277,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     ) external onlyOwner {
         maxOperationsPerAccount[account] = limit;
     }
-    
+
     /**
      * @notice Set global gas limit
      * @param limit New global gas limit
@@ -283,7 +286,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         globalGasLimit = limit;
         emit GlobalLimitSet(limit);
     }
-    
+
     /**
      * @notice Pause or unpause sponsorship
      * @param _paused Whether to pause
