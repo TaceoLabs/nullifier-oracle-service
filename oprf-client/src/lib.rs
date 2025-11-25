@@ -75,10 +75,7 @@ impl OprfSessions {
     }
 }
 
-#[instrument(
-    level = "debug",
-    skip(oprf_public_key, services, threshold, req, blinded_request)
-)]
+#[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
 pub async fn distributed_oprf<Auth>(
     request_id: Uuid,
     oprf_public_key: OprfPublicKey,
@@ -116,10 +113,7 @@ where
     Ok((challenge, dlog_proof))
 }
 
-#[instrument(
-    level = "debug",
-    skip(oprf_public_key, blinded_request, responses, challenge)
-)]
+#[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
 pub fn verify_dlog_equality(
     request_id: Uuid,
     oprf_public_key: OprfPublicKey,
