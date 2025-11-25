@@ -1,15 +1,16 @@
 [workspace]
 resolver = "3"
 members = [
-  "oprf-world-client",
   "oprf-client",
   "oprf-core",
   "oprf-dev-client",
+  "oprf-example-client",
   "oprf-service",
   "oprf-service-example",
   "oprf-service-world",
   "oprf-test",
   "oprf-types",
+  "oprf-world-client",
   "oprf-world-types",
 ]
 
@@ -54,13 +55,14 @@ metrics = "0.24"
 nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd" }
 num-bigint = "0.4"
 oprf-client = { path = "oprf-client" }
-oprf-world-client = { path = "oprf-world-client" }
 oprf-core = { package = "taceo-oprf-core", path = "oprf-core", version = "0.1", default-features = false }
+oprf-example-client = { path = "oprf-example-client" }
 oprf-service = { path = "oprf-service" }
 oprf-service-example = { path = "./oprf-service-example" }
 oprf-service-world = { path = "./oprf-service-world" }
 oprf-test = { path = "oprf-test" }
 oprf-types = { package = "taceo-oprf-types", path = "oprf-types", version = "0.1" }
+oprf-world-client = { path = "oprf-world-client" }
 oprf-world-types = { path = "oprf-world-types" }
 parking_lot = "0.12"
 poseidon2 = { package = "taceo-poseidon2", version = "0.2", default-features = false }
@@ -83,7 +85,7 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "9cdaf09" } # if this gets updated, also update indexer docker tags
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "9cdaf09" }  # if this gets updated, also update indexer docker tags
 zeroize = "1"
 
 # This profile can be used for CI in pull requests.

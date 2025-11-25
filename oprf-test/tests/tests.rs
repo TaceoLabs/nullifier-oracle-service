@@ -23,6 +23,7 @@ use oprf_test::{
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::OprfPublicKey;
 use oprf_world_client::{NullifierArgs, OprfQuery, VerifiableNullifier};
+use rand::Rng as _;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
@@ -260,6 +261,21 @@ async fn example_nullifier_e2e_test() -> eyre::Result<()> {
     .context("while polling RP key")?;
 
     println!("Running OPRF client flow...");
+
+    let action = ark_babyjubjub::Fq::rand(&mut rng);
+    let mt_index = rng.gen_range(0..(1 << 30)) as u64;
+
+    let _nullifier = oprf_example_client::nullifier(
+        oprf_services.as_slice(),
+        2,
+        oprf_public_key,
+        oprf_key_id,
+        ShareEpoch::default(),
+        action,
+        mt_index,
+        &mut rng,
+    )
+    .await?;
 
     Ok(())
 }

@@ -4760,18 +4760,11 @@ dependencies = [
 name = "oprf-client"
 version = "0.1.0"
 dependencies = [
- "ark-bn254",
  "ark-ec",
  "futures",
- "k256",
- "oprf-world-types",
- "rand 0.8.5",
  "reqwest",
  "serde",
  "taceo-ark-babyjubjub",
- "taceo-circom-types",
- "taceo-groth16",
- "taceo-groth16-material",
  "taceo-oprf-core",
  "taceo-oprf-types",
  "thiserror 2.0.17",
@@ -4805,6 +4798,21 @@ dependencies = [
  "taceo-eddsa-babyjubjub",
  "taceo-oprf-types",
  "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "oprf-example-client"
+version = "0.1.0"
+dependencies = [
+ "ark-ff 0.5.0",
+ "oprf-client",
+ "rand 0.8.5",
+ "taceo-ark-babyjubjub",
+ "taceo-oprf-core",
+ "taceo-oprf-types",
+ "taceo-poseidon2",
  "tracing",
  "uuid",
 ]
@@ -4932,7 +4940,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "k256",
- "oprf-client",
+ "oprf-example-client",
  "oprf-service",
  "oprf-service-example",
  "oprf-service-world",
@@ -4961,14 +4969,11 @@ dependencies = [
 name = "oprf-world-client"
 version = "0.1.0"
 dependencies = [
- "ark-ec",
  "eyre",
- "futures",
  "k256",
  "oprf-client",
  "oprf-world-types",
  "rand 0.8.5",
- "reqwest",
  "taceo-ark-babyjubjub",
  "taceo-circom-types",
  "taceo-groth16",
@@ -4976,7 +4981,6 @@ dependencies = [
  "taceo-oprf-core",
  "taceo-oprf-types",
  "thiserror 2.0.17",
- "tokio",
  "tracing",
  "uuid",
 ]

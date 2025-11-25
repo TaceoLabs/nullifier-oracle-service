@@ -1,5 +1,5 @@
 [package]
-name = "oprf-client"
+name = "oprf-example-client"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,13 +11,11 @@ publish.workspace = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
-ark-ec = { workspace = true }
-futures = { workspace = true }
+ark-ff = { workspace = true }
+oprf-client = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
-reqwest = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
+poseidon2.workspace = true
+rand.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
