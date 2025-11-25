@@ -1,15 +1,7 @@
 #![deny(missing_docs)]
-//! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
-//! nullifier oracle service. The service participates in multi-party key generation and provides
-//! partial OPRF evaluations for World ID protocol nullifiers.
+//! This crate provides the core functionality of a peer node for TACEO:Oprf.
 //!
-//! # Overview
-//!
-//! The OPRF peer:
-//! - Participates in distributed secret generation with other peers
-//! - Evaluates partial OPRF shares for authenticated clients
-//! - Monitors on-chain events for key generation and merkle root updates
-//! - Stores and manages cryptographic material securely via agnostic Secrets Manager (currently only AWS supported).
+//! When implementing a concrete instantiation of TACEO:Oprf, projects use this composable library to build their flavor of the distributed OPRF protocol. The main entry point for implementations is the [`init`] method. It returns an `axum::Router` that should be incorporated into a larger `axum` server that provides project based functionality for authentication.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 
@@ -115,16 +107,13 @@ pub async fn init<
         let provider = provider.clone();
         let contract_address = config.oprf_key_registry_contract;
         let cancellation_token = cancellation_token.clone();
-        async move {
-            services::key_event_watcher::key_event_watcher_task(
-                provider,
-                contract_address,
-                secret_manager,
-                dlog_secret_gen_service,
-                cancellation_token,
-            )
-            .await
-        }
+        services::key_event_watcher::key_event_watcher_task(
+            provider,
+            contract_address,
+            secret_manager,
+            dlog_secret_gen_service,
+            cancellation_token,
+        )
     });
 
     tracing::info!("init oprf-service...");
