@@ -22,13 +22,14 @@ futures.workspace = true
 groth16 = { workspace = true }
 itertools.workspace = true
 k256 = { workspace = true, features = ["ecdsa"] }
+nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
 oprf-core = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 oprf-world-types = { workspace = true }
 parking_lot = { workspace = true }
-poseidon2 = { workspace = true, features=["t8", "t16"] }
+poseidon2 = { workspace = true, features = ["t8", "t16"] }
 rand.workspace = true
 rand_chacha.workspace = true
 regex.workspace = true

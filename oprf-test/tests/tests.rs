@@ -29,6 +29,7 @@ use eddsa_babyjubjub::EdDSAPrivateKey;
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
 async fn nullifier_e2e_test() -> eyre::Result<()> {
+    nodes_telemetry::install_tracing("debug");
     let (_anvil_container, host_rpc_url, host_ws_url, bridge_rpc_url, bridge_ws_url) =
         anvil_testcontainer().await?;
     let mut rng = rand::thread_rng();
