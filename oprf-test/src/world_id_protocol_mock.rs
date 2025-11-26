@@ -2,13 +2,10 @@ use std::{path::PathBuf, process::Command, str::FromStr, time::Duration};
 
 use alloy::{
     network::EthereumWallet,
-    primitives::{Address, TxHash, U256, address},
-    providers::{DynProvider, PendingTransaction, Provider as _, ProviderBuilder, WsConnect},
-    rpc::types::TransactionReceipt,
+    primitives::{Address, U256, address},
+    providers::{ProviderBuilder, WsConnect},
     signers::local::PrivateKeySigner,
-    sol,
-    transports::RpcError,
-    uint,
+    sol, uint,
 };
 use ark_ff::AdditiveGroup as _;
 use ark_serialize::CanonicalSerialize as _;
