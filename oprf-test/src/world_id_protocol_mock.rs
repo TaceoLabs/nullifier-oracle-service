@@ -96,7 +96,7 @@ pub async fn create_account(
     };
     pubkey_batch.values[0] = offchain_signer_private_key.public().pk;
     let leaf_hash = leaf_hash(&pubkey_batch);
-    let pending_tx = contract
+    let receipt = contract
         .createAccount(
             address!("0x000000000000000000000000000000000000ABCD"),
             vec![onchain_signer.address()],
@@ -107,9 +107,8 @@ pub async fn create_account(
         )
         .send()
         .await?
-        .register()
+        .get_receipt()
         .await?;
-    let (receipt, _tx_hash) = watch_receipt(provider.erased(), pending_tx).await?;
     if !receipt.status() {
         eyre::bail!("could not get receipt for init-key gen");
     }
@@ -168,38 +167,4 @@ pub async fn fetch_inclusion_proof(
             .expect("lex is 30"),
     };
     Ok(merkle_membership)
-}
-
-// FIXME duplicated code from alloy_ken_gen_watcher
-async fn watch_receipt(
-    provider: DynProvider,
-    mut pending_tx: PendingTransaction,
-) -> Result<(TransactionReceipt, TxHash), alloy::contract::Error> {
-    let tx_hash = pending_tx.tx_hash().to_owned();
-    // FIXME: this is a hotfix to prevent a race condition where the heartbeat would miss the
-    // block the tx was mined in
-
-    let mut interval = tokio::time::interval(provider.client().poll_interval());
-
-    loop {
-        let mut confirmed = false;
-
-        tokio::select! {
-            _ = interval.tick() => {},
-            res = &mut pending_tx => {
-                let _ = res?;
-                confirmed = true;
-            }
-        }
-
-        // try to fetch the receipt
-        if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
-            return Ok((receipt, tx_hash));
-        }
-
-        if confirmed {
-            return Err(alloy::contract::Error::TransportError(RpcError::NullResp));
-            // FIXME duplicated code from alloy_ken_gen_watcher
-        }
-    }
 }
