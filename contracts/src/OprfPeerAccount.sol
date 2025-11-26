@@ -121,6 +121,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         address dest,
         uint256 value,
         bytes calldata func
+        // TODO: Probably this should only be the entry point...
     ) external override onlyOwnerOrEntryPoint {
         _call(dest, value, func);
         emit CallExecuted(dest, value, func, true);
@@ -136,6 +137,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         address[] calldata dest,
         uint256[] calldata value,
         bytes[] calldata func
+        // TODO: Probably this should only be the entry point...
     ) external onlyOwnerOrEntryPoint {
         require(
             dest.length == func.length && dest.length == value.length,
@@ -244,6 +246,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         return abi.decode(result, (uint256));
     }
 
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Get ephemeral public keys from Round 1
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -264,6 +267,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         return result; // Return raw bytes as the structure is complex
     }
 
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Get Round 2 ciphertexts for this peer
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -284,6 +288,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         return result; // Return raw bytes as the structure is complex
     }
 
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Get the nullifier key for a specific RP
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -302,6 +307,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         (x, y) = abi.decode(result, (uint256, uint256));
     }
 
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Get complete RP material (ECDSA key and nullifier key)
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -337,6 +343,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         }
     }
 
+    // TODO: Eventually change all these to the cleaner approach with `abi.encodeCall`
     /**
      * @notice Submit Round 1 contributions for multiple RPs
      * @param rpRegistryProxy The proxy address of RpRegistry
@@ -361,7 +368,6 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     }
 
     // TODO: Add batching function for Round 2 contributions
-
     /**
      * @notice Submit Round 3 acknowledgments for multiple RPs
      * @param rpRegistryProxy The proxy address of RpRegistry

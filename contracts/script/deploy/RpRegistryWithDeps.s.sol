@@ -100,11 +100,6 @@ contract DeployRpRegistryWithDepsScript is Script {
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen();
 
-         // Deploy ERC-4337 infrastructure
-        address entryPointAddress = deployEntryPoint();
-        address paymasterAddress = deployPaymaster(entryPointAddress, address(rpRegistry));
-        address peerAccountAddress = deployPeerAccount(entryPointAddress, taceoAdminAddress, "PeerAccount");
-
         // Deploy implementation
         RpRegistry implementation = new RpRegistry();
         // Encode initializer call
@@ -118,5 +113,37 @@ contract DeployRpRegistryWithDepsScript is Script {
         console.log("\n=== Deploying RpRegistry ===");
         console.log("RpRegistry implementation deployed to:", address(implementation));
         console.log("RpRegistry deployed to:", address(rpRegistry));
+
+
+        // TODO: Absolutely should be refactored just for Testing!!!!&&!$
+        // Deploy ERC-4337 infrastructure
+        address entryPointAddress = deployEntryPoint();
+        address paymasterAddress = deployPaymaster(entryPointAddress, address(rpRegistry));
+        address peerAccountAddress = deployPeerAccount(entryPointAddress, taceoAdminAddress, "PeerAccount");
+        // Deploy all three peer accounts
+        address aliceAccount = deployPeerAccount(entryPointAddress, 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955, "Alice");
+        address bobAccount = deployPeerAccount(entryPointAddress, 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f, "Bob");
+        address carolAccount = deployPeerAccount(entryPointAddress, 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720, "Carol");
+
+        address[] memory peers = new address[](3);
+        peers[0] = 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955;
+        peers[1] = 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f;
+        peers[2] = 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720;
+
+        address[] memory smartAccounts = new address[](3);
+        smartAccounts[0] = aliceAccount;
+        smartAccounts[1] = bobAccount;
+        smartAccounts[2] = carolAccount;
+
+        rpRegistry.registerOprfPeers(peers, smartAccounts);
+        console.log("Peers registered with smart accounts");
+
+        // Authorize accounts in paymaster
+        OprfPaymaster(paymasterAddress).setAccountAuthorization(aliceAccount, true);
+        OprfPaymaster(paymasterAddress).setAccountAuthorization(bobAccount, true);
+        OprfPaymaster(paymasterAddress).setAccountAuthorization(carolAccount, true);
+        console.log("Smart accounts authorized in paymaster");
+
+        vm.stopBroadcast();
     }
 }
