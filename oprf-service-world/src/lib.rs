@@ -1,15 +1,7 @@
 #![deny(missing_docs)]
-//! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
-//! nullifier oracle service. The service participates in multi-party key generation and provides
-//! partial OPRF evaluations for World ID protocol nullifiers.
+//! This crate implements TACEO:Oprf for World ID.
 //!
-//! # Overview
-//!
-//! The OPRF peer:
-//! - Participates in distributed secret generation with other peers
-//! - Evaluates partial OPRF shares for authenticated clients
-//! - Monitors on-chain events for key generation and merkle root updates
-//! - Stores and manages cryptographic material securely via agnostic Secrets Manager (currently only AWS supported).
+//! It provides an Axum based HTTP-server that computes distributed OPRF (Oblivious Pseudo-Random Function) functions to be used as nullifiers in the World ecosystem.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 use std::{fs::File, sync::Arc};
@@ -21,14 +13,14 @@ use oprf_service::secret_manager::SecretManagerService;
 use secrecy::ExposeSecret;
 
 use crate::{
+    auth::{WorldOprfReqAuthenticator, merkle_watcher::MerkleWatcher},
     config::WorldOprfPeerConfig,
-    services::{merkle_watcher::MerkleWatcher, oprf::WorldOprfReqAuthenticator},
 };
 
+pub(crate) mod auth;
 pub mod config;
-pub(crate) mod services;
 
-/// Main entry point for the OPRF service.
+/// Main entry point for an OPRF peer.
 ///
 /// This function initializes and starts the OPRF service, including its various components, and
 /// gracefully handles shutdown signals. The service performs the following tasks:
