@@ -8,8 +8,9 @@ use uuid::Uuid;
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct ExampleOprfReqAuth;
 
-/// Errors returned by the [`WorldOprfReqAuthenticator`].
+/// Errors returned by the [`ExampleOprfReqAuthError`].
 #[derive(Debug, thiserror::Error)]
+#[allow(unused)]
 pub(crate) enum ExampleOprfReqAuthError {
     #[error("invalid")]
     Invalid,

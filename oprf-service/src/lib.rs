@@ -234,7 +234,7 @@ mod tests {
     use rand::Rng as _;
     use uuid::Uuid;
 
-    use crate::services::oprf::{OprfReqAuthenticator, OprfService};
+    use crate::services::oprf::OprfService;
     use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;
