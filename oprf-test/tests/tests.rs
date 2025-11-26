@@ -347,8 +347,8 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     assert_eq!(is_oprf_public_key, should_oprf_public_key);
 
     let secret_before_delete0 = secret_managers[0].load_rps();
-    let secret_before_delete1 = secret_managers[0].load_rps();
-    let secret_before_delete2 = secret_managers[0].load_rps();
+    let secret_before_delete1 = secret_managers[1].load_rps();
+    let secret_before_delete2 = secret_managers[2].load_rps();
     let should_rps = vec![oprf_key_id];
     assert_eq!(secret_before_delete0, should_rps);
     assert_eq!(secret_before_delete1, should_rps);
@@ -367,8 +367,8 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     println!("check that shares are not in localstack anymore...");
 
     let secrets_after_delete0 = secret_managers[0].load_rps();
-    let secrets_after_delete1 = secret_managers[0].load_rps();
-    let secrets_after_delete2 = secret_managers[0].load_rps();
+    let secrets_after_delete1 = secret_managers[1].load_rps();
+    let secrets_after_delete2 = secret_managers[2].load_rps();
 
     assert!(secrets_after_delete0.is_empty());
     assert!(secrets_after_delete1.is_empty());
