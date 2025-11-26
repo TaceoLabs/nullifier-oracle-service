@@ -157,6 +157,7 @@ async fn handle_round1(
         .send()
         .await
         .context("while broadcasting to network")?
+        .with_required_confirmations(2)
         .get_receipt()
         .await
         .context("while registering watcher for transaction")?;
@@ -211,6 +212,7 @@ async fn handle_round2(
         .send()
         .await
         .context("while broadcasting to network")?
+        .with_required_confirmations(2)
         .get_receipt()
         .await
         .context("while registering watcher for transaction")?;
@@ -262,6 +264,7 @@ async fn handle_round3(
         .send()
         .await
         .context("while broadcasting to network")?
+        .with_required_confirmations(2)
         .get_receipt()
         .await
         .context("while registering watcher for transaction")?;
