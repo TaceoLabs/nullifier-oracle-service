@@ -69,14 +69,14 @@ impl AwsSecretManager {
     /// in a `SecretManagerService`.
     pub async fn init(
         aws_config: aws_config::SdkConfig,
-        rp_secret_id_prefix: &str,
+        oprf_secret_id_prefix: &str,
         wallet_private_key_secret_id: &str,
     ) -> Self {
         // loads the latest defaults for aws
         let client = aws_sdk_secretsmanager::Client::new(&aws_config);
         AwsSecretManager {
             client,
-            oprf_secret_id_prefix: rp_secret_id_prefix.to_string(),
+            oprf_secret_id_prefix: oprf_secret_id_prefix.to_string(),
             wallet_private_key_secret_id: wallet_private_key_secret_id.to_string(),
         }
     }
@@ -86,8 +86,8 @@ impl AwsSecretManager {
 ///
 /// Stores the current and optionally previous epoch.
 #[derive(Serialize, Deserialize)]
-struct AwsRpSecret {
-    rp_id: OprfKeyId,
+struct AwsOprfSecret {
+    oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
     current: EpochSecret,
     // Is none for first secret
@@ -102,13 +102,17 @@ struct EpochSecret {
     secret: DLogShareShamir,
 }
 
-impl AwsRpSecret {
+impl AwsOprfSecret {
     /// Creates a new secret for a given `OprfKeyId`.
     ///
     /// Current epoch is set to 0, previous is `None`.
-    pub fn new(rp_id: OprfKeyId, oprf_public_key: OprfPublicKey, secret: DLogShareShamir) -> Self {
+    pub fn new(
+        oprf_key_id: OprfKeyId,
+        oprf_public_key: OprfPublicKey,
+        secret: DLogShareShamir,
+    ) -> Self {
         Self {
-            rp_id,
+            oprf_key_id,
             oprf_public_key,
             current: EpochSecret {
                 epoch: ShareEpoch::default(),
@@ -119,11 +123,11 @@ impl AwsRpSecret {
     }
 }
 
-impl From<AwsRpSecret> for OprfKeyMaterial {
-    /// Converts an [`AwsRpSecret`] into [`RpMaterial`].
+impl From<AwsOprfSecret> for OprfKeyMaterial {
+    /// Converts an `AwsOprfSecret` into [`OprfKeyMaterial`].
     ///
     /// Includes both current and previous epoch secrets if available.
-    fn from(value: AwsRpSecret) -> Self {
+    fn from(value: AwsOprfSecret) -> Self {
         let mut shares = HashMap::new();
         shares.insert(value.current.epoch, value.current.secret);
         if let Some(previous) = value.previous {
@@ -225,10 +229,13 @@ impl SecretManager for AwsSecretManager {
                             .secret_string()
                             .expect("is string and not binary")
                             .to_owned();
-                        let rp_secret: AwsRpSecret = serde_json::from_str(&secret_value)
+                        let oprf_secret: AwsOprfSecret = serde_json::from_str(&secret_value)
                             .context("Cannot deserialize AWS Secret")?;
-                        tracing::debug!("loaded secret for rp_id: {}", rp_secret.rp_id);
-                        oprf_materials.insert(rp_secret.rp_id, rp_secret.into());
+                        tracing::debug!(
+                            "loaded secret for oprf_key_id: {}",
+                            oprf_secret.oprf_key_id
+                        );
+                        oprf_materials.insert(oprf_secret.oprf_key_id, oprf_secret.into());
                     }
                 }
             }
@@ -243,9 +250,9 @@ impl SecretManager for AwsSecretManager {
         Ok(OprfKeyMaterialStore::new(oprf_materials))
     }
 
-    /// Stores a new DLog share for an RP in AWS Secrets Manager.
+    /// Stores a new DLog share for an OPRF secret-key in AWS Secrets Manager.
     ///
-    /// Creates a new secret with the configured prefix and RP ID.
+    /// Creates a new secret with the configured prefix and OPRF key id.
     #[instrument(level = "info", skip_all)]
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
         let StoreDLogShare {
@@ -254,7 +261,7 @@ impl SecretManager for AwsSecretManager {
             share,
         } = store;
         let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
-        let secret = AwsRpSecret::new(oprf_key_id, oprf_public_key, share);
+        let secret = AwsOprfSecret::new(oprf_key_id, oprf_public_key, share);
         self.client
             .create_secret()
             .name(secret_id)
@@ -266,12 +273,12 @@ impl SecretManager for AwsSecretManager {
         Ok(())
     }
 
-    /// Removes an RP's secret from AWS Secrets Manager.
+    /// Removes an OPRF secret from AWS Secrets Manager.
     ///
     /// Permanently deletes the secret without recovery period.
     #[instrument(level = "info", skip(self))]
-    async fn remove_dlog_share(&self, rp_id: OprfKeyId) -> eyre::Result<()> {
-        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, rp_id);
+    async fn remove_dlog_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<()> {
+        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
         self.client
             .delete_secret()
             .secret_id(secret_id)
@@ -279,23 +286,23 @@ impl SecretManager for AwsSecretManager {
             .send()
             .await
             .context("while deleting DLog Share")?;
-        tracing::info!("deleted secret from AWS {rp_id}");
+        tracing::info!("deleted secret from AWS {oprf_key_id}");
         Ok(())
     }
 
-    /// Updates an RP's secret with a new epoch.
+    /// Updates an OPRF secret with a new epoch.
     ///
     /// Loads the existing secret, moves the current epoch to previous,
     /// and stores the new share as the current epoch.
     #[instrument(level = "info", skip(self, share))]
     async fn update_dlog_share(
         &self,
-        rp_id: OprfKeyId,
+        oprf_key_id: OprfKeyId,
         epoch: ShareEpoch,
         share: DLogShareShamir,
     ) -> eyre::Result<()> {
         // Load old secret to preserve previous epoch
-        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, rp_id);
+        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
         tracing::info!("loading old secret first at {secret_id}");
         let secret_value = self
             .client
@@ -308,13 +315,13 @@ impl SecretManager for AwsSecretManager {
             .expect("is string and not binary")
             .to_owned();
 
-        let mut rp_secret: AwsRpSecret =
+        let mut oprf_secret: AwsOprfSecret =
             serde_json::from_str(&secret_value).context("Cannot deserialize AWS Secret")?;
 
-        let prev_epoch = rp_secret.current.epoch;
+        let prev_epoch = oprf_secret.current.epoch;
 
-        rp_secret.previous = Some(rp_secret.current.clone());
-        rp_secret.current = EpochSecret {
+        oprf_secret.previous = Some(oprf_secret.current.clone());
+        oprf_secret.current = EpochSecret {
             epoch,
             secret: share,
         };
@@ -322,12 +329,12 @@ impl SecretManager for AwsSecretManager {
         self.client
             .put_secret_value()
             .secret_id(secret_id)
-            .secret_string(serde_json::to_string(&rp_secret).expect("can serialize"))
+            .secret_string(serde_json::to_string(&oprf_secret).expect("can serialize"))
             .send()
             .await
             .context("while storing new secret")?;
         tracing::debug!(
-            "updated rp secret for {rp_id} with current: {epoch}, previous: {prev_epoch}"
+            "updated rp secret for {oprf_key_id} with current: {epoch}, previous: {prev_epoch}"
         );
         Ok(())
     }
@@ -356,7 +363,7 @@ mod test {
     use crate::services::secret_manager::{SecretManager as _, aws::AwsSecretManager};
 
     const WALLET_SECRET_ID: &str = "wallet_secret_id";
-    const RP_SECRET_ID_PREFIX: &str = "rp_suffix";
+    const OPRF_SECRET_ID_PREFIX: &str = "oprf_suffix";
     async fn localstack_testcontainer() -> eyre::Result<(ContainerAsync<LocalStack>, String)> {
         let container = LocalStack::default()
             .with_env_var("SERVICES", "secretsmanager")
@@ -403,7 +410,7 @@ mod test {
         let (_localstack_container, localstack_url) = localstack_testcontainer().await?;
         let (client, config) = localstack_client(&localstack_url).await;
         let secret_manager =
-            AwsSecretManager::init(config, RP_SECRET_ID_PREFIX, WALLET_SECRET_ID).await;
+            AwsSecretManager::init(config, OPRF_SECRET_ID_PREFIX, WALLET_SECRET_ID).await;
         let _ = load_secret(client.clone(), WALLET_SECRET_ID)
             .await
             .expect_err("should not be there");

@@ -1,9 +1,8 @@
-//! This module provides [`OprfKeyMaterialStore`], which securely holds each RP's
-//! DLog shares (per epoch) along with their ECDSA verifying key.  
+//! This module provides [`OprfKeyMaterialStore`], which securely holds each OPRF DLog shares (per epoch).
 //! Access is synchronized via a `RwLock` and wrapped in an `Arc` for thread-safe shared ownership.
 //!
 //! Use the store to retrieve or add shares and public keys safely.  
-//! Each RP's material is represented by [`OprfKeyMaterial`].
+//! Each OPRF key material is represented by [`OprfKeyMaterial`].
 
 use oprf_core::{
     ddlog_equality::shamir::{
@@ -26,16 +25,15 @@ type OprfKeyMaterialStoreResult<T> = std::result::Result<T, OprfKeyMaterialStore
 
 /// Errors returned by the [`OprfKeyMaterial`].
 ///
-/// This error type is mostly used in API contexts, meaning it should be digested by the
-/// [`crate::api::errors`] module.
+/// This error type is mostly used in API contexts, meaning it should be digested by the `crate::api::errors` module.
 ///
 /// Methods that are used in other contexts may return one of the variants
 /// here or return an `eyre::Result`.
 #[derive(Debug, thiserror::Error)]
 pub enum OprfKeyMaterialStoreError {
-    /// Cannot find the RP.
-    #[error("Cannot find RP id: {0}")]
-    UnknownRp(OprfKeyId),
+    /// Cannot find the OPRF key id.
+    #[error("Cannot find key id: {0}")]
+    UnknownOprfKeyId(OprfKeyId),
     /// Cannot find a secret share for the epoch.
     #[error("Cannot find share with epoch: {0}")]
     UnknownShareEpoch(ShareEpoch),
@@ -91,9 +89,9 @@ impl OprfKeyMaterialStore {
     /// Computes C = B * x_share and commitments to a random value k_share.
     ///
     /// This generates the peer's partial contribution used in the DLogEqualityProof.
-    /// The provided [`OprfShareIdentifier`] identifies the RP and the epoch of the share.
+    /// The provided [`ShareIdentifier`] identifies the used OPRF key and the epoch of the share.
     ///
-    /// Returns an error if the RP is unknown or the share for the epoch is not registered.
+    /// Returns an error if the OPRF key is unknown or the share for the epoch is not registered.
     #[instrument(level = "debug", skip_all)]
     pub(crate) fn partial_commit(
         &self,
@@ -103,7 +101,7 @@ impl OprfKeyMaterialStore {
         tracing::debug!("computing partial commitment");
         let share = self
             .get(share_identifier.oprf_key_id)
-            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+            .ok_or(OprfKeyMaterialStoreError::UnknownOprfKeyId(
                 share_identifier.oprf_key_id,
             ))?
             .get_share(share_identifier.share_epoch)
@@ -120,9 +118,9 @@ impl OprfKeyMaterialStore {
     /// Finalizes a proof share for a given challenge hash and session.
     ///
     /// Consumes the session to prevent reuse of the randomness. The provided
-    /// [`OprfShareIdentifier`] identifies the RP and the epoch of the key.
+    /// The provided [`ShareIdentifier`] identifies the used OPRF key and the epoch of the share.
     ///
-    /// Returns an error if the RP is unknown or the key epoch is not registered.
+    /// Returns an error if the OPRF key is unknown or the share for the epoch is not registered.
     pub(crate) fn challenge(
         &self,
         session_id: Uuid,
@@ -132,14 +130,14 @@ impl OprfKeyMaterialStore {
         share_identifier: &ShareIdentifier,
     ) -> OprfKeyMaterialStoreResult<DLogProofShareShamir> {
         tracing::debug!("finalizing proof share");
-        let rp_nullifier_key = self
+        let oprf_public_key = self
             .get_oprf_public_key(share_identifier.oprf_key_id)
-            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+            .ok_or(OprfKeyMaterialStoreError::UnknownOprfKeyId(
                 share_identifier.oprf_key_id,
             ))?;
         let share = self
             .get(share_identifier.oprf_key_id)
-            .ok_or(OprfKeyMaterialStoreError::UnknownRp(
+            .ok_or(OprfKeyMaterialStoreError::UnknownOprfKeyId(
                 share_identifier.oprf_key_id,
             ))?
             .get_share(share_identifier.share_epoch)
@@ -153,22 +151,22 @@ impl OprfKeyMaterialStore {
         Ok(session.challenge(
             session_id,
             share,
-            rp_nullifier_key.inner(),
+            oprf_public_key.inner(),
             challenge,
             lagrange_coefficient,
         ))
     }
 
-    /// Retrieves the secret share for the given [`OprfShareIdentifier`].
+    /// Retrieves the secret share for the given [`ShareIdentifier`].
     ///
-    /// Returns `None` if the RP or share epoch is not found.
-    fn get(&self, rp_id: OprfKeyId) -> Option<OprfKeyMaterial> {
-        self.0.read().get(&rp_id).cloned()
+    /// Returns `None` if the OPRF key or share epoch is not found.
+    fn get(&self, oprf_key_id: OprfKeyId) -> Option<OprfKeyMaterial> {
+        self.0.read().get(&oprf_key_id).cloned()
     }
 
     /// Returns the [`OprfPublicKey`], if registered.
-    pub(crate) fn get_oprf_public_key(&self, rp_id: OprfKeyId) -> Option<OprfPublicKey> {
-        Some(self.0.read().get(&rp_id)?.get_oprf_public_key())
+    pub(crate) fn get_oprf_public_key(&self, oprf_key_id: OprfKeyId) -> Option<OprfPublicKey> {
+        Some(self.0.read().get(&oprf_key_id)?.get_oprf_public_key())
     }
 
     /// Adds OPRF key-material with epoch 0.
@@ -177,7 +175,7 @@ impl OprfKeyMaterialStore {
     /// Intended for creating new shares, not rotation.
     pub(super) fn add(
         &self,
-        rp_id: OprfKeyId,
+        oprf_key_id: OprfKeyId,
         oprf_public_key: OprfPublicKey,
         dlog_share: DLogShareShamir,
     ) {
@@ -187,7 +185,7 @@ impl OprfKeyMaterialStore {
             .0
             .write()
             .insert(
-                rp_id,
+                oprf_key_id,
                 OprfKeyMaterial {
                     shares,
                     nullifier_key: oprf_public_key,
@@ -195,16 +193,16 @@ impl OprfKeyMaterialStore {
             )
             .is_some()
         {
-            tracing::warn!("overwriting share for {rp_id}");
+            tracing::warn!("overwriting share for {oprf_key_id}");
         }
     }
 
-    /// Removes the RP entry associated with the provided [`RpId`].
+    /// Removes the OPRF key entry associated with the provided [`OprfKeyId`].
     ///
     /// If the id is not registered, doesn't do anything.
-    pub(super) fn remove(&self, rp_id: OprfKeyId) {
-        if self.0.write().remove(&rp_id).is_some() {
-            tracing::debug!("removed {rp_id:?} material from OprfKeyMaterialStore");
+    pub(super) fn remove(&self, oprf_key_id: OprfKeyId) {
+        if self.0.write().remove(&oprf_key_id).is_some() {
+            tracing::debug!("removed {oprf_key_id:?} material from OprfKeyMaterialStore");
         }
     }
 }

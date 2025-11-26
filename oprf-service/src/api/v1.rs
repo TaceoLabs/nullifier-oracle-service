@@ -12,13 +12,13 @@ use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, Oprf
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::instrument;
 
-use crate::services::oprf::{OprfReqAuthService, OprfService};
+use crate::{OprfReqAuthService, services::oprf::OprfService};
 
 /// Handles `POST /init`.
 ///
 /// Validates the nonce signature, retrieves the relevant merkle root for the requested epoch,
 /// and initializes a new OPRF session via [`OprfService`].
-#[instrument(level = "debug", skip_all)]
+#[instrument(level = "debug", skip_all, fields(request_id=%request.request_id))]
 async fn oprf_request<ReqAuth: Clone + Serialize + DeserializeOwned, ReqAuthError: IntoResponse>(
     Extension(oprf_service): Extension<OprfService>,
     Extension(oprf_req_auth_service): Extension<OprfReqAuthService<ReqAuth, ReqAuthError>>,
@@ -42,7 +42,7 @@ async fn oprf_request<ReqAuth: Clone + Serialize + DeserializeOwned, ReqAuthErro
 /// Handles `POST /finish`.
 ///
 /// Finalizes the OPRF session for the given request and returns the resulting proof share.
-#[instrument(level = "debug", skip_all)]
+#[instrument(level = "debug", skip_all, fields(request_id=%request.request_id))]
 async fn oprf_challenge(
     Extension(oprf_service): Extension<OprfService>,
     Json(request): Json<ChallengeRequest>,

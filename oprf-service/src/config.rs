@@ -1,14 +1,8 @@
-//! Configuration types and CLI/environment parsing for the OPRF service.
+//! Configuration types and CLI/environment parsing for TACEO:Oprf.
 //!
-//! This module centralizes all runtime configuration of an OPRF peer.
-//! It defines:
+//! Concrete implementations may have a more detailed config and can use the exposed [`OprfPeerConfig`] and flatten it with `#[clap(flatten)]`.
 //!
-//! * [`Environment`] — the deployment environment (`prod` or `dev`) with a helper to assert dev-only code.
-//! * [`OprfPeerConfig`] — the full configuration for an OPRF peer, parsed from command-line flags
-//!   or environment variables using [`clap`].  
-//!
-//! By keeping all parameters here, startup code can simply call
-//! `OprfPeerConfig::parse()` to get a ready-to-use config struct.
+//! Additionally this module defines the [`Environment`] to assert dev-only code.
 
 use std::{path::PathBuf, time::Duration};
 
@@ -20,7 +14,7 @@ use secrecy::SecretString;
 ///
 /// Main usage for the `Environment` is to call
 /// [`Environment::assert_is_dev`]. Services that are intended
-/// for `dev` only (like SC mock watcher, local secret-manager,...)
+/// for `dev` only (like local secret-manager,...)
 /// shall assert that they are called from the `dev` environment.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Environment {
@@ -37,7 +31,7 @@ impl Environment {
     }
 }
 
-/// The configuration for the OPRF peer.
+/// The configuration for TACEO:Oprf core functionality.
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]

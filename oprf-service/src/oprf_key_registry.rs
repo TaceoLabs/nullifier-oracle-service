@@ -1,4 +1,4 @@
-//! This module includes the alloy types for the OprfKeyRegistry.
+//! This module includes the alloy types for the `OprfKeyRegistry` contract.
 //!
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 

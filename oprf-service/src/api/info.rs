@@ -4,7 +4,7 @@
 //!
 //! - `/version` – returns the version string
 //! - `/wallet` – returns the wallet address
-//! - `/rp/{rp_id}` – returns the [`oprf_types::api::v1::PublicRpMaterial`] associated with the [`RpId`] if the OPRF peer has the information stored.
+//! - `/oprf_pub/{id}` – returns the [`oprf_types::crypto::OprfPublicKey`] associated with the [`OprfKeyId`] if the OPRF peer has the information stored.
 //!
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
 use alloy::primitives::Address;
@@ -35,7 +35,7 @@ pub(crate) fn routes(oprf_service: OprfService, wallet_address: Address) -> Rout
         ))
 }
 
-/// Responds with cargo package name, cargo package version, and the git hash of the repository that was used to build the binary
+/// Responds with cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
 ///
 /// Returns `200 OK` with a string response.
 async fn version() -> impl IntoResponse {

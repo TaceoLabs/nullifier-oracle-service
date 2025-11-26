@@ -1,20 +1,30 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+//! This module implements the authentication process for World ID.
+//!
+//! During the user's session initialization, the MPC nodes uses this authentication service to determine whether a user is eligible to compute a nullifier.
+//!
+//! Additionally, it defines two sub-modules necessary for the authentication process.
+//!
+//! - [`merkle_watcher`] – watches the blockchain for merkle-root update events.
+//! - [`signature_history`] – keeps track of nonce + time_stamp signatures to detect replays
 
+use crate::auth::{
+    merkle_watcher::{MerkleWatcher, MerkleWatcherError},
+    signature_history::{DuplicateSignatureError, SignatureHistory},
+};
 use ark_bn254::Bn254;
 use async_trait::async_trait;
 use axum::{http::StatusCode, response::IntoResponse};
 use oprf_service::OprfReqAuthenticator;
 use oprf_types::api::v1::OprfRequest;
 use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use uuid::Uuid;
 
-use crate::services::{
-    merkle_watcher::{MerkleWatcher, MerkleWatcherError},
-    signature_history::{DuplicateSignatureError, SignatureHistory},
-};
+pub(crate) mod merkle_watcher;
+pub(crate) mod signature_history;
 
 /// Errors returned by the [`WorldOprfReqAuthenticator`].
 #[derive(Debug, thiserror::Error)]

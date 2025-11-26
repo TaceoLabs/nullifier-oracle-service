@@ -12,40 +12,16 @@
 //!
 //! We refer to [Section 3 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf) for more information about the OPRF-protocol.
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use async_trait::async_trait;
 use oprf_core::ddlog_equality::shamir::{DLogProofShareShamir, PartialDLogCommitmentsShamir};
-use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
+use oprf_types::api::v1::{ChallengeRequest, ShareIdentifier};
 use oprf_types::crypto::PartyId;
-use serde::{Serialize, de::DeserializeOwned};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::services::oprf_key_material_store::{OprfKeyMaterialStore, OprfKeyMaterialStoreError};
 use crate::{metrics::METRICS_KEY_OPRF_SUCCESS, services::session_store::SessionStore};
-
-#[async_trait]
-
-/// Trait defining the authentication mechanism for OPRF requests.
-///
-/// This trait enables the verification of OPRF requests to ensure they are
-/// properly authenticated before processing. It is designed to be implemented
-/// by authentication services that can validate the authenticity of incoming
-/// OPRF requests.
-pub trait OprfReqAuthenticator: Send + Sync {
-    /// Represents the authentication data type included in the OPRF request.
-    type ReqAuth: Clone + Serialize + DeserializeOwned;
-    /// Represents the error type returned if authentication fails.
-    type ReqAuthError: axum::response::IntoResponse;
-
-    /// Verifies the authenticity of an OPRF request.
-    async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
-}
-
-/// Dynamic trait object for `OprfReqAuthenticator` service.
-pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
-    Arc<dyn OprfReqAuthenticator<ReqAuth = ReqAuth, ReqAuthError = ReqAuthError>>;
 
 /// Errors returned by the [`OprfService`].
 #[derive(Debug, thiserror::Error)]

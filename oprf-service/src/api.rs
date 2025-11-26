@@ -1,6 +1,6 @@
 //! API module for the OPRF peer service.
 //!
-//! This module defines all HTTP endpoints exposed by the OPRF peer and organizes them into submodules:
+//! This module defines all HTTP endpoints an OPRF peer must serve to participate in TACEO:Oprf and organizes them into submodules:
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health endpoints (`/health`).
@@ -12,7 +12,7 @@ use axum::{Router, response::IntoResponse};
 use serde::{Serialize, de::DeserializeOwned};
 use tower_http::trace::TraceLayer;
 
-use crate::services::oprf::{OprfReqAuthService, OprfService};
+use crate::{OprfReqAuthService, services::oprf::OprfService};
 
 pub(crate) mod errors;
 pub(crate) mod health;
@@ -28,8 +28,7 @@ pub(crate) mod v1;
 /// - General info about the deployment from [`info`].
 /// - An HTTP trace layer via [`TraceLayer`].
 ///
-/// The returned [`Router`] has an [`AppState`] attached that contains the configuration and service
-/// instances needed to handle requests.
+/// The returned [`Router`] can be incorporated into another router or be served directly by axum. Implementations don't need to configure anything in their `State`, the service is inlined as [`Extension`](https://docs.rs/axum/latest/axum/struct.Extension.html).
 pub fn routes<
     ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
     ReqAuthError: IntoResponse + Send + Sync + 'static,

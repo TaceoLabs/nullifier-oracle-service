@@ -1,29 +1,19 @@
 #![deny(missing_docs)]
-//! This crate implements a peer node for the distributed OPRF (Oblivious Pseudo-Random Function)
-//! nullifier oracle service. The service participates in multi-party key generation and provides
-//! partial OPRF evaluations for World ID protocol nullifiers.
+//! This crate provides the core functionality of a peer node for TACEO:Oprf.
 //!
-//! # Overview
+//! When implementing a concrete instantiation of TACEO:Oprf, projects use this composable library to build their flavor of the distributed OPRF protocol. The main entry point for implementations is the [`init`] method. It returns an `axum::Router` that should be incorporated into a larger `axum` server that provides project-based functionality for authentication.
 //!
-//! The OPRF peer:
-//! - Participates in distributed secret generation with other peers
-//! - Evaluates partial OPRF shares for authenticated clients
-//! - Monitors on-chain events for key generation and merkle root updates
-//! - Stores and manages cryptographic material securely via agnostic Secrets Manager (currently only AWS supported).
+//! Additionally, implementations must provide their project-specific authentication. For that, this library exposes the [`OprfReqAuthenticator`] trait. A call to `init` expects an [`OprfReqAuthService`], which is a dyn object of `OprfReqAuthenticator`.
+//!
+//! The general workflow is as follows:
+//! 1) End-users initiate a session at $n$ peers.
+//!    - the router created by `init` receives the request
+//!    - the router calls [`OprfReqAuthenticator::verify`] of the provided authentication implementation. This can be anything from no verification to providing credentials.
+//!    - the peer creates a session identified by a UUID and sends a commitment back to the user.
+//! 2) As soon as end-users have opened $t$ sessions, they compute challenges for the answering peers.
+//!    - the router answers the challenge and deletes all information containing the sessions.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
-
-use alloy::{
-    network::EthereumWallet,
-    providers::{Provider as _, ProviderBuilder, WsConnect},
-};
-use axum::response::IntoResponse;
-use eyre::Context as _;
-use groth16_material::circom::CircomGroth16MaterialBuilder;
-use secrecy::ExposeSecret as _;
-use serde::{Serialize, de::DeserializeOwned};
-use tokio::signal;
-use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::OprfPeerConfig,
@@ -31,6 +21,20 @@ use crate::{
         oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
     },
 };
+use alloy::{
+    network::EthereumWallet,
+    providers::{Provider as _, ProviderBuilder, WsConnect},
+};
+use async_trait::async_trait;
+use axum::response::IntoResponse;
+use eyre::Context as _;
+use groth16_material::circom::CircomGroth16MaterialBuilder;
+use oprf_types::api::v1::OprfRequest;
+use secrecy::ExposeSecret as _;
+use serde::{Serialize, de::DeserializeOwned};
+use std::sync::Arc;
+use tokio::signal;
+use tokio_util::sync::CancellationToken;
 
 pub(crate) mod api;
 pub mod config;
@@ -38,9 +42,29 @@ pub mod metrics;
 pub mod oprf_key_registry;
 pub(crate) mod services;
 
-pub use services::oprf::{OprfReqAuthService, OprfReqAuthenticator};
 pub use services::oprf_key_material_store;
 pub use services::secret_manager;
+
+/// Trait defining the authentication mechanism for OPRF requests.
+///
+/// This trait enables the verification of OPRF requests to ensure they are
+/// properly authenticated before processing. It is designed to be implemented
+/// by authentication services that can validate the authenticity of incoming
+/// OPRF requests.
+#[async_trait]
+pub trait OprfReqAuthenticator: Send + Sync {
+    /// Represents the authentication data type included in the OPRF request.
+    type ReqAuth: Clone + Serialize + DeserializeOwned;
+    /// Represents the error type returned if authentication fails.
+    type ReqAuthError: axum::response::IntoResponse;
+
+    /// Verifies the authenticity of an OPRF request.
+    async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
+}
+
+/// Dynamic trait object for `OprfReqAuthenticator` service.
+pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
+    Arc<dyn OprfReqAuthenticator<ReqAuth = ReqAuth, ReqAuthError = ReqAuthError>>;
 
 /// Initializes the OPRF service.
 ///
@@ -115,16 +139,13 @@ pub async fn init<
         let provider = provider.clone();
         let contract_address = config.oprf_key_registry_contract;
         let cancellation_token = cancellation_token.clone();
-        async move {
-            services::key_event_watcher::key_event_watcher_task(
-                provider,
-                contract_address,
-                secret_manager,
-                dlog_secret_gen_service,
-                cancellation_token,
-            )
-            .await
-        }
+        services::key_event_watcher::key_event_watcher_task(
+            provider,
+            contract_address,
+            secret_manager,
+            dlog_secret_gen_service,
+            cancellation_token,
+        )
     });
 
     tracing::info!("init oprf-service...");
@@ -150,7 +171,7 @@ pub fn version_info() -> String {
     )
 }
 
-/// Spawns a shutdown task and creates an associated [CancellationToken](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html). This task will complete when either the provided shutdown_signal futures completes or if some other tasks cancels the shutdown token. The associated shutdown token will be cancelled either way.
+/// Spawns a shutdown task and creates an associated [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html). This task will complete when either the provided `shutdown_signal` futures completes or if some other tasks cancels the shutdown token. The associated shutdown token will be cancelled either way.
 ///
 /// Waiting for the shutdown token is the preferred way to wait for termination.
 pub fn spawn_shutdown_task(
@@ -213,7 +234,7 @@ mod tests {
     use rand::Rng as _;
     use uuid::Uuid;
 
-    use crate::services::oprf::{OprfReqAuthenticator, OprfService};
+    use crate::services::oprf::OprfService;
     use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;

@@ -1,4 +1,4 @@
-//! Core services of the OPRF peer.
+//! Core services that make up TACEO:Oprf.
 //!
 //! This module exposes all internal services used by the peer to handle
 //! cryptography, chain interactions, secret generation, OPRF sessions, and
@@ -8,15 +8,12 @@
 //!
 //! # Services overview
 //!
-//! - [`event_handler`] – handles chain events sequentially to avoid locks.
 //! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the peer.
-//! - [`merkle_watcher`] – watches the blockchain for merkle-root update events.
 //! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
 //! - [`oprf_key_material_store`] – provides a store that securely holds all OPRF key-material.
 //! - [`secret_gen`] – handles multi-round secret generation protocols.
-//! - [`secret_manager`] – stores and retrieves secrets (AWS or local file based).
+//! - [`secret_manager`] – stores and retrieves secrets.
 //! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
-//! - [`signature_history`] – keeps track of nonce + time_stamp signatures to detect replays
 pub(crate) mod key_event_watcher;
 pub(crate) mod oprf;
 pub mod oprf_key_material_store;
