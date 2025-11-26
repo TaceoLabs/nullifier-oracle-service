@@ -157,7 +157,7 @@ deploy-rp-registry-with-deps-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-rp-registry-with-deps *args:
-    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+    forge script RpRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
@@ -167,7 +167,7 @@ deploy-rp-registry-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-rp-registry *args:
-    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+    forge script RpRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY
 
 [group('deploy')]
 [working-directory('contracts/script/test')]
@@ -177,7 +177,7 @@ deploy-account-registry-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/test')]
 deploy-account-registry *args:
-    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
