@@ -2,8 +2,10 @@ use std::str::FromStr as _;
 use std::time::Instant;
 use std::time::{Duration, SystemTime};
 
-use alloy::network::EthereumWallet;
-use alloy::providers::{ProviderBuilder, WsConnect};
+use alloy::network::{EthereumWallet, TransactionBuilder as _};
+use alloy::primitives::U256;
+use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::rpc::types::TransactionRequest;
 use alloy::signers::k256;
 use alloy::signers::k256::ecdsa::signature::Signer as _;
 use alloy::signers::local::PrivateKeySigner;
@@ -12,8 +14,9 @@ use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use eddsa_babyjubjub::EdDSAPrivateKey;
 use eyre::Context as _;
 use oprf_test::{
-    MOCK_RP_SECRET_KEY, OprfKeyRegistry, TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY,
-    anvil_testcontainer, health_checks, indexer_testcontainer, postgres_testcontainer,
+    MOCK_RP_SECRET_KEY, OPRF_PEER_ADDRESS_0, OprfKeyRegistry, TACEO_ADMIN_ADDRESS,
+    TACEO_ADMIN_PRIVATE_KEY, anvil_testcontainer, health_checks, indexer_testcontainer,
+    postgres_testcontainer,
 };
 use oprf_test::{
     credentials,
@@ -167,6 +170,16 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
     .context("could not finish key-gen in 60 seconds")?
     .context("while polling RP key")?;
 
+    // send a dummy tx to get enough blocks to reach the required 2 confirmations in key-gen
+    let tx = TransactionRequest::default()
+        .with_from(TACEO_ADMIN_ADDRESS)
+        .with_to(OPRF_PEER_ADDRESS_0)
+        .with_value(U256::from(1));
+    let receipt = provider.send_transaction(tx).await?.get_receipt().await?;
+    if !receipt.status() {
+        eyre::bail!("failed to send dummy tx");
+    }
+
     println!("Running OPRF client flow...");
     let args = NullifierArgs {
         credentials_signature: credential_signature.clone(),
@@ -260,6 +273,16 @@ async fn example_nullifier_e2e_test() -> eyre::Result<()> {
     .context("could not finish key-gen in 60 seconds")?
     .context("while polling RP key")?;
 
+    // send a dummy tx to get enough blocks to reach the required 2 confirmations in key-gen
+    let tx = TransactionRequest::default()
+        .with_from(TACEO_ADMIN_ADDRESS)
+        .with_to(OPRF_PEER_ADDRESS_0)
+        .with_value(U256::from(1));
+    let receipt = provider.send_transaction(tx).await?.get_receipt().await?;
+    if !receipt.status() {
+        eyre::bail!("failed to send dummy tx");
+    }
+
     println!("Running OPRF client flow...");
 
     let action = ark_babyjubjub::Fq::rand(&mut rng);
@@ -335,6 +358,16 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     .await
     .context("could not finish key-gen in 60 seconds")?
     .context("while polling RP key")?;
+
+    // send a dummy tx to get enough blocks to reach the required 2 confirmations in key-gen
+    let tx = TransactionRequest::default()
+        .with_from(TACEO_ADMIN_ADDRESS)
+        .with_to(OPRF_PEER_ADDRESS_0)
+        .with_value(U256::from(1));
+    let receipt = provider.send_transaction(tx).await?.get_receipt().await?;
+    if !receipt.status() {
+        eyre::bail!("failed to send dummy tx");
+    }
 
     println!("checking that key-material is registered at services..");
     let is_oprf_public_key = health_checks::oprf_public_key_from_services(
