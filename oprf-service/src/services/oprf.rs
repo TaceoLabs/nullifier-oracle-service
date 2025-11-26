@@ -12,13 +12,11 @@
 //!
 //! We refer to [Section 3 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf) for more information about the OPRF-protocol.
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use async_trait::async_trait;
 use oprf_core::ddlog_equality::shamir::{DLogProofShareShamir, PartialDLogCommitmentsShamir};
-use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
+use oprf_types::api::v1::{ChallengeRequest, ShareIdentifier};
 use oprf_types::crypto::PartyId;
-use serde::{Serialize, de::DeserializeOwned};
 use tracing::instrument;
 use uuid::Uuid;
 

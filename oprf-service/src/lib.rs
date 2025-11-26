@@ -1,14 +1,26 @@
 #![deny(missing_docs)]
 //! This crate provides the core functionality of a peer node for TACEO:Oprf.
 //!
-//! When implementing a concrete instantiation of TACEO:Oprf, projects use this composable library to build their flavor of the distributed OPRF protocol. The main entry point for implementations is the [`init`] method. It returns an `axum::Router` that should be incorporated into a larger `axum` server that provides project based functionality for authentication.
+//! When implementing a concrete instantiation of TACEO:Oprf, projects use this composable library to build their flavor of the distributed OPRF protocol. The main entry point for implementations is the [`init`] method. It returns an `axum::Router` that should be incorporated into a larger `axum` server that provides project-based functionality for authentication.
 //!
-//! Next to that, implementations must provide their project specific authorization. For that this library exposes the [`OprfReqAuthenticator` ] trait.
+//! Additionally, implementations must provide their project-specific authentication. For that, this library exposes the [`OprfReqAuthenticator`] trait. A call to `init` expects an [`OprfReqAuthService`], which is a dyn object of `OprfReqAuthenticator`.
+//!
+//! The general workflow is as follows:
+//! 1) End-users initiate a session at $n$ peers.
+//!    - the router created by `init` receives the request
+//!    - the router calls [`OprfReqAuthenticator::verify`] of the provided authentication implementation. This can be anything from no verification to providing credentials.
+//!    - the peer creates a session identified by a UUID and sends a commitment back to the user.
+//! 2) As soon as end-users have opened $t$ sessions, they compute challenges for the answering peers.
+//!    - the router answers the challenge and deletes all information containing the sessions.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 
-use std::sync::Arc;
-
+use crate::{
+    config::OprfPeerConfig,
+    services::{
+        oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
+    },
+};
 use alloy::{
     network::EthereumWallet,
     providers::{Provider as _, ProviderBuilder, WsConnect},
@@ -20,15 +32,9 @@ use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::api::v1::OprfRequest;
 use secrecy::ExposeSecret as _;
 use serde::{Serialize, de::DeserializeOwned};
+use std::sync::Arc;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
-
-use crate::{
-    config::OprfPeerConfig,
-    services::{
-        oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
-    },
-};
 
 pub(crate) mod api;
 pub mod config;
