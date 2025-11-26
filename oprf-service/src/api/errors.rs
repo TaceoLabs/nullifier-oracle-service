@@ -37,7 +37,7 @@ impl IntoResponse for OprfServiceError {
 impl IntoResponse for OprfKeyMaterialStoreError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            OprfKeyMaterialStoreError::UnknownRp(rp_id) => (
+            OprfKeyMaterialStoreError::UnknownOprfKeyId(rp_id) => (
                 StatusCode::NOT_FOUND,
                 format!("cannot find RP with id: {rp_id}"),
             )
