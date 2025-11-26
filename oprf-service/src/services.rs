@@ -1,6 +1,6 @@
 //! Core services that make up TACEO:Oprf.
 //!
-//! This module exposes all internal services used by the peer to handle
+//! This module exposes all internal services used by the node to handle
 //! cryptography, chain interactions, secret generation, OPRF sessions, and
 //! session storage. Each service is designed to encapsulate a specific
 //! responsibility and can be used by higher-level components such as the API
@@ -8,7 +8,7 @@
 //!
 //! # Services overview
 //!
-//! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the peer.
+//! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the node.
 //! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
 //! - [`oprf_key_material_store`] – provides a store that securely holds all OPRF key-material.
 //! - [`secret_gen`] – handles multi-round secret generation protocols.

@@ -50,11 +50,11 @@ pub enum Error {
 
 /// Executes the distributed OPRF protocol.
 ///
-/// This part is agnostic to the concrete use-case and serves as a helper function for instantiations of the protocol. The method expects an [`OprfRequest`] with an `Auth` part that will be evaluated at the OPRF peers.
+/// This part is agnostic to the concrete use-case and serves as a helper function for instantiations of the protocol. The method expects an [`OprfRequest`] with an `Auth` part that will be evaluated at the OPRF nodes.
 ///
 /// This method tries to initialize a session at each endpoint provided in `services`. It stops as soon as it receives `threshold` answers, the other connections are dropped (the servers are expected to handle that gracefully).
 ///
-/// We then prepare challenges for the remaining peers and with their answers we compute the final [`DLogEqualityProof`].
+/// We then prepare challenges for the remaining nodes and with their answers we compute the final [`DLogEqualityProof`].
 ///
 /// Most implementations of TACEO:Oprf will only need this function. In case you want more fine-grained control, you can use the other exposed functions in this module.
 ///
@@ -100,7 +100,7 @@ where
     Ok((challenge, dlog_proof))
 }
 
-/// Combines the [`ChallengeResponse`]s of the OPRF peers and computes the final [`DLogEqualityProof`].
+/// Combines the [`ChallengeResponse`]s of the OPRF nodes and computes the final [`DLogEqualityProof`].
 ///
 /// Verifies the proof and returns an [`Error`] iff the proof is invalid.
 #[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
@@ -135,7 +135,7 @@ pub fn verify_dlog_equality(
     Ok(dlog_proof)
 }
 
-/// Generates the [`ChallengeRequest`] for the OPRF peers used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
+/// Generates the [`ChallengeRequest`] for the OPRF nodes used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
 #[instrument(level = "debug", skip(sessions))]
 pub fn generate_challenge_request(
     request_id: Uuid,

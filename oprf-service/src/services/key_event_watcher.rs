@@ -185,14 +185,14 @@ async fn handle_round2(
     let OprfKeyRegistry::SecretGenRound2 { oprfKeyId } = round2.inner.data;
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     tracing::info!("fetching ephemeral public keys from chain..");
-    let peers = contract
+    let nodes = contract
         .checkIsParticipantAndReturnEphemeralPublicKeys(oprfKeyId)
         .call()
         .await
         .context("while loading eph keys")?;
     tracing::debug!("got keys from chain - parsing..");
     // TODO handle error case better - we want to know which one send wrong key
-    let peers = peers
+    let nodes = nodes
         .into_iter()
         .map(EphemeralEncryptionPublicKey::try_from)
         .collect::<eyre::Result<Vec<_>>>()?;
@@ -202,7 +202,7 @@ async fn handle_round2(
     // block_in_place here because we do a lot CPU work
     let res = tokio::task::block_in_place(|| {
         secret_gen
-            .round2(oprf_key_id, peers.into())
+            .round2(oprf_key_id, nodes)
             .context("while doing round2")
     })?;
     tracing::debug!("finished round 2 - now reporting");

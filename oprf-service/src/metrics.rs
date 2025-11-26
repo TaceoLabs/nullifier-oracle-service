@@ -26,7 +26,7 @@ pub fn describe_metrics() {
     metrics::describe_gauge!(
         METRICS_KEY_OPEN_SESSIONS,
         metrics::Unit::Count,
-        "Number of open sessions the peer has stored"
+        "Number of open sessions the node has stored"
     );
 
     metrics::describe_counter!(
@@ -38,6 +38,6 @@ pub fn describe_metrics() {
     metrics::describe_counter!(
         METRICS_RP_SECRETS,
         metrics::Unit::Count,
-        "Number of RPs for which the peer holds secrets"
+        "Number of RPs for which the node holds secrets"
     );
 }

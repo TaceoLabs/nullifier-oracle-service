@@ -1,6 +1,6 @@
-//! API module for the OPRF peer service.
+//! API module for the OPRF node service.
 //!
-//! This module defines all HTTP endpoints an OPRF peer must serve to participate in TACEO:Oprf and organizes them into submodules:
+//! This module defines all HTTP endpoints an OPRF node must serve to participate in TACEO:Oprf and organizes them into submodules:
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health endpoints (`/health`).
@@ -19,7 +19,7 @@ pub(crate) mod health;
 pub(crate) mod info;
 pub(crate) mod v1;
 
-/// Builds the main API router for the OPRF peer service.
+/// Builds the main API router for the OPRF node service.
 ///
 /// This function sets up:
 ///

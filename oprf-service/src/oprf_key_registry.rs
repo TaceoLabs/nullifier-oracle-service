@@ -112,7 +112,7 @@ impl From<SecretGenCiphertexts> for Types::Round2Contribution {
     }
 }
 
-/// Loads the party ID for this peer from the OprfKeyRegistry contract.
+/// Loads the party ID for this node from the OprfKeyRegistry contract.
 pub async fn load_party_id(
     contract_address: Address,
     provider: DynProvider,

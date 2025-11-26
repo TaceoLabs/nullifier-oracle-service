@@ -60,7 +60,7 @@ pub struct OprfDevClientConfig {
     /// The URLs to all OPRF Services
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_SERVICES",
+        env = "OPRF_DEV_CLIENT_NODES",
         value_delimiter = ',',
         default_value = "http://127.0.0.1:10000,http://127.0.0.1:10001,http://127.0.0.1:10002"
     )]
@@ -102,7 +102,7 @@ pub struct OprfDevClientConfig {
     )]
     pub chain_rpc_url: SecretString,
 
-    /// The PRIVATE_KEY of the TACEO admin wallet - used to register the OPRF peers
+    /// The PRIVATE_KEY of the TACEO admin wallet - used to register the OPRF nodes
     ///
     /// Default is anvil wallet 0
     #[clap(
@@ -488,7 +488,7 @@ async fn main() -> eyre::Result<()> {
     let query_material = oprf_world_client::load_embedded_query_material();
     let nullifier_material = oprf_world_client::load_embedded_nullifier_material();
 
-    tracing::info!("health check for all peers...");
+    tracing::info!("health check for all nodes...");
     health_checks::services_health_check(&config.services, Duration::from_secs(5))
         .await
         .context("while doing health checks")?;

@@ -3,7 +3,7 @@
 //!
 //! Currently, there is no timeout for a single key generation. Therefore, the toxic waste will not be cleaned up and will remain in memory.
 //!
-//! On the other hand, the toxic waste is not persisted anywhere other than RAM. This means that if an OPRF peer shuts down during key generation, the key generation cannot be completed, as the data is lost.
+//! On the other hand, the toxic waste is not persisted anywhere other than RAM. This means that if an OPRF node shuts down during key generation, the key generation cannot be completed, as the data is lost.
 //!
 //! **Important:** This service is **not thread-safe**. It is intended to be used
 //! only in contexts where a single dedicated task owns the struct. No internal
@@ -31,8 +31,8 @@ use oprf_types::{
         SecretGenRound1Contribution, SecretGenRound2Contribution, SecretGenRound3Contribution,
     },
     crypto::{
-        EphemeralEncryptionPublicKey, OprfPublicKey, PeerPublicKeyList, SecretGenCiphertext,
-        SecretGenCiphertexts, SecretGenCommitment,
+        EphemeralEncryptionPublicKey, OprfPublicKey, SecretGenCiphertext, SecretGenCiphertexts,
+        SecretGenCommitment,
     },
 };
 use rand::{CryptoRng, Rng};
@@ -60,33 +60,33 @@ pub(crate) struct DLogSecretGenService {
     oprf_key_material_store: OprfKeyMaterialStore,
 }
 
-/// The ephemeral private key of an OPRF peer.
+/// The ephemeral private key of an OPRF node.
 ///
 /// Used internally to compute Diffie-Hellman for key-generation operations.
 /// Not `Debug`/`Display` to avoid accidental leaks.
 ///
 /// **Note**: Don't reuse a key. One key per keygen.
 #[derive(ZeroizeOnDrop)]
-struct PeerPrivateKey(ark_babyjubjub::Fr);
+struct EphemeralEncryptionPrivateKey(ark_babyjubjub::Fr);
 
 /// The toxic waste generated in round 1 of the key generation protocol.
 ///
 /// Contains the full polynomial and the ephemeral private key for a single key generation.
 struct ToxicWasteRound1 {
     poly: KeyGenPoly,
-    sk: PeerPrivateKey,
+    sk: EphemeralEncryptionPrivateKey,
 }
 
 /// The toxic waste generated in round 2 of the key generation protocol.
 ///
-/// Contains the ephemeral private key for a single key generation and the associated public keys of all peers.
+/// Contains the ephemeral private key for a single key generation and the associated public keys of all nodes.
 /// The public key list is not toxic waste per se, but for simplicity we store it together with the private key.
 struct ToxicWasteRound2 {
-    peers: PeerPublicKeyList,
-    sk: PeerPrivateKey,
+    pks: Vec<EphemeralEncryptionPublicKey>,
+    sk: EphemeralEncryptionPrivateKey,
 }
 
-impl PeerPrivateKey {
+impl EphemeralEncryptionPrivateKey {
     /// Generates a fresh private-key to be used in a single DLog generation.
     /// **Note**: do not reuse this key.
     fn generate<R: Rng + CryptoRng>(r: &mut R) -> Self {
@@ -118,25 +118,25 @@ impl ToxicWasteRound1 {
     /// * `rng` - A mutable reference to a cryptographically secure random number generator.
     fn new<R: Rng + CryptoRng>(degree: usize, rng: &mut R) -> Self {
         let poly = KeyGenPoly::new(rng, degree);
-        let sk = PeerPrivateKey::generate(rng);
+        let sk = EphemeralEncryptionPrivateKey::generate(rng);
         Self { poly, sk }
     }
 
     /// Advances to the second round of key generation.
     ///
-    /// Consumes `self` and combines the secret material from round one with the public keys of all peers.
+    /// Consumes `self` and combines the secret material from round one with the public keys of all nodes.
     ///
     /// **Note:** do not reuse the toxic waste.
     ///
     /// # Arguments
     ///
-    /// * `peers` - A list of public keys for all peers involved in the key generation session.
+    /// * `pks` - A list of public keys for all nodes involved in the key generation session.
     ///
     /// # Returns
     ///
-    /// A `ToxicWasteRound2` instance containing the ephemeral private key and the peer public key list.
-    fn next(self, peers: PeerPublicKeyList) -> ToxicWasteRound2 {
-        ToxicWasteRound2 { peers, sk: self.sk }
+    /// A `ToxicWasteRound2` instance containing the ephemeral private key and the node public key list.
+    fn next(self, pks: Vec<EphemeralEncryptionPublicKey>) -> ToxicWasteRound2 {
+        ToxicWasteRound2 { pks, sk: self.sk }
     }
 }
 
@@ -159,7 +159,7 @@ impl DLogSecretGenService {
     /// This includes:
     /// * [`ToxicWasteRound1`]
     /// * [`ToxicWasteRound2`]
-    /// * Any finished shares that wait for finalize from all peers
+    /// * Any finished shares that wait for finalize from all nodes
     /// * The [`crate::services::oprf_key_material_store::OprfKeyMaterial`] in the [`OprfKeyMaterialStore`].
     pub(crate) fn delete_oprf_key_material(&mut self, oprf_key_id: OprfKeyId) {
         if self.toxic_waste_round1.remove(&oprf_key_id).is_some() {
@@ -211,32 +211,29 @@ impl DLogSecretGenService {
 
     /// Executes round 2 of the secret generation protocol.
     ///
-    /// Generates secret shares for all peers based on the polynomial generated in round 1 and a proof of the encryptions.
+    /// Generates secret shares for all nodes based on the polynomial generated in round 1 and a proof of the encryptions.
     ///
     /// Returns a [`SecretGenRound2Contribution`] containing ciphertexts for all parties + the proof.
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
-    /// * `peers` - List of public keys for peers participating in the protocol.
+    /// * `pks` - List of public keys for nodes participating in the protocol.
     pub(crate) fn round2(
         &mut self,
         oprf_key_id: OprfKeyId,
-        peers: PeerPublicKeyList,
+        pks: Vec<EphemeralEncryptionPublicKey>,
     ) -> eyre::Result<SecretGenRound2Contribution> {
         // check that degree is 1 and num_parties is 3
-        if peers.len() != 3 {
+        if pks.len() != 3 {
             eyre::bail!("only can do num_parties 3");
         }
         let toxic_waste_r1 = self
             .toxic_waste_round1
             .remove(&oprf_key_id)
             .expect("todo how to handle this");
-        let (contribution, toxix_waste_r2) = compute_keygen_proof_max_degree1_parties3(
-            &self.key_gen_material,
-            toxic_waste_r1,
-            peers,
-        )
-        .context("while computing proof for round2")?;
+        let (contribution, toxix_waste_r2) =
+            compute_keygen_proof_max_degree1_parties3(&self.key_gen_material, toxic_waste_r1, pks)
+                .context("while computing proof for round2")?;
         self.toxic_waste_round2.insert(oprf_key_id, toxix_waste_r2);
         Ok(SecretGenRound2Contribution {
             oprf_key_id,
@@ -297,12 +294,12 @@ impl DLogSecretGenService {
 
 /// Decrypts a key-generation ciphertext using the private key.
 ///
-/// Returns the share of the peer's polynomial or an error if decryption fails.
+/// Returns the share of the node's polynomial or an error if decryption fails.
 fn decrypt_key_gen_ciphertexts(
     ciphers: Vec<SecretGenCiphertext>,
     toxic_waste: ToxicWasteRound2,
 ) -> eyre::Result<DLogShareShamir> {
-    let ToxicWasteRound2 { peers, sk } = toxic_waste;
+    let ToxicWasteRound2 { pks, sk } = toxic_waste;
     // In some later version, we maybe need some meaningful way
     // to tell which party produced a wrong ciphertext. Currently,
     // we trust the smart-contract to verify the proof, therefore
@@ -321,9 +318,9 @@ fn decrypt_key_gen_ciphertexts(
                 cipher,
                 commitment,
             } = cipher;
-            let their_pk = peers[idx].inner();
+            let their_pk = pks[idx].inner();
             let share = keygen::decrypt_share(sk.inner(), their_pk, cipher, nonce)
-                .context("cannot decrypt share ciphertext from peer")?;
+                .context("cannot decrypt share ciphertext from node")?;
             // check commitment
             let is_commitment = (ark_babyjubjub::EdwardsAffine::generator() * share).into_affine();
             // This is actually not possible if Smart Contract verified proof
@@ -340,31 +337,30 @@ fn decrypt_key_gen_ciphertexts(
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
 ///
 /// ## Security Considerations
-/// This method expects that the parameter `peers` contains exactly three [`EphemeralEncryptionPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
+/// This method expects that the parameter `pks` contains exactly three [`EphemeralEncryptionPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
 ///
-/// If `peers.len()` != 3, the method panics.
-/// If `peers` were constructed without [`EphemeralEncryptionPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
+/// If `pks.len()` != 3, the method panics.
+/// If `pks` were constructed without [`EphemeralEncryptionPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
 ///
 /// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
 fn compute_keygen_proof_max_degree1_parties3(
     key_gen_material: &CircomGroth16Material,
     toxic_waste: ToxicWasteRound1,
-    peers: PeerPublicKeyList,
+    pks: Vec<EphemeralEncryptionPublicKey>,
 ) -> eyre::Result<(SecretGenCiphertexts, ToxicWasteRound2)> {
     // compute the nonces for every party
     assert_eq!(
-        peers.len(),
+        pks.len(),
         3,
-        "amount peers must be checked before calling this function"
+        "amount pks must be checked before calling this function"
     );
-    let pks = peers.clone().into_inner();
     let mut rng = rand::thread_rng();
     let nonces = (0..pks.len())
         .map(|_| ark_babyjubjub::Fq::rand(&mut rng))
         .collect_vec();
 
-    let pks = pks
-        .into_iter()
+    let flattened_pks = pks
+        .iter()
         .flat_map(|pk| {
             let p = pk.inner();
             [p.x.into(), p.y.into()]
@@ -385,7 +381,7 @@ fn compute_keygen_proof_max_degree1_parties3(
         vec![U256::from(toxic_waste.poly.degree())],
     );
     inputs.insert(String::from("my_sk"), vec![toxic_waste.sk.inner().into()]);
-    inputs.insert(String::from("pks"), pks);
+    inputs.insert(String::from("pks"), flattened_pks);
     inputs.insert(String::from("poly"), coeffs);
     inputs.insert(
         String::from("nonces"),
@@ -431,5 +427,5 @@ fn compute_keygen_proof_max_degree1_parties3(
     }
 
     let ciphers = SecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
-    Ok((ciphers, toxic_waste.next(peers)))
+    Ok((ciphers, toxic_waste.next(pks)))
 }

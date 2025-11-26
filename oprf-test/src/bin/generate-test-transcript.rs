@@ -29,7 +29,7 @@ fn main() {
 
     let _should_public_key = poly0.get_pk_share() + poly1.get_pk_share() + poly2.get_pk_share();
 
-    let peer_keys_flattened = [public_key0, public_key1, public_key2]
+    let flattened_pks = [public_key0, public_key1, public_key2]
         .into_iter()
         .flat_map(|p| [p.x.into(), p.y.into()])
         .collect_vec();
@@ -65,7 +65,7 @@ fn main() {
     let mut input0_json = HashMap::new();
     input0_json.insert("degree", vec![U256::from(degree)]);
     input0_json.insert("my_sk", vec![private_key0.into()]);
-    input0_json.insert("pks", peer_keys_flattened.clone());
+    input0_json.insert("pks", flattened_pks.clone());
     input0_json.insert("poly", coeffs0);
     input0_json.insert("nonces", nonces0.iter().map(|n| n.into()).collect_vec());
     let circom_input0 = serde_json::to_string_pretty(&input0_json).expect("can serialize");
@@ -73,7 +73,7 @@ fn main() {
     let mut input1_json = HashMap::new();
     input1_json.insert("degree", vec![U256::from(degree)]);
     input1_json.insert("my_sk", vec![private_key1.into()]);
-    input1_json.insert("pks", peer_keys_flattened.clone());
+    input1_json.insert("pks", flattened_pks.clone());
     input1_json.insert("poly", coeffs1);
     input1_json.insert("nonces", nonces1.iter().map(|n| n.into()).collect_vec());
     let circom_input1 = serde_json::to_string_pretty(&input1_json).expect("can serialize");
@@ -81,7 +81,7 @@ fn main() {
     let mut input2_json = HashMap::new();
     input2_json.insert("degree", vec![U256::from(degree)]);
     input2_json.insert("my_sk", vec![private_key2.into()]);
-    input2_json.insert("pks", peer_keys_flattened.clone());
+    input2_json.insert("pks", flattened_pks.clone());
     input2_json.insert("poly", coeffs2);
     input2_json.insert("nonces", nonces2.iter().map(|n| n.into()).collect_vec());
     let circom_input2 = serde_json::to_string_pretty(&input2_json).expect("can serialize");

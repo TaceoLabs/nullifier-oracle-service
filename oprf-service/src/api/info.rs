@@ -4,7 +4,7 @@
 //!
 //! - `/version` – returns the version string
 //! - `/wallet` – returns the wallet address
-//! - `/oprf_pub/{id}` – returns the [`oprf_types::crypto::OprfPublicKey`] associated with the [`OprfKeyId`] if the OPRF peer has the information stored.
+//! - `/oprf_pub/{id}` – returns the [`oprf_types::crypto::OprfPublicKey`] associated with the [`OprfKeyId`] if the OPRF node has the information stored.
 //!
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
 use alloy::primitives::Address;
@@ -42,7 +42,7 @@ async fn version() -> impl IntoResponse {
     (StatusCode::OK, crate::version_info())
 }
 
-/// Responds with the wallet address of the oprf peer
+/// Responds with the wallet address of the oprf node
 ///
 /// Returns `200 OK` with a string response.
 async fn wallet(wallet_address: Address) -> impl IntoResponse {

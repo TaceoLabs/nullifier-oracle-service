@@ -1,4 +1,4 @@
-//! Secret manager interface for OPRF peers.
+//! Secret manager interface for OPRF nodes.
 //!
 //! This module defines the [`SecretManager`] trait, which is used to
 //! persist and retrieve `OprfKeyMaterial`.

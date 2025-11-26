@@ -88,7 +88,7 @@ impl OprfKeyMaterialStore {
 
     /// Computes C = B * x_share and commitments to a random value k_share.
     ///
-    /// This generates the peer's partial contribution used in the DLogEqualityProof.
+    /// This generates the node's partial contribution used in the DLogEqualityProof.
     /// The provided [`ShareIdentifier`] identifies the used OPRF key and the epoch of the share.
     ///
     /// Returns an error if the OPRF key is unknown or the share for the epoch is not registered.

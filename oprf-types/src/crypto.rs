@@ -7,22 +7,21 @@
 //! Main types:
 //! * [`PartyId`]
 //! * [`EphemeralEncryptionPublicKey`]
-//! * [`PeerPublicKeyList`]
 //! * [`OprfPublicKey`]
 //! * [`SecretGenCommitment`]
 //! * [`SecretGenCiphertexts`] / [`SecretGenCiphertext`]
 
-use std::{fmt, ops::Index};
+use std::fmt;
 
 use ark_serde_compat::babyjubjub;
 use circom_types::{ark_bn254::Bn254, groth16::Proof};
 use serde::{Deserialize, Serialize};
 
-/// The party id of the OPRF-Peer.
+/// The party id of the OPRF node.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PartyId(pub u16);
 
-/// The ephemeral public key of an OPRF peer.
+/// The ephemeral public key of an OPRF node.
 ///
 /// Can only be constructed if on curve and on correct subgroup.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -33,14 +32,9 @@ pub struct EphemeralEncryptionPublicKey(
     ark_babyjubjub::EdwardsAffine,
 );
 
-/// A list of [`EphemeralEncryptionPublicKey`]s.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PeerPublicKeyList(Vec<EphemeralEncryptionPublicKey>);
-
 /// The OPRF public-key.
 ///
-/// Constructed by multiplying the BabyJubJub generator with the secret shared among the OPRF peers.
+/// Constructed by multiplying the BabyJubJub generator with the secret shared among the OPRF nodes.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct OprfPublicKey(
@@ -49,11 +43,11 @@ pub struct OprfPublicKey(
     ark_babyjubjub::EdwardsAffine,
 );
 
-/// The public contribution of one OPRF peer for the first round of the OPRF-nullifier generation protocol.
+/// The public contribution of one OPRF node for the first round of the OPRF-nullifier generation protocol.
 ///
 /// Contains the public commitments to the random share and the
 /// polynomial. Additionally, contains an ephemeral public key for this
-/// key-generation. Peers should use this public key to encrypt the ciphertexts
+/// key-generation. Nodes should use this public key to encrypt the ciphertexts
 /// for round2.
 ///
 /// See [Appendix B.2 of our design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf)
@@ -62,7 +56,7 @@ pub struct OprfPublicKey(
 pub struct SecretGenCommitment {
     #[serde(serialize_with = "babyjubjub::serialize_affine")]
     #[serde(deserialize_with = "babyjubjub::deserialize_affine")]
-    /// The commitment to the random value sampled by the peer.
+    /// The commitment to the random value sampled by the node.
     pub comm_share: ark_babyjubjub::EdwardsAffine,
     #[serde(serialize_with = "babyjubjub::serialize_fq")]
     #[serde(deserialize_with = "babyjubjub::deserialize_fq")]
@@ -72,20 +66,20 @@ pub struct SecretGenCommitment {
     pub eph_pub_key: EphemeralEncryptionPublicKey,
 }
 
-/// The public contribution of one OPRF peer for the second round of the OPRF-nullifier generation protocol.
+/// The public contribution of one OPRF node for the second round of the OPRF-nullifier generation protocol.
 ///
-/// Contains ciphertexts for all OPRF peers (including the peer itself) with the evaluations
-/// of the polynomial generated in the first round. The ciphertexts of the peers
+/// Contains ciphertexts for all OPRF nodes (including the node itself) with the evaluations
+/// of the polynomial generated in the first round. The ciphertexts of the nodes
 /// is sorted according to their respective party ID.  
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretGenCiphertexts {
     /// The proof that the ciphertexts were computed correctly
     pub proof: Proof<Bn254>,
-    /// All ciphers for peers (including peer itself).
+    /// All ciphers for nodes (including node itself).
     pub ciphers: Vec<SecretGenCiphertext>,
 }
 
-/// A ciphertext for an OPRF peer used in round 2 of the OPRF-nullifier generation protocol.
+/// A ciphertext for an OPRF node used in round 2 of the OPRF-nullifier generation protocol.
 ///
 /// Contains the [`EphemeralEncryptionPublicKey`] of the sender, the ciphertext itself, and a nonce.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,42 +174,6 @@ impl fmt::Display for EphemeralEncryptionPublicKey {
     }
 }
 
-impl From<Vec<EphemeralEncryptionPublicKey>> for PeerPublicKeyList {
-    fn from(value: Vec<EphemeralEncryptionPublicKey>) -> Self {
-        Self(value)
-    }
-}
-
-impl IntoIterator for PeerPublicKeyList {
-    type Item = EphemeralEncryptionPublicKey;
-    type IntoIter = std::vec::IntoIter<EphemeralEncryptionPublicKey>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-impl PeerPublicKeyList {
-    /// Creates a new public key list by wrapping a `Vec` of [`EphemeralEncryptionPublicKey`]s.
-    pub fn new(values: Vec<EphemeralEncryptionPublicKey>) -> Self {
-        Self::from(values)
-    }
-
-    /// Consumes this object and returns the inner value (`Vec<EphemeralEncryptionPublicKey>`).
-    pub fn into_inner(self) -> Vec<EphemeralEncryptionPublicKey> {
-        self.0
-    }
-
-    /// Returns the len of this list.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Returns `true` iff the list is empty.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
 impl SecretGenCiphertexts {
     /// Creates a new instance by wrapping the provided value.
     pub fn new(proof: Proof<Bn254>, ciphers: Vec<SecretGenCiphertext>) -> Self {
@@ -224,7 +182,7 @@ impl SecretGenCiphertexts {
 }
 
 impl SecretGenCiphertext {
-    /// Creates a new ciphertext contribution for an OPRF-Peer by wrapping a nonce, a ciphertext and a commitment to the plain text.
+    /// Creates a new ciphertext contribution for an OPRF node by wrapping a nonce, a ciphertext and a commitment to the plain text.
     pub fn new(
         cipher: ark_babyjubjub::Fq,
         commitment: ark_babyjubjub::EdwardsAffine,
@@ -253,13 +211,5 @@ impl From<u16> for PartyId {
 impl From<PartyId> for u16 {
     fn from(value: PartyId) -> Self {
         value.0
-    }
-}
-
-impl Index<usize> for PeerPublicKeyList {
-    type Output = EphemeralEncryptionPublicKey;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
     }
 }

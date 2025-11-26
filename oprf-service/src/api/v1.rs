@@ -1,6 +1,6 @@
 //! Version 1 (v1) API Routes
 //!
-//! This module defines the v1 API routes for the OPRF peer service.
+//! This module defines the v1 API routes for the OPRF node service.
 //! Currently, all endpoints are unauthenticated.
 //! # Endpoints
 //!

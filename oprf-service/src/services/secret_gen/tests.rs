@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use ark_ec::{CurveGroup as _, PrimeGroup};
 use groth16_material::circom::{CircomGroth16Material, CircomGroth16MaterialBuilder, Validate};
 use itertools::Itertools;
-use oprf_types::crypto::{EphemeralEncryptionPublicKey, PeerPublicKeyList, SecretGenCiphertexts};
+use oprf_types::crypto::{EphemeralEncryptionPublicKey, SecretGenCiphertexts};
 use rand::Rng;
 
 use super::*;
@@ -26,17 +26,17 @@ fn build_public_inputs(
     degree: u16,
     pk: EphemeralEncryptionPublicKey,
     contribution: &SecretGenCiphertexts,
-    peer_keys_flattened: &[ark_bn254::Fr],
+    flattened_pks: &[ark_bn254::Fr],
     commitments: SecretGenCommitment,
 ) -> Vec<ark_babyjubjub::Fq> {
     // public input is:
     // 1) PublicKey from sender (Affine Point Babyjubjub)
     // 2) Commitment to share (Affine Point Babyjubjub)
     // 3) Commitment to coeffs (Basefield Babyjubjub)
-    // 4) Ciphertexts for peers (in this case 3 Basefield BabyJubJub)
+    // 4) Ciphertexts for nodes (in this case 3 Basefield BabyJubJub)
     // 5) Commitments to plaintexts (in this case 3 Affine Points BabyJubJub)
     // 6) Degree (Basefield BabyJubJub)
-    // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
+    // 7) Public Keys from nodes (in this case 3 Affine Points BabyJubJub)
     // 8) Nonces (in this case 3 Basefield BabyJubJub)
     let mut ciphers = Vec::with_capacity(3);
     let mut comm_ciphers = Vec::with_capacity(3);
@@ -56,7 +56,7 @@ fn build_public_inputs(
     public_inputs.extend(ciphers);
     public_inputs.extend(comm_ciphers);
     public_inputs.push(ark_babyjubjub::Fq::from(degree));
-    public_inputs.extend(peer_keys_flattened.iter());
+    public_inputs.extend(flattened_pks.iter());
     public_inputs.extend(nonces);
     public_inputs
 }
@@ -100,52 +100,51 @@ async fn test_secret_gen() -> eyre::Result<()> {
         |acc, contribution| (acc + contribution.comm_share).into_affine(),
     );
 
-    let peers = PeerPublicKeyList::from(vec![
+    let pks = [
         dlog_secret_gen0_round1.contribution.eph_pub_key,
         dlog_secret_gen1_round1.contribution.eph_pub_key,
         dlog_secret_gen2_round1.contribution.eph_pub_key,
-    ]);
-    let peer_keys_flattened = peers
-        .clone()
+    ];
+    let flattened_pks = pks
         .into_iter()
         .flat_map(|p| [p.inner().x, p.inner().y])
         .collect_vec();
 
     let dlog_secret_gen0_round2 = dlog_secret_gen0
-        .round2(oprf_key_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen1_round2 = dlog_secret_gen1
-        .round2(oprf_key_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen2_round2 = dlog_secret_gen2
-        .round2(oprf_key_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
 
     assert_eq!(dlog_secret_gen0_round2.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen1_round2.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen2_round2.oprf_key_id, oprf_key_id);
-    let peer_keys = peers.clone().into_inner();
+    let [pk0, pk1, pk2] = pks;
     // verify the proofs
     // build public inputs for proof0
     let public_inputs0 = build_public_inputs(
         threshold - 1,
-        peer_keys[0],
+        pk0,
         &dlog_secret_gen0_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments0,
     );
     let public_inputs1 = build_public_inputs(
         threshold - 1,
-        peer_keys[1],
+        pk1,
         &dlog_secret_gen1_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments1,
     );
     let public_inputs2 = build_public_inputs(
         threshold - 1,
-        peer_keys[2],
+        pk2,
         &dlog_secret_gen2_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments2,
     );
     let proof0 = dlog_secret_gen0_round2.contribution.proof;

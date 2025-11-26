@@ -20,7 +20,7 @@ use crate::{
 pub(crate) mod auth;
 pub mod config;
 
-/// Main entry point for an OPRF peer.
+/// Main entry point for an OPRF node.
 ///
 /// This function initializes and starts the OPRF service, including its various components, and
 /// gracefully handles shutdown signals. The service performs the following tasks:

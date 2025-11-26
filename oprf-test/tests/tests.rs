@@ -55,7 +55,7 @@ async fn world_nullifier_e2e_test() -> eyre::Result<()> {
     )
     .await?;
 
-    println!("Starting OPRF peers...");
+    println!("Starting OPRF nodes...");
     let oprf_services = oprf_test::start_world_services(
         &host_ws_url,
         oprf_test::create_secret_managers(),
@@ -233,7 +233,7 @@ async fn example_nullifier_e2e_test() -> eyre::Result<()> {
         TACEO_ADMIN_PRIVATE_KEY,
     );
 
-    println!("Starting OPRF peers...");
+    println!("Starting OPRF nodes...");
     let oprf_services = oprf_test::start_example_services(
         &host_ws_url,
         oprf_test::create_secret_managers(),
@@ -319,7 +319,7 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     );
 
     let secret_managers = oprf_test::create_secret_managers();
-    println!("Starting OPRF peers...");
+    println!("Starting OPRF nodes...");
     let oprf_services = oprf_test::start_world_services(
         &host_ws_url,
         secret_managers.clone(),

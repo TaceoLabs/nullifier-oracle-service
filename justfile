@@ -133,7 +133,7 @@ run-setup-world:
     echo "starting indexer..."
     REGISTRY_ADDRESS=$account_registry docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d postgres world-id-indexer
     echo "starting OPRF services..."
-    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services-world
+    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_NODE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services-world
     echo "stopping containers..."
     docker compose -f ./oprf-service-world/deploy/docker-compose.yml down
 
@@ -152,7 +152,7 @@ run-setup-example:
     echo "register oprf-nodes..."
     OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
     echo "starting OPRF services..."
-    OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-services-example
+    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-services-example
     echo "stopping containers..."
     docker compose -f ./oprf-service-example/deploy/docker-compose.yml down 
 
@@ -165,7 +165,7 @@ run-oprf-key-registry-and-services-world account_registry:
     address=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/oprf_key_registry.log)
     sleep 1
     echo "starting OPRF services..."
-    OPRF_SERVICE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services-world
+    OPRF_NODE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services-world
 
 [group('dev-client')]
 run-dev-client *args:

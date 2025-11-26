@@ -1,6 +1,6 @@
 //! Health Check Endpoints
 //!
-//! This module defines the health endpoint for the OPRF peer API.
+//! This module defines the health endpoint for the OPRF node API.
 //! These endpoints provide simple HTTP status responses to indicate the service's status.
 //!
 //! - `/health` – general health check

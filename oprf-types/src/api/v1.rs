@@ -53,7 +53,7 @@ pub struct OprfResponse {
     pub request_id: Uuid,
     /// Server’s partial commitments for the discrete log equality proof.
     pub commitments: PartialDLogCommitmentsShamir,
-    /// The party ID of the peer
+    /// The party ID of the node
     pub party_id: PartyId,
 }
 

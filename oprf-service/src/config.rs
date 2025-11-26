@@ -1,6 +1,6 @@
 //! Configuration types and CLI/environment parsing for TACEO:Oprf.
 //!
-//! Concrete implementations may have a more detailed config and can use the exposed [`OprfPeerConfig`] and flatten it with `#[clap(flatten)]`.
+//! Concrete implementations may have a more detailed config and can use the exposed [`OprfNodeConfig`] and flatten it with `#[clap(flatten)]`.
 //!
 //! Additionally this module defines the [`Environment`] to assert dev-only code.
 
@@ -35,15 +35,15 @@ impl Environment {
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]
-pub struct OprfPeerConfig {
+pub struct OprfNodeConfig {
     /// The environment of OPRF-service (either `prod` or `dev`).
-    #[clap(long, env = "OPRF_SERVICE_ENVIRONMENT", default_value = "prod")]
+    #[clap(long, env = "OPRF_NODE_ENVIRONMENT", default_value = "prod")]
     pub environment: Environment,
 
     /// Max time a request is valid, after that it is automatically cancelled and will be cleaned up.
     #[clap(
         long,
-        env = "OPRF_SERVICE_REQUEST_LIFETIME",
+        env = "OPRF_NODE_REQUEST_LIFETIME",
         default_value="5min",
         value_parser = humantime::parse_duration
     )]
@@ -55,42 +55,38 @@ pub struct OprfPeerConfig {
     /// old sessions, not the validity of a session.
     #[clap(
         long,
-        env = "OPRF_SERVICE_SESSION_CLEANUP_INTERVAL",
+        env = "OPRF_NODE_SESSION_CLEANUP_INTERVAL",
         default_value="5min",
         value_parser = humantime::parse_duration
     )]
     pub session_cleanup_interval: Duration,
 
     /// The Address of the OprfKeyRegistry contract.
-    #[clap(long, env = "OPRF_SERVICE_OPRF_KEY_REGISTRY_CONTRACT")]
+    #[clap(long, env = "OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT")]
     pub oprf_key_registry_contract: Address,
 
     /// The websocket rpc url of the chain
     #[clap(
         long,
-        env = "OPRF_SERVICE_CHAIN_WS_RPC_URL",
+        env = "OPRF_NODE_CHAIN_WS_RPC_URL",
         default_value = "ws://127.0.0.1:8545"
     )]
     pub chain_ws_rpc_url: SecretString,
 
     /// Prefix for secret name to store rp secrets in secret-manager.
     /// The implementation will call `format!("{rp_secret_id_prefix}/{rp_id}")`
-    #[clap(
-        long,
-        env = "OPRF_SERVICE_RP_SECRET_ID_PREFIX",
-        default_value = "oprf/rp"
-    )]
+    #[clap(long, env = "OPRF_NODE_RP_SECRET_ID_PREFIX", default_value = "oprf/rp")]
     pub rp_secret_id_prefix: String,
 
     /// Secret Id of the wallet private key.
-    #[clap(long, env = "OPRF_SERVICE_WALLET_PRIVATE_KEY_SECRET_ID")]
+    #[clap(long, env = "OPRF_NODE_WALLET_PRIVATE_KEY_SECRET_ID")]
     pub wallet_private_key_secret_id: String,
 
     /// The location of the zkey for the key-gen proof in round 2 of KeyGen
-    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_ZKEY")]
+    #[clap(long, env = "OPRF_NODE_KEY_GEN_ZKEY")]
     pub key_gen_zkey_path: PathBuf,
 
     /// The location of the graph binary for the key-gen witness extension
-    #[clap(long, env = "OPRF_SERVICE_KEY_GEN_GRAPH")]
+    #[clap(long, env = "OPRF_NODE_KEY_GEN_GRAPH")]
     pub key_gen_witness_graph_path: PathBuf,
 }

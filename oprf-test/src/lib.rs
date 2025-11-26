@@ -62,7 +62,7 @@ async fn start_world_service(
         current_time_stamp_max_difference: Duration::from_secs(10),
         signature_history_cleanup_interval: Duration::from_secs(30),
         account_registry_contract,
-        service_config: oprf_service::config::OprfPeerConfig {
+        service_config: oprf_service::config::OprfNodeConfig {
             environment: oprf_service::config::Environment::Dev,
             request_lifetime: Duration::from_secs(5 * 60),
             session_cleanup_interval: Duration::from_micros(1000000),
@@ -102,10 +102,10 @@ async fn start_example_service(
 ) -> String {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let url = format!("http://localhost:1{id:04}"); // set port based on id, e.g. 10001 for id 1
-    let config = oprf_service_example::config::ExampleOprfPeerConfig {
+    let config = oprf_service_example::config::ExampleOprfNodeConfig {
         bind_addr: format!("0.0.0.0:1{id:04}").parse().unwrap(),
         max_wait_time_shutdown: Duration::from_secs(10),
-        service_config: oprf_service::config::OprfPeerConfig {
+        service_config: oprf_service::config::OprfNodeConfig {
             environment: oprf_service::config::Environment::Dev,
             request_lifetime: Duration::from_secs(5 * 60),
             session_cleanup_interval: Duration::from_micros(1000000),

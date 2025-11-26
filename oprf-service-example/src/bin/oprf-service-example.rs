@@ -1,6 +1,6 @@
 //! OPRF Service Binary
 //!
-//! This is the main entry point for the OPRF peer service.
+//! This is the main entry point for the OPRF node service.
 //! It initializes tracing, metrics, and starts the service with configuration
 //! from command-line arguments or environment variables.
 
@@ -8,7 +8,7 @@ use std::{process::ExitCode, sync::Arc};
 
 use clap::Parser;
 use oprf_service::{config::Environment, secret_manager::aws::AwsSecretManager};
-use oprf_service_example::config::ExampleOprfPeerConfig;
+use oprf_service_example::config::ExampleOprfNodeConfig;
 
 #[tokio::main]
 async fn main() -> eyre::Result<ExitCode> {
@@ -21,7 +21,7 @@ async fn main() -> eyre::Result<ExitCode> {
 
     tracing::info!("{}", oprf_service::version_info());
 
-    let config = ExampleOprfPeerConfig::parse();
+    let config = ExampleOprfNodeConfig::parse();
 
     let aws_config = match config.service_config.environment {
         Environment::Prod => aws_config::load_from_env().await,

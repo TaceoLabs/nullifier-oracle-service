@@ -3,14 +3,14 @@
 //! This example project shall help projects incorporate at TACEO:Oprf. Explain in detail what implementations need to do to build their flavor.
 use std::sync::Arc;
 
-use crate::{auth::ExampleOprfReqAuthenticator, config::ExampleOprfPeerConfig};
+use crate::{auth::ExampleOprfReqAuthenticator, config::ExampleOprfNodeConfig};
 use oprf_service::secret_manager::SecretManagerService;
 
 pub(crate) mod auth;
 pub mod config;
 
 pub async fn start(
-    config: ExampleOprfPeerConfig,
+    config: ExampleOprfNodeConfig,
     secret_manager: SecretManagerService,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> eyre::Result<()> {

@@ -7,10 +7,10 @@ use serde::{Serialize, de::DeserializeOwned};
 use tokio::task::JoinSet;
 use tracing::instrument;
 
-/// Holds information about active OPRF sessions with multiple peers.
+/// Holds information about active OPRF sessions with multiple nodes.
 ///
-/// Tracks the peer services, their party IDs, and the partial DLog equality
-/// commitments received from each peer.
+/// Tracks the node services, their party IDs, and the partial DLog equality
+/// commitments received from each node.
 pub struct OprfSessions {
     pub(super) services: Vec<String>,
     pub(super) party_ids: Vec<PartyId>,
@@ -28,7 +28,7 @@ impl OprfSessions {
         }
     }
 
-    /// Adds a peer's response to the sessions.
+    /// Adds a node's response to the sessions.
     fn push(&mut self, service: String, response: OprfResponse) {
         self.services.push(service);
         self.party_ids.push(response.party_id);
@@ -41,9 +41,9 @@ impl OprfSessions {
     }
 }
 
-/// Sends an `init` request to one OPRF peer.
+/// Sends an `init` request to one OPRF node.
 ///
-/// Returns the peer's URL alongside the parsed [`OprfResponse`].
+/// Returns the node's URL alongside the parsed [`OprfResponse`].
 #[instrument(level = "trace", skip(client, req))]
 async fn oprf_request<T: Clone + Serialize + DeserializeOwned>(
     client: reqwest::Client,
@@ -86,12 +86,12 @@ async fn oprf_challenge(
 }
 
 /// Completes all OPRF sessions in parallel by calling `/api/v1/finish`
-/// on every peer in the [`OprfSessions`].
+/// on every node in the [`OprfSessions`].
 ///
 /// **Important:**  
 /// - These must be the *same parties* that were used during the initial
 ///   `init_sessions` call.
-/// - The order of the peers matters: we return responses in the order provided and they need
+/// - The order of the nodes matters: we return responses in the order provided and they need
 ///   to match the original session list. This is crucial because Lagrange coefficients are
 ///   computed in the meantime, and they need to match the shares obtained earlier.
 ///
@@ -112,10 +112,10 @@ pub async fn finish_sessions(
 }
 
 /// Initializes new OPRF sessions by calling `/api/v1/init`
-/// on a list of peers, collecting responses until the
+/// on a list of nodes, collecting responses until the
 /// given `threshold` is met.
 ///
-/// Peers are queried concurrently. Errors from some services
+/// Nodes are queried concurrently. Errors from some services
 /// are logged and ignored, unless they prevent reaching the threshold.
 ///
 /// Returns an [`OprfSessions`] ready to be finalized with [`finish_sessions`].
