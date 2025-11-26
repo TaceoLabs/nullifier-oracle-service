@@ -98,20 +98,20 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                 rp_id,
                 contribution,
             }) => {
-                let pending_tx = contract
+                let receipt = contract
                     .addRound1Contribution(rp_id.into_inner(), contribution.into())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
-                    .register()
+                    .get_receipt()
                     .await
                     .context("while registering watcher for transaction")?;
-                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
-                    .await
-                    .context("while waiting for receipt")?;
                 if receipt.status() {
-                    tracing::info!("round 1 done with transaction hash: {tx_hash}",);
+                    tracing::info!(
+                        "round 1 done with transaction hash: {}",
+                        receipt.transaction_hash
+                    );
                 } else {
                     eyre::bail!("cannot finish transaction: {receipt:?}");
                 }
@@ -120,39 +120,39 @@ impl KeyGenEventListener for AlloyKeyGenWatcher {
                 rp_id,
                 contribution,
             }) => {
-                let pending_tx = contract
+                let receipt = contract
                     .addRound2Contribution(rp_id.into_inner(), contribution.into())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
-                    .register()
+                    .get_receipt()
                     .await
                     .context("while registering watcher for transaction")?;
-                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
-                    .await
-                    .context("while waiting for receipt")?;
                 if receipt.status() {
-                    tracing::info!("round 2 done with transaction hash: {tx_hash}",);
+                    tracing::info!(
+                        "round 2 done with transaction hash: {}",
+                        receipt.transaction_hash
+                    );
                 } else {
                     eyre::bail!("cannot finish transaction: {receipt:?}");
                 }
             }
             ChainEventResult::SecretGenRound3(SecretGenRound3Contribution { rp_id }) => {
-                let pending_tx = contract
+                let receipt = contract
                     .addRound3Contribution(rp_id.into_inner())
                     .gas(10000000) // FIXME this is only for dummy smart contract
                     .send()
                     .await
                     .context("while broadcasting to network")?
-                    .register()
+                    .get_receipt()
                     .await
                     .context("while registering watcher for transaction")?;
-                let (receipt, tx_hash) = watch_receipt(self.provider.clone(), pending_tx)
-                    .await
-                    .context("while waiting for receipt")?;
                 if receipt.status() {
-                    tracing::info!("round3 done with transaction hash: {tx_hash}",);
+                    tracing::info!(
+                        "round3 done with transaction hash: {}",
+                        receipt.transaction_hash
+                    );
                 } else {
                     eyre::bail!("cannot finish transaction: {receipt:?}");
                 }
