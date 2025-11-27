@@ -19,7 +19,7 @@ type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 /// The opened session. Thin wrapper around tungstenite web-socket stream.
 ///
-/// When [`send`] or [`read`] returns an error, the implementation will try to send a `Close` frame. You don't need to do that at callsite.
+/// When [`WebSocketSession::send`] or [`WebSocketSession::read`] returns an error, the implementation will try to send a `Close` frame. You don't need to do that at callsite.
 pub(crate) struct WebSocketSession {
     inner: WebSocket,
 }
