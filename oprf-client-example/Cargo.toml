@@ -1,5 +1,5 @@
 [package]
-name = "oprf-example-client"
+name = "oprf-client-example"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,6 @@ publish.workspace = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
-ark-ff = { workspace = true }
 oprf-client = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }

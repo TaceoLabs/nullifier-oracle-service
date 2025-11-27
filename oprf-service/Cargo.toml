@@ -24,7 +24,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
-groth16-material = { workspace = true }
+groth16-material = { workspace = true, features = ["circom"] }
 http = { workspace = true }
 humantime.workspace = true
 itertools = { workspace = true }

@@ -74,27 +74,7 @@ lint:
     cd contracts && forge fmt
 
 [group('local-setup')]
-run-services-world:
-    #!/usr/bin/env bash
-    mkdir -p logs
-    cargo build --workspace --release
-    # anvil wallet 7
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service0.log 2>&1 &
-    pid0=$!
-    echo "started service0 with PID $pid0"
-    # anvil wallet 8
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service1.log 2>&1 &
-    pid1=$!
-    echo "started service1 with PID $pid1"
-    # anvil wallet 9
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-world --user-verification-key-path ./circom/main/query/OPRFQuery.vk.json --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service2.log 2>&1  &
-    pid2=$!
-    echo "started service2 with PID $pid2"
-    trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
-    wait $pid0 $pid1 $pid2
-
-[group('local-setup')]
-run-services-example:
+run-nodes:
     #!/usr/bin/env bash
     mkdir -p logs
     cargo build --workspace --release
@@ -114,35 +94,11 @@ run-services-example:
     wait $pid0 $pid1 $pid2
 
 [group('local-setup')]
-run-setup-world:
+run-setup:
     #!/usr/bin/env bash
     mkdir -p logs
     echo "starting localstack and anvil"
-    docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d localstack anvil
-    sleep 1
-    echo "preparing localstack"
-    just prepare-localstack-secrets
-    echo "starting AccountRegistry contract..."
-    just deploy-account-registry-anvil | tee logs/deploy_account_registry.log
-    account_registry=$(grep -oP 'AccountRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_account_registry.log)
-    echo "starting OprfKeyRegistry contract.."
-    just deploy-oprf-key-registry-with-deps-anvil | tee logs/deploy_oprf_key_registry.log
-    oprf_key_registry=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_oprf_key_registry.log)
-    echo "register oprf-nodes..."
-    OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
-    echo "starting indexer..."
-    REGISTRY_ADDRESS=$account_registry docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d postgres world-id-indexer
-    echo "starting OPRF services..."
-    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry OPRF_NODE_ACCOUNT_REGISTRY_CONTRACT=$account_registry just run-services-world
-    echo "stopping containers..."
-    docker compose -f ./oprf-service-world/deploy/docker-compose.yml down
-
-[group('local-setup')]
-run-setup-example:
-    #!/usr/bin/env bash
-    mkdir -p logs
-    echo "starting localstack and anvil"
-    docker compose -f ./oprf-service-world/deploy/docker-compose.yml up -d localstack anvil
+    docker compose -f ./oprf-service-example/deploy/docker-compose.yml up -d localstack anvil
     sleep 1
     echo "preparing localstack"
     just prepare-localstack-secrets
@@ -155,17 +111,6 @@ run-setup-example:
     OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-services-example
     echo "stopping containers..."
     docker compose -f ./oprf-service-example/deploy/docker-compose.yml down 
-
-[group('local-setup')]
-run-oprf-key-registry-and-services-world account_registry:
-    #!/usr/bin/env bash
-    mkdir -p logs
-    echo "starting OprfKeyRegistry contract.."
-    just deploy-oprf-key-registry-with-deps-anvil | tee logs/oprf_key_registry.log
-    address=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/oprf_key_registry.log)
-    sleep 1
-    echo "starting OPRF services..."
-    OPRF_NODE_ACCOUNT_REGISTRY_CONTRACT={{ account_registry }} OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$address just run-services-world
 
 [group('dev-client')]
 run-dev-client *args:
@@ -201,16 +146,6 @@ deploy-oprf-key-registry *args:
     forge script OprfKeyRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
 
 [group('deploy')]
-[working-directory('contracts/script/test')]
-deploy-account-registry-dry-run *args:
-    forge script AccountRegistry.s.sol -vvvvv {{ args }}
-
-[group('deploy')]
-[working-directory('contracts/script/test')]
-deploy-account-registry *args:
-    forge script AccountRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
-
-[group('deploy')]
 [working-directory('contracts/script/deploy')]
 register-participants *args:
     forge script RegisterParticipants.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
@@ -219,16 +154,6 @@ register-participants *args:
 [working-directory('contracts/script/deploy')]
 register-participants-dry-run *args:
     forge script RegisterParticipants.s.sol -vvvvv {{ args }}
-
-[group('deploy')]
-[working-directory('contracts/script/test')]
-create-account-auth-tree *args:
-    forge script CreateAccount.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
-
-[group('deploy')]
-[working-directory('contracts/script/test')]
-create-account-auth-tree-dry-run *args:
-    forge script CreateAccount.s.sol -vvvvv {{ args }}
 
 [group('deploy')]
 [working-directory('contracts/script')]
@@ -261,11 +186,6 @@ deploy-oprf-key-registry-anvil:
     TACEO_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 forge script OprfKeyRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 [group('anvil')]
-[working-directory('contracts/script/test')]
-deploy-account-registry-anvil:
-    forge script AccountRegistry.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
-[group('anvil')]
 [working-directory('contracts/script/deploy')]
 register-participants-anvil:
     ALICE_ADDRESS=0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 BOB_ADDRESS=0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f CAROL_ADDRESS=0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 forge script RegisterParticipants.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -280,15 +200,6 @@ revoke-key-gen-admin-anvil:
 register-key-gen-admin-anvil:
     forge script RegisterKeyGenAdmin.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-[group('anvil')]
-[working-directory('contracts/script/test')]
-create-account-auth-tree-anvil:
-    ACCOUNT_REGISTRY=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 forge script CreateAccount.s.sol --broadcast --fork-url http://127.0.0.1:8545 -vvvvv --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-
 [group('docker')]
 build-push-docker-image-oprf-service-amd TAG:
-    docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service:{{ TAG }}-amd64 -f build/Dockerfile.oprf-service .
-
-[group('docker')]
-build-push-docker-image-key-gen-amd TAG:
-    docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/key-gen:{{ TAG }}-amd64 -f build/Dockerfile.key-gen .
+    docker buildx build --build-arg GIT_HASH=$(git rev-parse HEAD) --platform linux/amd64 --push -t 651706750785.dkr.ecr.eu-central-1.amazonaws.com/nullifier-oracle-service/oprf-service-example:{{ TAG }}-amd64 -f build/Dockerfile.oprf-service-example .
