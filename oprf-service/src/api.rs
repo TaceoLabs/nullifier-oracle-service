@@ -7,12 +7,13 @@
 //! - [`info`] – Info about the service (`/version` and `/wallet`).
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
+use crate::{OprfReqAuthService, OprfReqError, oprf_key_material_store::OprfKeyMaterialStore};
 use alloy::primitives::Address;
-use axum::{Router, response::IntoResponse};
+use axum::Router;
+use oprf_types::crypto::PartyId;
 use serde::{Serialize, de::DeserializeOwned};
+use std::time::Duration;
 use tower_http::trace::TraceLayer;
-
-use crate::{OprfReqAuthService, services::oprf::OprfService};
 
 pub(crate) mod errors;
 pub(crate) mod health;
@@ -23,7 +24,7 @@ pub(crate) mod v1;
 ///
 /// This function sets up:
 ///
-/// - The `/api/v1` endpoints from [`v1`].
+/// - The `/api/v1/oprf` endpoint from [`v1`].
 /// - The health and readiness endpoints from [`health`].
 /// - General info about the deployment from [`info`].
 /// - An HTTP trace layer via [`TraceLayer`].
@@ -31,18 +32,27 @@ pub(crate) mod v1;
 /// The returned [`Router`] can be incorporated into another router or be served directly by axum. Implementations don't need to configure anything in their `State`, the service is inlined as [`Extension`](https://docs.rs/axum/latest/axum/struct.Extension.html).
 pub fn routes<
     ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    ReqAuthError: IntoResponse + Send + Sync + 'static,
+    ReqAuthError: OprfReqError,
 >(
-    oprf_service: OprfService,
+    party_id: PartyId,
+    oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
     wallet_address: Address,
+    max_message_size: usize,
+    max_connection_lifetime: Duration,
 ) -> Router {
     Router::new()
         .nest(
             "/api/v1",
-            v1::routes(oprf_service.clone(), req_auth_service),
+            v1::routes(
+                party_id,
+                oprf_material_store.clone(),
+                req_auth_service.clone(),
+                max_message_size,
+                max_connection_lifetime,
+            ),
         )
         .merge(health::routes())
-        .merge(info::routes(oprf_service.clone(), wallet_address))
+        .merge(info::routes(oprf_material_store.clone(), wallet_address))
         .layer(TraceLayer::new_for_http())
 }

@@ -8,15 +8,16 @@ use oprf_core::{
     oprf::BlindedOprfRequest,
 };
 use oprf_types::{
-    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, ShareIdentifier},
+    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest},
     crypto::OprfPublicKey,
 };
-use reqwest::StatusCode;
 use serde::{Serialize, de::DeserializeOwned};
+use tokio_tungstenite::tungstenite;
 use tracing::instrument;
 use uuid::Uuid;
 
 mod sessions;
+mod ws;
 pub use sessions::OprfSessions;
 pub use sessions::finish_sessions;
 pub use sessions::init_sessions;
@@ -24,17 +25,12 @@ pub use sessions::init_sessions;
 /// Errors returned by the distributed OPRF protocol.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// API error returned by the OPRF service.
-    #[error("API error {status}: {message}")]
-    ApiError {
-        /// the HTTP status code
-        status: StatusCode,
-        /// the error message
-        message: String,
-    },
-    /// HTTP or network errors from OPRF service requests.
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
+    /// The server send an unexpected message (either message type or a frame that is not `Binary`/`Close`).
+    #[error("Unexpected msg")]
+    UnexpectedMsg,
+    /// Server did close the connection.
+    #[error("Endpoint closed connection")]
+    Eof,
     /// Not enough OPRF responses received to satisfy the required threshold.
     #[error("expected degree {threshold} responses, got {n}")]
     NotEnoughOprfResponses {
@@ -46,6 +42,9 @@ pub enum Error {
     /// The DLog equality proof failed verification.
     #[error("DLog proof could not be verified")]
     InvalidDLogProof,
+    /// Wrapping inner tungstenite error
+    #[error(transparent)]
+    WsError(#[from] tungstenite::Error),
 }
 
 /// Executes the distributed OPRF protocol.
@@ -75,19 +74,17 @@ pub async fn distributed_oprf<Auth>(
 where
     Auth: Send + Sync + Clone + Serialize + DeserializeOwned + 'static,
 {
-    let share_identifier = req.share_identifier;
     // Init the sessions at the services
     tracing::debug!("initializing sessions at {} services", services.len());
-    let reqwest_client = reqwest::Client::new();
-    let sessions = sessions::init_sessions(&reqwest_client, services, threshold, req).await?;
+    let sessions = sessions::init_sessions(services, threshold, req).await?;
 
     tracing::debug!("compute the challenges for the services..");
-    let challenge_request = generate_challenge_request(request_id, share_identifier, &sessions);
+    let challenge_request = generate_challenge_request(&sessions);
     // Extract the DLog challenge for later use
     let challenge = challenge_request.challenge.clone();
 
     tracing::debug!("finishing the sessions at the remaining services..");
-    let responses = sessions::finish_sessions(&reqwest_client, sessions, challenge_request).await?;
+    let responses = sessions::finish_sessions(sessions, challenge_request).await?;
 
     // verify the DLog Equality Proof
     let dlog_proof = verify_dlog_equality(
@@ -137,11 +134,7 @@ pub fn verify_dlog_equality(
 
 /// Generates the [`ChallengeRequest`] for the OPRF peers used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
 #[instrument(level = "debug", skip(sessions))]
-pub fn generate_challenge_request(
-    request_id: Uuid,
-    share_identifier: ShareIdentifier,
-    sessions: &OprfSessions,
-) -> ChallengeRequest {
+pub fn generate_challenge_request(sessions: &OprfSessions) -> ChallengeRequest {
     let contributing_parties = sessions
         .party_ids
         .iter()
@@ -150,9 +143,5 @@ pub fn generate_challenge_request(
     // Combine commitments from all sessions and create a single challenge
     let challenge =
         DLogCommitmentsShamir::combine_commitments(&sessions.commitments, contributing_parties);
-    ChallengeRequest {
-        request_id,
-        challenge,
-        share_identifier,
-    }
+    ChallengeRequest { challenge }
 }

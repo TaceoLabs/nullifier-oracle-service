@@ -1,52 +1,61 @@
-//! Conversions are provided from service-level errors like [`OprfServiceError`] into
-//! API errors, ensuring consistent HTTP responses.
-//!
-//! All errors implement [`IntoResponse`] so they can be directly returned from Axum
-//! handlers.
+//! This module defines the [`Error`] the websocket connection may encounter during a OPRF request. It further provides a method to transform the encountered errors into a close frame if necessary.
 
-use axum::{http::StatusCode, response::IntoResponse};
-use uuid::Uuid;
+use crate::services::oprf_key_material_store::OprfKeyMaterialStoreError;
+use axum::extract::ws::{CloseFrame, close_code};
+use oprf_types::api::v1::oprf_error_codes;
 
-use crate::services::{oprf::OprfServiceError, oprf_key_material_store::OprfKeyMaterialStoreError};
+/// All errors that may occur during an OPRF request.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("Connection closed by peer")]
+    ConnectionClosed,
+    #[error(transparent)]
+    Axum(#[from] axum::Error),
+    #[error("unexpected message")]
+    UnexpectedMessage,
+    #[error("cannot authenticate: {0}")]
+    Auth(String),
+    #[error("bad request: {0}")]
+    BadRequest(String),
+}
 
-impl IntoResponse for OprfServiceError {
-    fn into_response(self) -> axum::response::Response {
+impl Error {
+    /// Transforms the error into a [`CloseFrame`](https://docs.rs/axum/latest/axum/extract/ws/struct.CloseFrame.html) if necessary.
+    pub(crate) fn into_close_frame(self) -> Option<CloseFrame> {
+        tracing::debug!("{self:?}");
         match self {
-            OprfServiceError::BlindedQueryIsIdentity => (
-                StatusCode::BAD_REQUEST,
-                "blinded query not allowed to be identity",
-            )
-                .into_response(),
-            OprfServiceError::UnknownRequestId(id) => {
-                (StatusCode::NOT_FOUND, format!("unknown request id: {id}")).into_response()
+            Error::ConnectionClosed => {
+                // nothing to do here
+                None
             }
-            OprfServiceError::OprfKeyMaterialStoreError(err) => err.into_response(),
-            OprfServiceError::InternalServerError(err) => {
-                let error_id = Uuid::new_v4();
-                tracing::error!("{error_id} - {err:?}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("An internal server error has occurred. Error ID={error_id}"),
-                )
-                    .into_response()
-            }
+            Error::Axum(_) => Some(CloseFrame {
+                code: close_code::ERROR,
+                reason: "unexpected error".into(),
+            }),
+            Error::UnexpectedMessage => Some(CloseFrame {
+                code: close_code::UNSUPPORTED,
+                reason: "only text or binary".into(),
+            }),
+            err @ Error::Auth(_) => Some(CloseFrame {
+                code: close_code::POLICY,
+                reason: err.to_string().into(),
+            }),
+            err @ Error::BadRequest(_) => Some(CloseFrame {
+                code: oprf_error_codes::BAD_REQUEST,
+                reason: err.to_string().into(),
+            }),
         }
     }
 }
 
-impl IntoResponse for OprfKeyMaterialStoreError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            OprfKeyMaterialStoreError::UnknownOprfKeyId(rp_id) => (
-                StatusCode::NOT_FOUND,
-                format!("cannot find RP with id: {rp_id}"),
-            )
-                .into_response(),
-            OprfKeyMaterialStoreError::UnknownShareEpoch(share_epoch) => (
-                StatusCode::NOT_FOUND,
-                format!("cannot find share with epoch {share_epoch}"),
-            )
-                .into_response(),
+impl From<OprfKeyMaterialStoreError> for Error {
+    fn from(value: OprfKeyMaterialStoreError) -> Self {
+        // we bind it like this in case we add an error later, the compiler will scream at us.
+        match value {
+            err @ OprfKeyMaterialStoreError::UnknownOprfKeyId(_)
+            | err @ OprfKeyMaterialStoreError::UnknownShareEpoch(_) => {
+                Self::BadRequest(err.to_string())
+            }
         }
     }
 }

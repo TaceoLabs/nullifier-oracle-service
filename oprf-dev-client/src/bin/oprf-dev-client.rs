@@ -19,11 +19,7 @@ use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{
     MOCK_RP_SECRET_KEY, health_checks, oprf_key_registry_scripts, world_id_protocol_mock,
 };
-use oprf_types::{
-    OprfKeyId, ShareEpoch,
-    api::v1::{OprfRequest, ShareIdentifier},
-    crypto::OprfPublicKey,
-};
+use oprf_types::{OprfKeyId, ShareEpoch, api::v1::OprfRequest, crypto::OprfPublicKey};
 use oprf_world_client::{CircomGroth16Material, NullifierArgs, OprfQuery, SignedOprfQuery};
 use oprf_world_types::{MerkleMembership, UserKeyMaterial, api::v1::OprfRequestAuth};
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -348,16 +344,14 @@ async fn stress_test(
     }
 
     let mut init_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending init requests..");
     let start = Instant::now();
     for (idx, req) in init_requests.into_iter().enumerate() {
-        let client = client.clone();
         let services = services.to_vec();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions = oprf_client::init_sessions(&client, &services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&services, threshold, req).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -386,37 +380,25 @@ async fn stress_test(
     let mut finish_challenges = sessions
         .iter()
         .map(|(idx, sessions)| {
-            let query = oprf_queries.get(idx).expect("is there");
-            eyre::Ok((
-                *idx,
-                oprf_client::generate_challenge_request(
-                    query.get_request().request_id,
-                    ShareIdentifier {
-                        oprf_key_id,
-                        share_epoch: ShareEpoch::default(),
-                    },
-                    sessions,
-                ),
-            ))
+            let _query = oprf_queries.get(idx).expect("is there");
+            eyre::Ok((*idx, oprf_client::generate_challenge_request(sessions)))
         })
         .collect::<eyre::Result<HashMap<_, _>>>()?;
 
     let mut finish_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending finish requests..");
     durations.clear();
     for (idx, sessions) in sessions {
-        let client = client.clone();
         let signed_query = oprf_queries.get(&idx).expect("is there").to_owned();
         let challenge = finish_challenges.remove(&idx).expect("is there");
         finish_results.spawn(async move {
             let finish_start = Instant::now();
-            let responses =
-                oprf_client::finish_sessions(&client, sessions, challenge.clone()).await?;
+            let responses = oprf_client::finish_sessions(sessions, challenge.clone()).await?;
             let duration = finish_start.elapsed();
             let dlog_proof = oprf_client::verify_dlog_equality(
-                challenge.request_id,
+                Uuid::new_v4(), //FIXME
+                // challenge.request_id,
                 oprf_public_key,
                 &signed_query.blinded_request,
                 responses,

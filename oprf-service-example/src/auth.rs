@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use axum::{http::StatusCode, response::IntoResponse};
-use oprf_service::OprfReqAuthenticator;
+use oprf_service::{OprfReqAuthenticator, OprfReqError};
 use oprf_types::api::v1::OprfRequest;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -39,6 +39,8 @@ impl IntoResponse for ExampleOprfReqAuthError {
 }
 
 pub(crate) struct ExampleOprfReqAuthenticator;
+
+impl OprfReqError for ExampleOprfReqAuthError {}
 
 #[async_trait]
 impl OprfReqAuthenticator for ExampleOprfReqAuthenticator {

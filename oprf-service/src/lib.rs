@@ -14,19 +14,19 @@
 //!    - the router answers the challenge and deletes all information containing the sessions.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
-
+//!
+//! Clients will connect via web-sockets to the OPRF node. Axum supports both HTTP/1.1 and HTTP/2.0 web-socket connections, therefore we accept connections with `any`.
+///
+/// If you want to enable HTTP/2.0, you either have to do it by hand or by calling `axum::serve`, which enabled HTTP/2.0 by default. Have a look at [Axum's HTTP2.0 example](https://github.com/tokio-rs/axum/blob/aeff16e91af6fa76efffdee8f3e5f464b458785b/examples/websockets-http2/src/main.rs#L57).
 use crate::{
     config::OprfPeerConfig,
-    services::{
-        oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
-    },
+    services::{secret_gen::DLogSecretGenService, secret_manager::SecretManagerService},
 };
 use alloy::{
     network::EthereumWallet,
     providers::{Provider as _, ProviderBuilder, WsConnect},
 };
 use async_trait::async_trait;
-use axum::response::IntoResponse;
 use eyre::Context as _;
 use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::api::v1::OprfRequest;
@@ -56,11 +56,18 @@ pub trait OprfReqAuthenticator: Send + Sync {
     /// Represents the authentication data type included in the OPRF request.
     type ReqAuth: Clone + Serialize + DeserializeOwned;
     /// Represents the error type returned if authentication fails.
-    type ReqAuthError: axum::response::IntoResponse;
+    type ReqAuthError: OprfReqError;
 
     /// Verifies the authenticity of an OPRF request.
     async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
 }
+
+/// The error type that may be returned by the [`OprfReqAuthenticator`] on [`OprfReqAuthenticator::verify`].
+///
+/// This method shall implement `fmt::Display` because a human-readable message will be sent back to the user for troubleshooting.
+///
+/// **Note:** it is very important that `fmt::Display` does not print any sensitive information. For debugging information, use `fmt::Debug`.
+pub trait OprfReqError: Send + Sync + 'static + std::error::Error {}
 
 /// Dynamic trait object for `OprfReqAuthenticator` service.
 pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
@@ -87,7 +94,7 @@ pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
 /// - A `JoinHandle` for the key event watcher task.
 pub async fn init<
     ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    ReqAuthError: IntoResponse + Send + Sync + 'static,
+    ReqAuthError: OprfReqError,
 >(
     config: OprfPeerConfig,
     secret_manager: SecretManagerService,
@@ -149,14 +156,14 @@ pub async fn init<
     });
 
     tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(
-        oprf_key_material_store.clone(),
-        config.request_lifetime,
-        config.session_cleanup_interval,
+    let axum_rest_api = api::routes(
         party_id,
+        oprf_key_material_store,
+        oprf_req_auth_service,
+        wallet_address,
+        config.ws_max_message_size,
+        config.session_lifetime,
     );
-
-    let axum_rest_api = api::routes(oprf_service, oprf_req_auth_service, wallet_address);
 
     Ok((axum_rest_api, key_event_watcher))
 }
@@ -220,9 +227,6 @@ pub async fn default_shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::{collections::HashMap, time::Duration};
-
     use ark_ff::UniformRand;
     use async_trait::async_trait;
     use axum::Router;
@@ -232,19 +236,25 @@ mod tests {
     use oprf_types::crypto::{OprfPublicKey, PartyId};
     use oprf_types::{OprfKeyId, ShareEpoch};
     use rand::Rng as _;
+    use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::services::oprf::OprfService;
     use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;
 
     struct TestOprfReqAuthenticator;
+    #[derive(Debug, thiserror::Error)]
+    enum TestOprfReqAuthenticatorErr {
+        #[error("dummy")]
+        Dummy,
+    }
+    impl OprfReqError for TestOprfReqAuthenticatorErr {}
 
     #[async_trait]
     impl OprfReqAuthenticator for TestOprfReqAuthenticator {
         type ReqAuth = ();
-        type ReqAuthError = ();
+        type ReqAuthError = TestOprfReqAuthenticatorErr;
 
         async fn verify(
             &self,
@@ -256,7 +266,7 @@ mod tests {
 
     struct TestSetup {
         server: TestServer,
-        oprf_service: OprfService,
+        oprf_key_material: OprfKeyMaterialStore,
         oprf_req: OprfRequest<()>,
         challenge_req: ChallengeRequest,
     }
@@ -289,7 +299,6 @@ mod tests {
                 auth: (),
             };
             let challenge_req = ChallengeRequest {
-                request_id,
                 challenge: DLogCommitmentsShamir::new(
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
@@ -298,10 +307,6 @@ mod tests {
                     ark_babyjubjub::EdwardsAffine::rand(&mut rng),
                     vec![1, 2, 3],
                 ),
-                share_identifier: ShareIdentifier {
-                    oprf_key_id,
-                    share_epoch,
-                },
             };
 
             let oprf_key_material = OprfKeyMaterialStore::new(HashMap::from([(
@@ -315,17 +320,17 @@ mod tests {
                 ),
             )]));
 
-            let request_lifetime = Duration::from_secs(5 * 60);
-            let session_cleanup_interval = Duration::from_secs(30);
-            let oprf_service = OprfService::init(
-                oprf_key_material,
-                request_lifetime,
-                session_cleanup_interval,
-                PartyId(0),
-            );
+            let max_message_size = 1024 * 512;
+            let request_lifetime = Duration::from_secs(60);
             let routes = Router::new().nest(
                 "/api/v1",
-                api::v1::routes(oprf_service.clone(), Arc::new(TestOprfReqAuthenticator)),
+                api::v1::routes(
+                    PartyId(0),
+                    oprf_key_material.clone(),
+                    Arc::new(TestOprfReqAuthenticator),
+                    max_message_size,
+                    request_lifetime,
+                ),
             );
             let server = TestServer::builder()
                 .expect_success_by_default()
@@ -335,30 +340,11 @@ mod tests {
 
             Ok(Self {
                 server,
-                oprf_service,
+                oprf_key_material,
                 oprf_req,
                 challenge_req,
             })
         }
-    }
-
-    #[tokio::test]
-    async fn test_init() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        Ok(())
     }
 
     #[tokio::test]
@@ -414,37 +400,37 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_finish() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        let req = setup.challenge_req;
-        setup
-            .server
-            .post("/api/v1/finish")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            !setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        Ok(())
-    }
+    // #[tokio::test]
+    // async fn test_finish() -> eyre::Result<()> {
+    //     let setup = TestSetup::new().await?;
+    //     let req = setup.oprf_req;
+    //     setup
+    //         .server
+    //         .post("/api/v1/init")
+    //         .json(&req)
+    //         .await
+    //         .assert_status_ok();
+    //     assert!(
+    //         setup
+    //             .oprf_service
+    //             .session_store
+    //             .contains_key(req.request_id)
+    //     );
+    //     let req = setup.challenge_req;
+    //     setup
+    //         .server
+    //         .post("/api/v1/finish")
+    //         .json(&req)
+    //         .await
+    //         .assert_status_ok();
+    //     assert!(
+    //         !setup
+    //             .oprf_service
+    //             .session_store
+    //             .contains_key(req.request_id)
+    //     );
+    //     Ok(())
+    // }
 
     #[tokio::test]
     async fn test_finish_without_init() -> eyre::Result<()> {
@@ -460,29 +446,29 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_finish_unknown_share_epoch() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        let unknown_share_epoch = ShareEpoch::new(rand::random());
-        let mut req = setup.challenge_req;
-        req.share_identifier.share_epoch = unknown_share_epoch;
-        let res = setup
-            .server
-            .post("/api/v1/finish")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text(format!(
-            "cannot find share with epoch {unknown_share_epoch}",
-        ));
-        res.assert_status_not_found();
-        Ok(())
-    }
+    // #[tokio::test]
+    // async fn test_finish_unknown_share_epoch() -> eyre::Result<()> {
+    //     let setup = TestSetup::new().await?;
+    //     let req = setup.oprf_req;
+    //     setup
+    //         .server
+    //         .post("/api/v1/init")
+    //         .json(&req)
+    //         .await
+    //         .assert_status_ok();
+    //     let unknown_share_epoch = ShareEpoch::new(rand::random());
+    //     let mut req = setup.challenge_req;
+    //     req.share_identifier.share_epoch = unknown_share_epoch;
+    //     let res = setup
+    //         .server
+    //         .post("/api/v1/finish")
+    //         .json(&req)
+    //         .expect_failure()
+    //         .await;
+    //     res.assert_text(format!(
+    //         "cannot find share with epoch {unknown_share_epoch}",
+    //     ));
+    //     res.assert_status_not_found();
+    //     Ok(())
+    // }
 }

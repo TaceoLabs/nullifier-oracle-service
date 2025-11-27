@@ -14,7 +14,7 @@ use crate::auth::{
 use ark_bn254::Bn254;
 use async_trait::async_trait;
 use axum::{http::StatusCode, response::IntoResponse};
-use oprf_service::OprfReqAuthenticator;
+use oprf_service::{OprfReqAuthenticator, OprfReqError};
 use oprf_types::api::v1::OprfRequest;
 use oprf_world_types::{TREE_DEPTH, api::v1::OprfRequestAuth};
 use std::{
@@ -89,6 +89,8 @@ pub(crate) struct WorldOprfReqAuthenticator {
     vk: Arc<ark_groth16::PreparedVerifyingKey<Bn254>>,
     current_time_stamp_max_difference: Duration,
 }
+
+impl OprfReqError for WorldOprfReqAuthError {}
 
 impl WorldOprfReqAuthenticator {
     pub(crate) fn init(
