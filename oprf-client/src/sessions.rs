@@ -144,6 +144,7 @@ pub async fn init_sessions<Auth: Clone + Serialize + DeserializeOwned + Send + S
             Err(err) => {
                 // we very much expect certain services to return an error therefore we do not log at warn/error level.
                 tracing::debug!("Got error response: {err:?}");
+                println!("node returned error: {err:?}");
             }
         }
     }
