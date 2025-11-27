@@ -14,19 +14,20 @@
 //!    - the router answers the challenge and deletes all information containing the sessions.
 //!
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
-
+//!
+//! Clients will connect via web-sockets to the OPRF node. Axum supports both HTTP/1.1 and HTTP/2.0 web-socket connections, therefore we accept connections with `any`.
+///
+/// If you want to enable HTTP/2.0, you either have to do it by hand or by calling `axum::serve`, which enabled HTTP/2.0 by default. Have a look at [Axum's HTTP2.0 example](https://github.com/tokio-rs/axum/blob/aeff16e91af6fa76efffdee8f3e5f464b458785b/examples/websockets-http2/src/main.rs#L57).
 use crate::{
     config::OprfNodeConfig,
-    services::{
-        oprf::OprfService, secret_gen::DLogSecretGenService, secret_manager::SecretManagerService,
-    },
+    services::{secret_gen::DLogSecretGenService, secret_manager::SecretManagerService},
 };
 use alloy::{
     network::EthereumWallet,
     providers::{Provider as _, ProviderBuilder, WsConnect},
 };
 use async_trait::async_trait;
-use axum::response::IntoResponse;
+use core::fmt;
 use eyre::Context as _;
 use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::api::v1::OprfRequest;
@@ -55,8 +56,12 @@ pub use services::secret_manager;
 pub trait OprfRequestAuthenticator: Send + Sync {
     /// Represents the authentication data type included in the OPRF request.
     type RequestAuth;
-    /// Represents the error type returned if authentication fails.
-    type RequestAuthError: axum::response::IntoResponse;
+    /// The error type that may be returned by the [`OprfRequestAuthenticator`] on [`OprfRequestAuthenticator::verify`].
+    ///
+    /// This method shall implement `fmt::Display` because a human-readable message will be sent back to the user for troubleshooting.
+    ///
+    /// **Note:** it is very important that `fmt::Display` does not print any sensitive information. For debugging information, use `fmt::Debug`.
+    type RequestAuthError: Send + 'static + std::error::Error;
 
     /// Verifies the authenticity of an OPRF request.
     async fn verify(
@@ -68,10 +73,22 @@ pub trait OprfRequestAuthenticator: Send + Sync {
 /// An implementation of `OprfRequestAuthenticator` that performs no authentication.
 pub struct WithoutAuthentication;
 
+/// Error type for [`WithoutAuthentication`]. Will never be constructed during ordinary flow.
+#[derive(Debug, Clone, Copy)]
+pub struct WithoutAuthenticationError;
+
+impl fmt::Display for WithoutAuthenticationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("you failed the no-authentication authentication")
+    }
+}
+
+impl std::error::Error for WithoutAuthenticationError {}
+
 #[async_trait]
 impl OprfRequestAuthenticator for WithoutAuthentication {
     type RequestAuth = ();
-    type RequestAuthError = ();
+    type RequestAuthError = WithoutAuthenticationError;
 
     async fn verify(
         &self,
@@ -107,7 +124,7 @@ pub type OprfRequestAuthService<RequestAuth, RequestAuthError> = Arc<
 /// - A `JoinHandle` for the key event watcher task.
 pub async fn init<
     RequestAuth: for<'de> Deserialize<'de> + Send + 'static,
-    RequestAuthError: IntoResponse + 'static,
+    RequestAuthError: Send + 'static + std::error::Error,
 >(
     config: OprfNodeConfig,
     secret_manager: SecretManagerService,
@@ -169,14 +186,14 @@ pub async fn init<
     });
 
     tracing::info!("init oprf-service...");
-    let oprf_service = OprfService::init(
-        oprf_key_material_store.clone(),
-        config.request_lifetime,
-        config.session_cleanup_interval,
+    let axum_rest_api = api::routes(
         party_id,
+        oprf_key_material_store,
+        oprf_req_auth_service,
+        wallet_address,
+        config.ws_max_message_size,
+        config.session_lifetime,
     );
-
-    let axum_rest_api = api::routes(oprf_service, oprf_req_auth_service, wallet_address);
 
     Ok((axum_rest_api, key_event_watcher))
 }
@@ -235,254 +252,5 @@ pub async fn default_shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = terminate => {},
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use std::{collections::HashMap, time::Duration};
-
-    use ark_ff::UniformRand;
-    use axum::Router;
-    use axum_test::TestServer;
-    use oprf_client::BlindingFactor;
-    use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
-    use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
-    use oprf_types::crypto::{OprfPublicKey, PartyId};
-    use oprf_types::{OprfKeyId, ShareEpoch};
-    use rand::Rng as _;
-    use uuid::Uuid;
-
-    use crate::services::oprf::OprfService;
-    use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
-
-    use super::*;
-
-    struct TestSetup {
-        server: TestServer,
-        oprf_service: OprfService,
-        oprf_req: OprfRequest<()>,
-        challenge_req: ChallengeRequest,
-    }
-
-    impl TestSetup {
-        async fn new() -> eyre::Result<Self> {
-            let mut rng = rand::thread_rng();
-
-            let share_epoch = ShareEpoch::default();
-
-            let oprf_key_id = OprfKeyId::new(rng.r#gen());
-
-            let request_id = Uuid::new_v4();
-            let action = ark_babyjubjub::Fq::rand(&mut rng);
-            let query = action;
-            let blinding_factor = BlindingFactor::rand(&mut rng);
-            let blinded_request = oprf_core::oprf::client::blind_query(query, blinding_factor);
-            let oprf_req = OprfRequest {
-                request_id,
-                blinded_query: blinded_request.blinded_query(),
-                share_identifier: ShareIdentifier {
-                    oprf_key_id,
-                    share_epoch,
-                },
-                auth: (),
-            };
-            let challenge_req = ChallengeRequest {
-                request_id,
-                challenge: DLogCommitmentsShamir::new(
-                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-                    ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-                    vec![1, 2, 3],
-                ),
-                share_identifier: ShareIdentifier {
-                    oprf_key_id,
-                    share_epoch,
-                },
-            };
-
-            let oprf_key_material = OprfKeyMaterialStore::new(HashMap::from([(
-                oprf_key_id,
-                OprfKeyMaterial::new(
-                    HashMap::from([(
-                        ShareEpoch::default(),
-                        DLogShareShamir::from(ark_babyjubjub::Fr::rand(&mut rng)),
-                    )]),
-                    OprfPublicKey::new(rng.r#gen()),
-                ),
-            )]));
-
-            let request_lifetime = Duration::from_secs(5 * 60);
-            let session_cleanup_interval = Duration::from_secs(30);
-            let oprf_service = OprfService::init(
-                oprf_key_material,
-                request_lifetime,
-                session_cleanup_interval,
-                PartyId(0),
-            );
-            let routes = Router::new().nest(
-                "/api/v1",
-                api::v1::routes(oprf_service.clone(), Arc::new(WithoutAuthentication)),
-            );
-            let server = TestServer::builder()
-                .expect_success_by_default()
-                .mock_transport()
-                .build(routes)
-                .unwrap();
-
-            Ok(Self {
-                server,
-                oprf_service,
-                oprf_req,
-                challenge_req,
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn test_init() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_blinded_query_identity_is_bad_request() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let mut req = setup.oprf_req;
-        req.blinded_query = ark_babyjubjub::EdwardsAffine::zero();
-        let res = setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text("blinded query not allowed to be identity");
-        res.assert_status_bad_request();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_init_unknown_oprf_key_id() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let unknown_oprf_key_id = OprfKeyId::new(rand::random());
-        let mut req = setup.oprf_req;
-        req.share_identifier.oprf_key_id = unknown_oprf_key_id;
-
-        let res = setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text(format!("cannot find RP with id: {unknown_oprf_key_id}"));
-        res.assert_status_not_found();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_init_unknown_share_epoch() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let unknown_share_epoch = ShareEpoch::new(rand::random());
-        let mut req = setup.oprf_req;
-        req.share_identifier.share_epoch = unknown_share_epoch;
-        let res = setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text(format!(
-            "cannot find share with epoch {unknown_share_epoch}",
-        ));
-        res.assert_status_not_found();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_finish() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        let req = setup.challenge_req;
-        setup
-            .server
-            .post("/api/v1/finish")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        assert!(
-            !setup
-                .oprf_service
-                .session_store
-                .contains_key(req.request_id)
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_finish_without_init() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.challenge_req;
-        setup
-            .server
-            .post("/api/v1/finish")
-            .json(&req)
-            .expect_failure()
-            .await
-            .assert_status_not_found();
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_finish_unknown_share_epoch() -> eyre::Result<()> {
-        let setup = TestSetup::new().await?;
-        let req = setup.oprf_req;
-        setup
-            .server
-            .post("/api/v1/init")
-            .json(&req)
-            .await
-            .assert_status_ok();
-        let unknown_share_epoch = ShareEpoch::new(rand::random());
-        let mut req = setup.challenge_req;
-        req.share_identifier.share_epoch = unknown_share_epoch;
-        let res = setup
-            .server
-            .post("/api/v1/finish")
-            .json(&req)
-            .expect_failure()
-            .await;
-        res.assert_text(format!(
-            "cannot find share with epoch {unknown_share_epoch}",
-        ));
-        res.assert_status_not_found();
-        Ok(())
     }
 }

@@ -215,16 +215,14 @@ async fn stress_test(
     }
 
     let mut init_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending init requests..");
     let start = Instant::now();
     for (idx, req) in init_requests.into_iter().enumerate() {
-        let client = client.clone();
         let services = services.to_vec();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions = oprf_client::init_sessions(&client, &services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&services, threshold, req).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -253,37 +251,30 @@ async fn stress_test(
     let mut finish_challenges = sessions
         .iter()
         .map(|(idx, sessions)| {
-            let request_id = request_ids.get(idx).expect("is there");
+            let request_id = *request_ids.get(idx).expect("is there");
             eyre::Ok((
                 *idx,
-                oprf_client::generate_challenge_request(
-                    *request_id,
-                    ShareIdentifier {
-                        oprf_key_id,
-                        share_epoch: ShareEpoch::default(),
-                    },
-                    sessions,
+                (
+                    request_id,
+                    oprf_client::generate_challenge_request(sessions),
                 ),
             ))
         })
         .collect::<eyre::Result<HashMap<_, _>>>()?;
 
     let mut finish_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending finish requests..");
     durations.clear();
     for (idx, sessions) in sessions {
-        let client = client.clone();
         let blinded_req = blinded_requests.get(&idx).expect("is there").to_owned();
-        let challenge = finish_challenges.remove(&idx).expect("is there");
+        let (session_id, challenge) = finish_challenges.remove(&idx).expect("is there");
         finish_results.spawn(async move {
             let finish_start = Instant::now();
-            let responses =
-                oprf_client::finish_sessions(&client, sessions, challenge.clone()).await?;
+            let responses = oprf_client::finish_sessions(sessions, challenge.clone()).await?;
             let duration = finish_start.elapsed();
             let dlog_proof = oprf_client::verify_dlog_equality(
-                challenge.request_id,
+                session_id,
                 oprf_public_key,
                 &blinded_req,
                 responses,

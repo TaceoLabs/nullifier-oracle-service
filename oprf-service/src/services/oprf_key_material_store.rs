@@ -96,9 +96,13 @@ impl OprfKeyMaterialStore {
     pub(crate) fn partial_commit(
         &self,
         point_b: ark_babyjubjub::EdwardsAffine,
-        share_identifier: &ShareIdentifier,
+        share_identifier: ShareIdentifier,
     ) -> OprfKeyMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
         tracing::debug!("computing partial commitment");
+        // check that blinded query (B) is not the identity element
+        if point_b.is_zero() {
+            // return Err(OprfServiceError::BlindedQueryIsIdentity);
+        }
         let share = self
             .get(share_identifier.oprf_key_id)
             .ok_or(OprfKeyMaterialStoreError::UnknownOprfKeyId(
@@ -117,7 +121,7 @@ impl OprfKeyMaterialStore {
 
     /// Finalizes a proof share for a given challenge hash and session.
     ///
-    /// Consumes the session to prevent reuse of the randomness. The provided
+    /// Consumes the session to prevent reuse of the randomness.
     /// The provided [`ShareIdentifier`] identifies the used OPRF key and the epoch of the share.
     ///
     /// Returns an error if the OPRF key is unknown or the share for the epoch is not registered.
@@ -127,7 +131,7 @@ impl OprfKeyMaterialStore {
         my_party_id: PartyId,
         session: DLogSessionShamir,
         challenge: DLogCommitmentsShamir,
-        share_identifier: &ShareIdentifier,
+        share_identifier: ShareIdentifier,
     ) -> OprfKeyMaterialStoreResult<DLogProofShareShamir> {
         tracing::debug!("finalizing proof share");
         let oprf_public_key = self

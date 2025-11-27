@@ -35,6 +35,7 @@ aws-sdk-secretsmanager = "1"
 axum = "0.8"
 axum-test = "18"
 blake3 = "1"
+ciborium = "0.2"
 circom-types = { package = "taceo-circom-types", version = "0.1", default-features = false }
 clap = "4"
 criterion = "0.7"
@@ -74,6 +75,7 @@ serde = { version = "1" }
 serde_json = { version = "1" }
 thiserror = { version = "2" }
 tokio = { version = "1" }
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
 tokio-util = "0.7"
 tower-http = "0.6"
 tracing = { version = "0.1" }

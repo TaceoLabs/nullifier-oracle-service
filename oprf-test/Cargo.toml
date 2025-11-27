@@ -45,4 +45,5 @@ tokio = { workspace = true, features = [
 tracing.workspace = true
 
 [dev-dependencies]
+nodes-telemetry = { workspace = true }
 serial_test = { version = "3.2", features = ["file_locks"] }

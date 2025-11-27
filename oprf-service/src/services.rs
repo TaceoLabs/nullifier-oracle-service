@@ -8,15 +8,11 @@
 //!
 //! # Services overview
 //!
-//! - [`key_event_watcher`] – watches the blockchain for key-generation events relevant to the node.
-//! - [`oprf`] – handles OPRF sessions, including initialization and finalization.
+//! - [`key_event_watcher`] – watches the blockchain for key-generation events.
 //! - [`oprf_key_material_store`] – provides a store that securely holds all OPRF key-material.
 //! - [`secret_gen`] – handles multi-round secret generation protocols.
 //! - [`secret_manager`] – stores and retrieves secrets.
-//! - [`session_store`] – stores ephemeral session randomness for OPRF requests.
 pub(crate) mod key_event_watcher;
-pub(crate) mod oprf;
 pub mod oprf_key_material_store;
 pub(crate) mod secret_gen;
 pub mod secret_manager;
-pub(crate) mod session_store;

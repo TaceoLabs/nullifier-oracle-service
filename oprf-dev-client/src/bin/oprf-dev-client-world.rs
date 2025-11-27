@@ -415,17 +415,15 @@ async fn stress_test(
     }
 
     let mut init_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending init requests..");
     let start = Instant::now();
     for (idx, req) in init_requests.into_iter().enumerate() {
-        let client = client.clone();
         let services = authenticator.config.nullifier_oracle_urls().to_vec();
         let threshold = authenticator.config.nullifier_oracle_threshold();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions = oprf_client::init_sessions(&client, &services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&services, threshold, req).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -454,32 +452,22 @@ async fn stress_test(
     let mut finish_challenges = sessions
         .iter()
         .map(|(idx, sessions)| {
-            let request_id = request_ids.get(idx).expect("is there");
-            let challenge_request = oprf_client::generate_challenge_request(
-                *request_id,
-                ShareIdentifier {
-                    oprf_key_id,
-                    share_epoch: ShareEpoch::default(),
-                },
-                sessions,
-            );
+            let _request_id = request_ids.get(idx).expect("is there");
+            let challenge_request = oprf_client::generate_challenge_request(sessions);
             eyre::Ok((*idx, challenge_request))
         })
         .collect::<eyre::Result<HashMap<_, _>>>()?;
 
     let mut finish_results = JoinSet::new();
-    let client = reqwest::Client::new();
 
     tracing::info!("start sending finish requests..");
     durations.clear();
     let start = Instant::now();
     for (idx, sessions) in sessions {
-        let client = client.clone();
         let challenge = finish_challenges.remove(&idx).expect("is there");
         finish_results.spawn(async move {
             let finish_start = Instant::now();
-            let responses =
-                oprf_client::finish_sessions(&client, sessions, challenge.clone()).await?;
+            let responses = oprf_client::finish_sessions(sessions, challenge.clone()).await?;
             let duration = finish_start.elapsed();
             eyre::Ok((idx, responses, challenge, duration))
         });

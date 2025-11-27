@@ -18,6 +18,16 @@ use uuid::Uuid;
 use crate::{OprfKeyId, ShareEpoch, crypto::PartyId};
 use ark_serde_compat::babyjubjub;
 
+/// TACEO:Oprf specific websocket error codes.
+pub mod oprf_error_codes {
+    /// An opened session exceeds its life time.
+    ///
+    /// The OPRF node closed the websocket and the session must be considered void.
+    pub const TIMEOUT: u16 = 4001;
+    /// Bad request during OPRF computation (e.g. parsing error).
+    pub const BAD_REQUEST: u16 = 4002;
+}
+
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OprfRequest<OprfRequestAuth> {
@@ -45,8 +55,6 @@ pub struct ShareIdentifier {
 /// Server response to an [`OprfRequest`].
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OprfResponse {
-    /// ID of the request being answered.
-    pub request_id: Uuid,
     /// Server’s partial commitments for the discrete log equality proof.
     pub commitments: PartialDLogCommitmentsShamir,
     /// The party ID of the node
@@ -56,19 +64,13 @@ pub struct OprfResponse {
 /// A request from the client to complete the DLog equality challenge.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChallengeRequest {
-    /// ID of the original OPRF request.
-    pub request_id: Uuid,
     /// The challenge to respond to.
     pub challenge: DLogCommitmentsShamir,
-    /// Identifies the relying party’s and the epoch of the used share
-    pub share_identifier: ShareIdentifier,
 }
 
 /// Server response to a [`ChallengeRequest`].
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChallengeResponse {
-    /// ID of the request being answered.
-    pub request_id: Uuid,
     /// Server’s proof share for the discrete log equality proof.
     pub proof_share: DLogProofShareShamir,
 }
@@ -86,7 +88,6 @@ impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth> {
 impl fmt::Debug for ChallengeRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ChallengeRequest")
-            .field("req_id", &self.request_id)
             .field("challenge", &"omitted")
             .finish()
     }

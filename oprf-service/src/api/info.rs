@@ -18,17 +18,17 @@ use axum::{
 use oprf_types::OprfKeyId;
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::services::oprf::OprfService;
+use crate::oprf_key_material_store::OprfKeyMaterialStore;
 
 /// Create a router containing the info endpoints.
 ///
 /// All endpoints have `Cache-Control: no-cache` set.
-pub(crate) fn routes(oprf_service: OprfService, wallet_address: Address) -> Router {
+pub(crate) fn routes(oprf_material_store: OprfKeyMaterialStore, wallet_address: Address) -> Router {
     Router::new()
         .route("/version", get(version))
         .route("/wallet", get(move || wallet(wallet_address)))
         .route("/oprf_pub/{id}", get(oprf_key_available))
-        .layer(Extension(oprf_service))
+        .layer(Extension(oprf_material_store))
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),
@@ -54,10 +54,10 @@ async fn wallet(wallet_address: Address) -> impl IntoResponse {
 /// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKey`].
 /// Returns `404 Not Found` if not registered.
 async fn oprf_key_available(
-    Extension(oprf_service): Extension<OprfService>,
+    Extension(oprf_material_store): Extension<OprfKeyMaterialStore>,
     Path(id): Path<OprfKeyId>,
 ) -> impl IntoResponse {
-    if let Some(public_material) = oprf_service.oprf_material_store.get_oprf_public_key(id) {
+    if let Some(public_material) = oprf_material_store.get_oprf_public_key(id) {
         (StatusCode::OK, Json(public_material)).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

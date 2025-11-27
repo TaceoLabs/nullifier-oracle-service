@@ -1,18 +1,22 @@
+//! Handles session management of the client.
+//!
+//! See [`init_sessions`] and [`finish_sessions`] for more information.
+
+use crate::ws::WebSocketSession;
+
 use super::Error;
 use oprf_core::ddlog_equality::shamir::PartialDLogCommitmentsShamir;
 use oprf_types::api::v1::OprfResponse;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest};
 use oprf_types::crypto::PartyId;
 use serde::Serialize;
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::instrument;
 
-/// Holds information about active OPRF sessions with multiple nodes.
-///
-/// Tracks the node services, their party IDs, and the partial DLog equality
-/// commitments received from each node.
+/// Holds the active OPRF sessions with multiple nodes.
 pub struct OprfSessions {
-    pub(super) services: Vec<String>,
+    pub(super) ws: Vec<WebSocketSession>,
     pub(super) party_ids: Vec<PartyId>,
     pub(super) commitments: Vec<PartialDLogCommitmentsShamir>,
 }
@@ -22,133 +26,132 @@ impl OprfSessions {
     ///
     fn with_capacity(capacity: usize) -> Self {
         Self {
-            services: Vec::with_capacity(capacity),
+            ws: Vec::with_capacity(capacity),
             party_ids: Vec::with_capacity(capacity),
             commitments: Vec::with_capacity(capacity),
         }
     }
 
     /// Adds a node's response to the sessions.
-    fn push(&mut self, service: String, response: OprfResponse) {
-        self.services.push(service);
-        self.party_ids.push(response.party_id);
-        self.commitments.push(response.commitments);
+    fn push(&mut self, ws: WebSocketSession, response: OprfResponse) {
+        let OprfResponse {
+            commitments,
+            party_id,
+        } = response;
+        self.ws.push(ws);
+        self.party_ids.push(party_id);
+        self.commitments.push(commitments);
     }
 
     /// Returns the number of sessions currently stored.
     fn len(&self) -> usize {
-        self.services.len()
+        self.ws.len()
     }
 }
 
-/// Sends an `init` request to one OPRF node.
+/// Tries to establish a web-socket connection to the given service. On success sends the provided `req` to the service and reads the [`OprfResponse`].
 ///
-/// Returns the node's URL alongside the parsed [`OprfResponse`].
-#[instrument(level = "trace", skip(client, req))]
-async fn oprf_request<OprfRequestAuth: Serialize>(
-    client: reqwest::Client,
+/// Returns the [`WebSocketSession`] and the response on success.
+#[instrument(level = "trace", skip(req))]
+async fn init_session<Auth: Serialize>(
     service: String,
-    req: OprfRequest<OprfRequestAuth>,
-) -> Result<(String, OprfResponse), super::Error> {
-    let url = format!("{service}/api/v1/init");
-    tracing::trace!("> sending request to {url}..");
-    let response = client.post(url).json(&req).send().await?;
-    if response.status().is_success() {
-        let response = response.json::<OprfResponse>().await?;
-        Ok((service, response))
-    } else {
-        let status = response.status();
-        let message = response.text().await?;
-        Err(Error::ApiError { status, message })
-    }
+    req: OprfRequest<Auth>,
+) -> Result<(WebSocketSession, OprfResponse), super::Error> {
+    let mut session = WebSocketSession::new(service).await?;
+    session.send(req).await?;
+    let response = session.read::<OprfResponse>().await?;
+    Ok((session, response))
 }
 
-/// Sends a `challenge` request to one OPRF service.
+/// Write the `req` request to the provided [`WebSocketSession`].
 ///
-/// Returns the parsed [`ChallengeResponse`].
-#[instrument(level = "trace", skip(client, req))]
-async fn oprf_challenge(
-    client: reqwest::Client,
-    service: String,
+/// On success, returns the parsed [`ChallengeResponse`] and gracefully closes the web-socket.
+#[instrument(level = "trace", skip_all)]
+async fn finish_session(
+    mut session: WebSocketSession,
     req: ChallengeRequest,
-) -> Result<ChallengeResponse, super::Error> {
-    let url = format!("{service}/api/v1/finish");
-    tracing::trace!("> sending request to {url}..");
-    let response = client.post(url).json(&req).send().await?;
-    if response.status().is_success() {
-        let response = response.json::<ChallengeResponse>().await?;
-        Ok(response)
-    } else {
-        let status = response.status();
-        let message = response.text().await?;
-        Err(Error::ApiError { status, message })
-    }
+) -> Result<ChallengeResponse, Error> {
+    session.send(req).await?;
+    let resp = session.read().await?;
+    session.graceful_close().await;
+    Ok(resp)
 }
 
-/// Completes all OPRF sessions in parallel by calling `/api/v1/finish`
-/// on every node in the [`OprfSessions`].
+/// Completes all OPRF sessions in parallel by sending the provided [`ChallengeRequest`] to the open sessions.
 ///
 /// **Important:**  
 /// - These must be the *same parties* that were used during the initial
 ///   `init_sessions` call.
-/// - The order of the nodes matters: we return responses in the order provided and they need
-///   to match the original session list. This is crucial because Lagrange coefficients are
-///   computed in the meantime, and they need to match the shares obtained earlier.
+/// - The order of the sessions matter: we return responses in the order provided and they need to match the original session list. This is crucial because Lagrange coefficients are computed in the meantime, and they need to match the shares obtained earlier.
 ///
-/// Fails fast if any single request errors out.
+/// Fails fast if any single request errors.
 #[instrument(level = "debug", skip_all)]
 pub async fn finish_sessions(
-    client: &reqwest::Client,
     sessions: OprfSessions,
     req: ChallengeRequest,
 ) -> Result<Vec<ChallengeResponse>, super::Error> {
     futures::future::try_join_all(
         sessions
-            .services
-            .iter()
-            .map(|service| oprf_challenge(client.clone(), service.to_owned(), req.clone())),
+            .ws
+            .into_iter()
+            .map(|service| finish_session(service, req.clone())),
     )
     .await
 }
 
-/// Initializes new OPRF sessions by calling `/api/v1/init`
-/// on a list of nodes, collecting responses until the
-/// given `threshold` is met.
+/// Initializes new OPRF sessions by opening a web-socket at `/api/v1/oprf` on a list of nodes, collecting responses until the given `threshold` is met.
 ///
-/// Nodes are queried concurrently. Errors from some services
-/// are logged and ignored, unless they prevent reaching the threshold.
+/// Nodes are queried concurrently. Errors from some services are logged and ignored, unless they prevent reaching the threshold.
 ///
-/// Returns an [`OprfSessions`] ready to be finalized with [`finish_sessions`].
+/// Returns a [`OprfSessions`] ready to be finalized with [`finish_sessions`].
 #[instrument(level = "debug", skip_all)]
 pub async fn init_sessions<OprfRequestAuth: Clone + Serialize + Send + 'static>(
-    client: &reqwest::Client,
     oprf_services: &[String],
     threshold: usize,
     req: OprfRequest<OprfRequestAuth>,
 ) -> Result<OprfSessions, super::Error> {
-    let mut requests = oprf_services
-        .iter()
-        .map(|service| oprf_request(client.clone(), service.to_owned(), req.to_owned()))
-        .collect::<JoinSet<_>>();
-
-    let mut sessions = OprfSessions::with_capacity(threshold);
-    while let Some(response) = requests.join_next().await {
-        match response.expect("Task did not panic") {
-            Ok((service, response)) => {
-                tracing::trace!("Got response from {service}");
-                sessions.push(service, response);
-                if sessions.len() == threshold {
-                    break;
+    // only has one producer
+    let (tx, mut rx) = mpsc::channel(1);
+    tokio::task::spawn({
+        let oprf_services = oprf_services.to_vec();
+        let mut open_sessions = 0;
+        async move {
+            let mut join_set = oprf_services
+                .into_iter()
+                .map(|service| init_session(service, req.clone()))
+                .collect::<JoinSet<_>>();
+            while let Some(session_handle) = join_set.join_next().await {
+                match session_handle.expect("Can join") {
+                    Ok((session, resp)) => {
+                        if open_sessions == threshold {
+                            // The caller is most likely gone already - just close the connection
+                            session.graceful_close().await;
+                        } else {
+                            open_sessions += 1;
+                            if let Err(session) = tx.send((session, resp)).await {
+                                tracing::debug!("No one listening anymore?");
+                                let (session, _) = session.0;
+                                session.graceful_close().await;
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        // we very much expect certain services to return an error therefore we do not log at warn/error level.
+                        tracing::debug!("Got error response: {err:?}");
+                    }
                 }
             }
-            Err(err) => {
-                // we very much expect certain services to return an error therefore we do not log at warn/error level.
-                tracing::debug!("Got error response: {err:?}");
-                println!("node returned error: {err:?}");
-            }
+        }
+    });
+    let mut sessions = OprfSessions::with_capacity(threshold);
+
+    while let Some((ws, resp)) = rx.recv().await {
+        sessions.push(ws, resp);
+        tracing::debug!("received session {}", sessions.len());
+        if sessions.len() == threshold {
+            break;
         }
     }
-
     if sessions.len() == threshold {
         Ok(sessions)
     } else {

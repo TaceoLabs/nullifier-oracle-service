@@ -44,6 +44,8 @@ async fn start_node(
             key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
             key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
             wallet_private_key_secret_id: "wallet/privatekey".to_string(),
+            ws_max_message_size: 512 * 1024,
+            session_lifetime: Duration::from_secs(60),
         },
     };
     let never = async { futures::future::pending::<()>().await };

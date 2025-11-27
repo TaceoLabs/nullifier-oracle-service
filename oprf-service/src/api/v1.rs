@@ -1,74 +1,227 @@
-//! Version 1 (v1) API Routes
-//!
-//! This module defines the v1 API routes for the OPRF node service.
-//! Currently, all endpoints are unauthenticated.
-//! # Endpoints
-//!
-//! - `POST /init` – Initializes an OPRF session and commits to the partial exponent.
-//! - `POST /finish` – Completes the OPRF session and returns the proof share.
-
-use axum::{Extension, Json, Router, response::IntoResponse, routing::post};
-use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
+use crate::api::errors::Error;
+use crate::{OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore};
+use axum::{
+    Router,
+    extract::{
+        WebSocketUpgrade,
+        ws::{self, CloseFrame, WebSocket, close_code},
+    },
+    routing::any,
+};
+use oprf_types::{
+    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, oprf_error_codes},
+    crypto::PartyId,
+};
 use serde::Deserialize;
+use serde::Serialize;
+use std::time::Duration;
 use tracing::instrument;
 
-use crate::{OprfRequestAuthService, services::oprf::OprfService};
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HumanReadable {
+    Yes,
+    No,
+}
 
-/// Handles `POST /init`.
+/// Web-socket handler.
 ///
-/// Validates the nonce signature, retrieves the relevant merkle root for the requested epoch,
-/// and initializes a new OPRF session via [`OprfService`].
-#[instrument(level = "debug", skip_all, fields(request_id=%request.request_id))]
-async fn oprf_request<RequestAuth, RequestAuthError: IntoResponse>(
-    Extension(oprf_service): Extension<OprfService>,
-    Extension(oprf_req_auth_service): Extension<
-        OprfRequestAuthService<RequestAuth, RequestAuthError>,
-    >,
-    Json(request): Json<OprfRequest<RequestAuth>>,
-) -> axum::response::Result<Json<OprfResponse>> {
-    tracing::debug!("received new oprf request: {request:?}");
-    let request_id = request.request_id;
-    let party_id = oprf_service.party_id;
-    tracing::debug!("verifying request auth...");
-    oprf_req_auth_service.verify(&request).await?;
-    let commitments = oprf_service
-        .init_oprf_session(request_id, request.share_identifier, request.blinded_query)
-        .await?;
-    Ok(Json(OprfResponse {
-        request_id,
+/// Sets the `max_message_size` for the web-socket to the provided value. Implementations are encouraged to use a very conservative value here. We only expect exactly two kinds of messages, and those are very small (of course depending on your authentication request), therefore we can reject larger requests pretty handily.
+///
+/// The created web-socket connection holds all the information bound to the session. The generated randomness (which is not allowed to be used twice and shall not leak) only lives in the created task and is consumed when the session finishes. Furthermore, every web-socket only live for `max_connection_lifetime`. As soon as the upgrade finishes, we start the timer. If a sessions takes longer than this defined amount, the server will send a `Close` frame and deconstructs the session (also deleting all cryptographic material bound to the session).
+///
+/// Adds a `failed_upgrade` handler that logs the error.
+///
+/// See [`partial_oprf`] for the flow of the web-socket connection. If the session finishes successfully, encounters an error, the user closes the connection, or we run into a timeout, the implementation will try to initiate a graceful shutdown of the web-socket connection (closing handshake). We do this at a best-effort basis but are very restrictive on what we expect. We close any session that sends invalid requests/authentication. If the sending of the `Close` frame fails, we simply ignore the error and destruct everything associated with the session.
+async fn ws<
+    ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
+    ReqAuthError: Send + 'static + std::error::Error,
+>(
+    ws: WebSocketUpgrade,
+    party_id: PartyId,
+    oprf_material_store: OprfKeyMaterialStore,
+    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
+    max_message_size: usize,
+    max_connection_lifetime: Duration,
+) -> axum::response::Response {
+    ws.max_message_size(max_message_size)
+        .on_failed_upgrade(|err| {
+            tracing::warn!("could not establish websocket connection: {err:?}");
+        })
+        .on_upgrade(move |mut ws| async move {
+            let close_frame = match tokio::time::timeout(
+                max_connection_lifetime,
+                partial_oprf::<ReqAuth, ReqAuthError>(
+                    &mut ws,
+                    party_id,
+                    oprf_material_store,
+                    req_auth_service,
+                ),
+            )
+            .await
+            {
+                Ok(Ok(_)) => Some(CloseFrame {
+                    code: close_code::NORMAL,
+                    reason: "success".into(),
+                }),
+                Ok(Err(err)) => err.into_close_frame(),
+
+                Err(_) => Some(CloseFrame {
+                    code: oprf_error_codes::TIMEOUT,
+                    reason: "timeout".into(),
+                }),
+            };
+            if let Some(close_frame) = close_frame {
+                tracing::trace!(" < sending close frame");
+                // In their example, axum just sends the frame and ignores the error afterwards and also don't wait for the peers close frame. Therefore we do the same,
+                let _ = ws.send(ws::Message::Close(Some(close_frame))).await;
+            }
+        })
+}
+
+/// The whole life-cycle of a single user session.
+///
+/// 1) Read the [`OprfRequest`] of the user. Accepts `Text` and `Binary` frames and deserializes the request with `json` or `cbor` respectively.
+/// 2) Verifies the implementation dependent authentication part with the provided [`OprfRequestAuthService`].
+/// 3) Computes the nodes partial contribution for the session. The created randomness does not leave the task.
+/// 4) Sends the commitment back to the user (using same serialization as the user).
+/// 5) Read the [`ChallengeRequest`] of the user. Accepts `Text` and `Binary` frames and deserializes the request with `json` or `cbor` respectively.
+/// 6) Finalizes the proof share for the session and sends it back to the user (same serialization as the initial request of the user).
+///
+/// Clients may and will close the connection at any point because they only need `threshold` amount of sessions, therefore it is very much expected that sane clients send a `Close` frame at any point (or simply drop the connection). This method handles this gracefully at any point.
+#[instrument(level="debug", skip_all, fields(request_id=tracing::field::Empty))]
+async fn partial_oprf<
+    ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
+    ReqAuthError: Send + 'static + std::error::Error,
+>(
+    socket: &mut WebSocket,
+    party_id: PartyId,
+    oprf_material_store: OprfKeyMaterialStore,
+    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
+) -> Result<(), Error> {
+    tracing::trace!("> new oprf session - reading request...");
+    let (init_request, human_readable) = read_request::<OprfRequest<ReqAuth>>(socket).await?;
+    let request_id = init_request.request_id;
+    let oprf_span = tracing::Span::current();
+    oprf_span.record("request_id", request_id.to_string());
+
+    tracing::debug!("starting with request id: {request_id}");
+
+    tracing::debug!("verifying request with auth service...");
+    req_auth_service
+        .verify(&init_request)
+        .await
+        .map_err(|err| {
+            tracing::debug!("Could not auth request: {err:?}");
+            Error::Auth(err.to_string())
+        })?;
+
+    // check that blinded query (B) is not the identity element
+    if init_request.blinded_query.is_zero() {
+        return Err(Error::BadRequest(
+            "blinded query must not be identity".to_owned(),
+        ));
+    }
+
+    tracing::debug!("initiating session...");
+    let (session, commitments) = oprf_material_store
+        .partial_commit(init_request.blinded_query, init_request.share_identifier)?;
+
+    let response = OprfResponse {
         commitments,
         party_id,
-    }))
-}
+    };
 
-/// Handles `POST /finish`.
-///
-/// Finalizes the OPRF session for the given request and returns the resulting proof share.
-#[instrument(level = "debug", skip_all, fields(request_id=%request.request_id))]
-async fn oprf_challenge(
-    Extension(oprf_service): Extension<OprfService>,
-    Json(request): Json<ChallengeRequest>,
-) -> axum::response::Result<Json<ChallengeResponse>> {
-    tracing::debug!("received challenge request: {request:?}");
-    let request_id = request.request_id;
-    let proof_share = oprf_service.finalize_oprf_session(request)?;
-    Ok(Json(ChallengeResponse {
+    tracing::debug!("sending response...");
+    write_response(response, human_readable, socket).await?;
+
+    tracing::debug!("reading challenge...");
+    let (challenge, _) = read_request::<ChallengeRequest>(socket).await?;
+    let ChallengeRequest { challenge } = challenge;
+
+    tracing::debug!("finalizing session...");
+    let proof_share = oprf_material_store.challenge(
         request_id,
-        proof_share,
-    }))
+        party_id,
+        session,
+        challenge,
+        init_request.share_identifier,
+    )?;
+    let challenge_response = ChallengeResponse { proof_share };
+
+    tracing::debug!("sending challenge response to client...");
+    write_response(challenge_response, human_readable, socket).await?;
+    Ok(())
 }
 
-/// Builds the router for v1 OPRF endpoints.
+/// Attempts to read a `Msg` from the web-socket. Accepts `Text` and `Binary` frames and tries to deserialize the message with either `json` or `cbor`.
+///
+/// # Errors
+/// Returns the corresponding error if either the peer closes the connection (gracefully with a `Close` frame or not) or if the `Msg` cannot be serialized with the corresponding format.
+async fn read_request<Msg: for<'de> Deserialize<'de>>(
+    socket: &mut WebSocket,
+) -> Result<(Msg, HumanReadable), Error> {
+    let res = match socket.recv().await.ok_or(Error::ConnectionClosed)?? {
+        ws::Message::Text(json) => (
+            serde_json::from_slice::<Msg>(json.as_bytes()).map_err(|_| Error::UnexpectedMessage)?,
+            HumanReadable::Yes,
+        ),
+        ws::Message::Binary(cbor) => (
+            ciborium::from_reader(cbor.as_ref()).map_err(|_| Error::UnexpectedMessage)?,
+            HumanReadable::No,
+        ),
+        ws::Message::Close(_) => return Err(Error::ConnectionClosed),
+        _ => return Err(Error::UnexpectedMessage),
+    };
+    Ok(res)
+}
+
+/// Attempts to write a `Msg` to the web-socket. Depending on `human_readable` either sends a `Text` (`json`) frame or `Binary` (`cbor`) frame.
+async fn write_response<Msg: Serialize>(
+    response: Msg,
+    human_readable: HumanReadable,
+    socket: &mut WebSocket,
+) -> Result<(), Error> {
+    let msg = match human_readable {
+        HumanReadable::Yes => {
+            let msg = serde_json::to_string(&response).expect("Can serialize response");
+            ws::Message::text(msg)
+        }
+        HumanReadable::No => {
+            let mut buf = Vec::new();
+            ciborium::into_writer(&response, &mut buf).expect("Can serialize response");
+            ws::Message::binary(buf)
+        }
+    };
+    socket.send(msg).await?;
+    Ok(())
+}
+
+/// Creates a `Router` with a single `/oprf` route.
+///
+/// The clients will upgrade their connection via the web-socket upgrade protocol. Axum basically supports HTTP/1.1 and HTTP/2.0 web-socket connections, therefore we accept connections with `any`.
+///
+/// If you want to enable HTTP/2.0, you either have to do it by hand or by calling `axum::serve`, which enabled HTTP/2.0 by default. Have a look at [Axum's HTTP2.0 example](https://github.com/tokio-rs/axum/blob/aeff16e91af6fa76efffdee8f3e5f464b458785b/examples/websockets-http2/src/main.rs#L57).
 pub fn routes<
-    RequestAuth: for<'de> Deserialize<'de> + Send + 'static,
-    RequestAuthError: IntoResponse + 'static,
+    ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
+    ReqAuthError: Send + 'static + std::error::Error,
 >(
-    oprf_service: OprfService,
-    req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
+    party_id: PartyId,
+    oprf_material_store: OprfKeyMaterialStore,
+    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
+    max_message_size: usize,
+    max_connection_lifetime: Duration,
 ) -> Router {
-    Router::new()
-        .route("/init", post(oprf_request::<RequestAuth, RequestAuthError>))
-        .route("/finish", post(oprf_challenge))
-        .layer(Extension(req_auth_service))
-        .layer(Extension(oprf_service))
+    Router::new().route(
+        "/oprf",
+        any(move |websocket_upgrade| {
+            ws::<ReqAuth, ReqAuthError>(
+                websocket_upgrade,
+                party_id,
+                oprf_material_store,
+                req_auth_service,
+                max_message_size,
+                max_connection_lifetime,
+            )
+        }),
+    )
 }

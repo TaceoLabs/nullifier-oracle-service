@@ -61,6 +61,23 @@ pub struct OprfNodeConfig {
     )]
     pub session_cleanup_interval: Duration,
 
+    /// Max message size the websocket connection accepts.
+    ///
+    /// Default value: 512 kilobytes
+    #[clap(long, env = "OPRF_SERVICE_MAX_MESSAGE_SIZE", default_value = "524288")]
+    pub ws_max_message_size: usize,
+
+    /// Max time a created session is valid.
+    ///
+    /// This interval specifies how long a websocket connection is kept alive after a user initiates a session.
+    #[clap(
+        long,
+        env = "OPRF_SERVICE_SESSION_LIFETIME",
+        default_value="5min",
+        value_parser = humantime::parse_duration
+    )]
+    pub session_lifetime: Duration,
+
     /// The Address of the OprfKeyRegistry contract.
     #[clap(long, env = "OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT")]
     pub oprf_key_registry_contract: Address,
