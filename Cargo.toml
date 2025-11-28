@@ -40,7 +40,7 @@ axum = "0.8"
 axum-test = "18"
 blake3 = "1"
 circom-types = { package = "taceo-circom-types", version = "0.1", default-features = false }
-circom-witness-rs = { version = "0.2.1" }
+circom-witness-rs = { version = "0.2.2" }
 clap = "4"
 criterion = "0.7"
 eddsa-babyjubjub = { package = "taceo-eddsa-babyjubjub", version = "0.5" }

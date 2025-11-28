@@ -2211,9 +2211,9 @@ dependencies = [
 
 [[package]]
 name = "circom-witness-rs"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ffb423ecdfea516ad77c12a0a4b6e7a52b42656fe5b31df151ca2abc44545f"
+checksum = "ef3c1ad2fd98272ce36f3db32543dbeec6497e04c5e71640602e1cda1698c318"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.5.0",
