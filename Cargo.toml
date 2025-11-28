@@ -79,6 +79,8 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
+world-id-core = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "964827d" }
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "964827d" }
 zeroize = "1"
 
 # This profile can be used for CI in pull requests.
