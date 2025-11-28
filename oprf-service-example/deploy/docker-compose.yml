@@ -1,0 +1,19 @@
+services:
+  localstack:
+    image: localstack/localstack
+    container_name: localstack
+    stop_grace_period: 1s
+    ports:
+      - "4566:4566"            
+    environment:
+      - SERVICES=secretsmanager
+      - DEBUG=1
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: anvil
+    stop_grace_period: 1s
+    ports:
+      - "8545:8545"            
+    command: anvil
+    environment:
+        ANVIL_IP_ADDR: 0.0.0.0

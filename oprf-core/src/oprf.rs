@@ -27,6 +27,11 @@ pub mod server;
 pub struct BlindedOprfRequest(Affine);
 
 impl BlindedOprfRequest {
+    /// Construct a new [`BlindedOprfRequest`] from an affine point.
+    pub fn new(value: Affine) -> Self {
+        Self(value)
+    }
+
     /// Returns the public x/y coordinates of the blinded query.
     pub fn blinded_query_as_public_output(&self) -> [BaseField; 2] {
         [self.0.x, self.0.y]

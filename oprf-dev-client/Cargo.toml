@@ -14,16 +14,15 @@ alloy = { workspace = true, features = ["full", "rpc", "rpc-client-ws"] }
 ark-babyjubjub = { workspace = true }
 ark-ff.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
-eddsa-babyjubjub.workspace = true
 eyre.workspace = true
 humantime.workspace = true
-k256 = { workspace = true, features = ["ecdsa"] }
 nodes-telemetry.workspace = true
 oprf-client = { workspace = true }
+oprf-client-example = { workspace = true }
+oprf-core = { workspace = true }
 oprf-service = { workspace = true }
 oprf-test = { workspace = true }
 oprf-types = { workspace = true }
-oprf-world-types = { workspace = true }
 rand.workspace = true
 rand_chacha.workspace = true
 reqwest = { workspace = true }
@@ -35,7 +34,9 @@ tokio = { workspace = true, features = [
   "signal",
   "sync",
   "time",
-  "tokio-macros"
+  "tokio-macros",
 ] }
 tracing.workspace = true
 uuid.workspace = true
+world-id-core.workspace = true
+world-id-primitives.workspace = true

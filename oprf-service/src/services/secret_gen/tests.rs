@@ -7,10 +7,9 @@
 use std::path::PathBuf;
 
 use ark_ec::{CurveGroup as _, PrimeGroup};
-use groth16_material::circom::{CircomGroth16Material, Validate};
+use groth16_material::circom::{CircomGroth16Material, CircomGroth16MaterialBuilder, Validate};
 use itertools::Itertools;
-use oprf_client::CircomGroth16MaterialBuilder;
-use oprf_types::crypto::{PeerPublicKey, PeerPublicKeyList, RpSecretGenCiphertexts};
+use oprf_types::crypto::{EphemeralEncryptionPublicKey, SecretGenCiphertexts};
 use rand::Rng;
 
 use super::*;
@@ -18,26 +17,26 @@ use super::*;
 async fn dlog_secret_gen(
     key_gen_material: CircomGroth16Material,
 ) -> eyre::Result<DLogSecretGenService> {
-    let rp_material = RpMaterialStore::new(HashMap::new());
-    let dlog_secret_gen = DLogSecretGenService::init(rp_material, key_gen_material);
+    let oprf_material = OprfKeyMaterialStore::new(HashMap::new());
+    let dlog_secret_gen = DLogSecretGenService::init(oprf_material, key_gen_material);
     Ok(dlog_secret_gen)
 }
 
 fn build_public_inputs(
     degree: u16,
-    pk: PeerPublicKey,
-    contribution: &RpSecretGenCiphertexts,
-    peer_keys_flattened: &[ark_bn254::Fr],
-    commitments: RpSecretGenCommitment,
+    pk: EphemeralEncryptionPublicKey,
+    contribution: &SecretGenCiphertexts,
+    flattened_pks: &[ark_bn254::Fr],
+    commitments: SecretGenCommitment,
 ) -> Vec<ark_babyjubjub::Fq> {
     // public input is:
     // 1) PublicKey from sender (Affine Point Babyjubjub)
     // 2) Commitment to share (Affine Point Babyjubjub)
     // 3) Commitment to coeffs (Basefield Babyjubjub)
-    // 4) Ciphertexts for peers (in this case 3 Basefield BabyJubJub)
+    // 4) Ciphertexts for nodes (in this case 3 Basefield BabyJubJub)
     // 5) Commitments to plaintexts (in this case 3 Affine Points BabyJubJub)
     // 6) Degree (Basefield BabyJubJub)
-    // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
+    // 7) Public Keys from nodes (in this case 3 Affine Points BabyJubJub)
     // 8) Nonces (in this case 3 Basefield BabyJubJub)
     let mut ciphers = Vec::with_capacity(3);
     let mut comm_ciphers = Vec::with_capacity(3);
@@ -57,7 +56,7 @@ fn build_public_inputs(
     public_inputs.extend(ciphers);
     public_inputs.extend(comm_ciphers);
     public_inputs.push(ark_babyjubjub::Fq::from(degree));
-    public_inputs.extend(peer_keys_flattened.iter());
+    public_inputs.extend(flattened_pks.iter());
     public_inputs.extend(nonces);
     public_inputs
 }
@@ -65,7 +64,7 @@ fn build_public_inputs(
 #[tokio::test]
 async fn test_secret_gen() -> eyre::Result<()> {
     let mut rng = rand::thread_rng();
-    let rp_id = RpId::new(rng.r#gen());
+    let oprf_key_id = OprfKeyId::new(rng.r#gen());
     let threshold = 2;
     let graph = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
         .join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin");
@@ -83,9 +82,9 @@ async fn test_secret_gen() -> eyre::Result<()> {
     let mut dlog_secret_gen1 = dlog_secret_gen(key_gen_material.clone()).await?;
     let mut dlog_secret_gen2 = dlog_secret_gen(key_gen_material.clone()).await?;
 
-    let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(rp_id, threshold);
-    let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(rp_id, threshold);
-    let dlog_secret_gen2_round1 = dlog_secret_gen2.round1(rp_id, threshold);
+    let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(oprf_key_id, threshold);
+    let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(oprf_key_id, threshold);
+    let dlog_secret_gen2_round1 = dlog_secret_gen2.round1(oprf_key_id, threshold);
 
     let commitments0 = dlog_secret_gen0_round1.contribution.clone();
     let commitments1 = dlog_secret_gen1_round1.contribution.clone();
@@ -101,52 +100,51 @@ async fn test_secret_gen() -> eyre::Result<()> {
         |acc, contribution| (acc + contribution.comm_share).into_affine(),
     );
 
-    let peers = PeerPublicKeyList::from(vec![
+    let pks = [
         dlog_secret_gen0_round1.contribution.eph_pub_key,
         dlog_secret_gen1_round1.contribution.eph_pub_key,
         dlog_secret_gen2_round1.contribution.eph_pub_key,
-    ]);
-    let peer_keys_flattened = peers
-        .clone()
+    ];
+    let flattened_pks = pks
         .into_iter()
         .flat_map(|p| [p.inner().x, p.inner().y])
         .collect_vec();
 
     let dlog_secret_gen0_round2 = dlog_secret_gen0
-        .round2(rp_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen1_round2 = dlog_secret_gen1
-        .round2(rp_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen2_round2 = dlog_secret_gen2
-        .round2(rp_id, peers.clone())
+        .round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
 
-    assert_eq!(dlog_secret_gen0_round2.rp_id, rp_id);
-    assert_eq!(dlog_secret_gen1_round2.rp_id, rp_id);
-    assert_eq!(dlog_secret_gen2_round2.rp_id, rp_id);
-    let peer_keys = peers.clone().into_inner();
+    assert_eq!(dlog_secret_gen0_round2.oprf_key_id, oprf_key_id);
+    assert_eq!(dlog_secret_gen1_round2.oprf_key_id, oprf_key_id);
+    assert_eq!(dlog_secret_gen2_round2.oprf_key_id, oprf_key_id);
+    let [pk0, pk1, pk2] = pks;
     // verify the proofs
     // build public inputs for proof0
     let public_inputs0 = build_public_inputs(
         threshold - 1,
-        peer_keys[0],
+        pk0,
         &dlog_secret_gen0_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments0,
     );
     let public_inputs1 = build_public_inputs(
         threshold - 1,
-        peer_keys[1],
+        pk1,
         &dlog_secret_gen1_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments1,
     );
     let public_inputs2 = build_public_inputs(
         threshold - 1,
-        peer_keys[2],
+        pk2,
         &dlog_secret_gen2_round2.contribution,
-        &peer_keys_flattened,
+        &flattened_pks,
         commitments2,
     );
     let proof0 = dlog_secret_gen0_round2.contribution.proof;
@@ -167,26 +165,26 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .collect_vec();
     let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
 
-    let dlog_secret_gen0_round3 = dlog_secret_gen0.round3(rp_id, ciphers0)?;
-    let dlog_secret_gen1_round3 = dlog_secret_gen1.round3(rp_id, ciphers1)?;
-    let dlog_secret_gen2_round3 = dlog_secret_gen2.round3(rp_id, ciphers2)?;
-    assert_eq!(dlog_secret_gen0_round3.rp_id, rp_id);
-    assert_eq!(dlog_secret_gen1_round3.rp_id, rp_id);
-    assert_eq!(dlog_secret_gen2_round3.rp_id, rp_id);
+    let dlog_secret_gen0_round3 = dlog_secret_gen0.round3(oprf_key_id, ciphers0)?;
+    let dlog_secret_gen1_round3 = dlog_secret_gen1.round3(oprf_key_id, ciphers1)?;
+    let dlog_secret_gen2_round3 = dlog_secret_gen2.round3(oprf_key_id, ciphers2)?;
+    assert_eq!(dlog_secret_gen0_round3.oprf_key_id, oprf_key_id);
+    assert_eq!(dlog_secret_gen1_round3.oprf_key_id, oprf_key_id);
+    assert_eq!(dlog_secret_gen2_round3.oprf_key_id, oprf_key_id);
 
     let share0 = dlog_secret_gen0
         .finished_shares
-        .get(&rp_id)
+        .get(&oprf_key_id)
         .expect("gen0 has no share")
         .clone();
     let share1 = dlog_secret_gen1
         .finished_shares
-        .get(&rp_id)
+        .get(&oprf_key_id)
         .expect("gen0 has no share")
         .clone();
     let share2 = dlog_secret_gen2
         .finished_shares
-        .get(&rp_id)
+        .get(&oprf_key_id)
         .expect("gen0 has no share")
         .clone();
 
@@ -200,23 +198,16 @@ async fn test_secret_gen() -> eyre::Result<()> {
 
     assert_eq!(is_public_key, should_public_key);
 
-    let rp_public_key = k256::SecretKey::random(&mut rng).public_key();
     // finalize round
-    let finalize0 =
-        dlog_secret_gen0.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
-    let finalize1 =
-        dlog_secret_gen1.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
-    let finalize2 =
-        dlog_secret_gen2.finalize(rp_id, rp_public_key, RpNullifierKey::from(is_public_key))?;
-    assert_eq!(finalize0.rp_id, rp_id);
-    assert_eq!(finalize1.rp_id, rp_id);
-    assert_eq!(finalize2.rp_id, rp_id);
-    assert_eq!(finalize0.public_key, rp_public_key);
-    assert_eq!(finalize1.public_key, rp_public_key);
-    assert_eq!(finalize2.public_key, rp_public_key);
-    assert_eq!(finalize0.rp_nullifier_key, is_public_key.into());
-    assert_eq!(finalize1.rp_nullifier_key, is_public_key.into());
-    assert_eq!(finalize2.rp_nullifier_key, is_public_key.into());
+    let finalize0 = dlog_secret_gen0.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
+    let finalize1 = dlog_secret_gen1.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
+    let finalize2 = dlog_secret_gen2.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
+    assert_eq!(finalize0.oprf_key_id, oprf_key_id);
+    assert_eq!(finalize1.oprf_key_id, oprf_key_id);
+    assert_eq!(finalize2.oprf_key_id, oprf_key_id);
+    assert_eq!(finalize0.oprf_public_key, is_public_key.into());
+    assert_eq!(finalize1.oprf_public_key, is_public_key.into());
+    assert_eq!(finalize2.oprf_public_key, is_public_key.into());
 
     let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
     let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
@@ -232,9 +223,9 @@ async fn test_secret_gen() -> eyre::Result<()> {
 
     assert_eq!(is_public_key, should_public_key);
     // check that shares are removed correctly
-    assert!(!dlog_secret_gen0.finished_shares.contains_key(&rp_id));
-    assert!(!dlog_secret_gen1.finished_shares.contains_key(&rp_id));
-    assert!(!dlog_secret_gen2.finished_shares.contains_key(&rp_id));
+    assert!(!dlog_secret_gen0.finished_shares.contains_key(&oprf_key_id));
+    assert!(!dlog_secret_gen1.finished_shares.contains_key(&oprf_key_id));
+    assert!(!dlog_secret_gen2.finished_shares.contains_key(&oprf_key_id));
 
     Ok(())
 }
