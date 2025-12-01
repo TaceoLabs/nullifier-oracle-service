@@ -3,7 +3,7 @@
 //! finalize (unblind and hash) server responses, and verify server proofs of correctness.
 
 use ark_ec::CurveGroup;
-use ark_ff::{PrimeField, Zero};
+use ark_ff::Zero;
 
 use crate::dlog_equality::{DLogEqualityProof, InvalidProof};
 
@@ -11,13 +11,6 @@ use crate::oprf::{
     Affine, BaseField, BlindedOprfRequest, BlindedOprfResponse, BlindingFactor, Curve,
     PreparedBlindingFactor, ScalarField, mappings,
 };
-
-const OPRF_DS: &[u8] = b"OPRF";
-
-/// Returns the domain separator ("OPRF") for the query finalization as a field element.
-pub fn get_oprf_ds() -> BaseField {
-    BaseField::from_be_bytes_mod_order(OPRF_DS)
-}
 
 /// Blinds a query for the OPRF server using a randomly generated blinding factor.
 ///
@@ -66,6 +59,7 @@ pub fn blind_query(
 pub fn finalize_query(
     response: BlindedOprfResponse,
     blinding_factor: PreparedBlindingFactor,
+    domain_separator: BaseField,
 ) -> BaseField {
     // Unblind the response using the blinding factor
     let unblinded_point = response.unblind_response(&blinding_factor);
@@ -73,7 +67,7 @@ pub fn finalize_query(
     // compute the second hash in the 2Hash-DH construction
     // out = H(query, unblinded_point)
     let hash_input = [
-        get_oprf_ds(), // capacity of the sponge with domain separator
+        domain_separator,
         blinding_factor.query,
         unblinded_point.x,
         unblinded_point.y,
@@ -102,6 +96,7 @@ pub fn finalize_query_and_verify_proof(
     response: BlindedOprfResponse,
     proof: DLogEqualityProof,
     blinding_factor: PreparedBlindingFactor,
+    domain_separator: BaseField,
 ) -> Result<BaseField, InvalidProof> {
     // Verify the proof
     use ark_ec::PrimeGroup as _;
@@ -115,5 +110,5 @@ pub fn finalize_query_and_verify_proof(
     proof.verify(a, b, c, d)?;
 
     // Call finalize_query to unblind the response
-    Ok(finalize_query(response, blinding_factor))
+    Ok(finalize_query(response, blinding_factor, domain_separator))
 }

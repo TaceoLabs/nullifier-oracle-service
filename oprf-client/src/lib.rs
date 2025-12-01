@@ -89,6 +89,7 @@ pub async fn distributed_oprf<T>(
     share_epoch: ShareEpoch,
     query: ark_babyjubjub::Fq,
     blinding_factor: ark_babyjubjub::Fr,
+    domain_separator: ark_babyjubjub::Fq,
     auth: T,
 ) -> Result<VerifiableOprfOutput, Error>
 where
@@ -139,7 +140,7 @@ where
     let unblinded_response = oprf_blinded_response.unblind_response(&blinding_factor_prepared);
 
     let digest = poseidon2::bn254::t4::permutation(&[
-        oprf_core::oprf::client::get_oprf_ds(),
+        domain_separator,
         query,
         unblinded_response.x,
         unblinded_response.y,
