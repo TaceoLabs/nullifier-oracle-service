@@ -11,10 +11,9 @@ publish.workspace = true
 
 [dependencies]
 ark-babyjubjub = { workspace = true }
+ark-ff = { workspace = true }
 oprf-client = { workspace = true }
-oprf-core = { workspace = true }
 oprf-types = { workspace = true }
-poseidon2.workspace = true
 rand.workspace = true
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }

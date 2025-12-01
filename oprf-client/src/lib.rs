@@ -4,10 +4,12 @@
 //! Most implementations will only need the [`distributed_oprf`] method. For more fine-grained workflows, we expose all necessary functions.
 use ark_ec::AffineRepr as _;
 use oprf_core::{
-    ddlog_equality::shamir::DLogCommitmentsShamir, dlog_equality::DLogEqualityProof,
-    oprf::BlindedOprfRequest,
+    ddlog_equality::shamir::DLogCommitmentsShamir,
+    dlog_equality::DLogEqualityProof,
+    oprf::{BlindedOprfRequest, BlindedOprfResponse},
 };
 use oprf_types::{
+    OprfKeyId, ShareEpoch,
     api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, ShareIdentifier},
     crypto::OprfPublicKey,
 };
@@ -48,38 +50,72 @@ pub enum Error {
     InvalidDLogProof,
 }
 
+/// The result of the distributed OPRF protocol.
+#[derive(Debug, Clone)]
+pub struct VerifiableOprfOutput {
+    /// The generated OPRF output.
+    pub output: ark_babyjubjub::Fq,
+    /// The DLog equality proof.
+    pub dlog_proof: DLogEqualityProof,
+    /// The blinded OPRF response.
+    pub blinded_response: ark_babyjubjub::EdwardsAffine,
+    /// The unblinded OPRF response.
+    pub unblinded_response: ark_babyjubjub::EdwardsAffine,
+}
+
 /// Executes the distributed OPRF protocol.
 ///
-/// This part is agnostic to the concrete use-case and serves as a helper function for instantiations of the protocol. The method expects an [`OprfRequest`] with an `Auth` part that will be evaluated at the OPRF nodes.
-///
-/// This method tries to initialize a session at each endpoint provided in `services`. It stops as soon as it receives `threshold` answers, the other connections are dropped (the servers are expected to handle that gracefully).
-///
-/// We then prepare challenges for the remaining nodes and with their answers we compute the final [`DLogEqualityProof`].
-///
-/// Most implementations of TACEO:Oprf will only need this function. In case you want more fine-grained control, you can use the other exposed functions in this module.
+/// This function performs the full client-side workflow of the distributed OPRF protocol:
+/// 1. Blinds the input query using the provided blinding factor.
+/// 2. Initializes sessions with the specified OPRF services, sending the blinded query and authentication information.
+/// 3. Generates the DLog equality challenge based on the commitments received from the services.
+/// 4. Finishes the sessions by sending the challenge to the services and collecting their responses
+/// 5. Verifies the combined DLog equality proof from the services.
+/// 6. Unblinds the combined OPRF response using the blinding factor.
+/// 7. Computes the final OPRF output by hashing the original query and the unblinded response.
 ///
 /// # Returns
-/// The final [`DLogEqualityProof`] along with the created [`DLogCommitmentsShamir`].
+/// The final [`VerifiableOprfOutput`] containing the OPRF output, the DLog equality proof, the blinded and unblinded responses.
 ///
 /// # Errors
 /// See the [`Error`] enum for all potential errors of this function.
-#[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
-pub async fn distributed_oprf<Auth>(
-    request_id: Uuid,
-    oprf_public_key: OprfPublicKey,
+#[instrument(level = "debug", skip_all, fields(request_id = tracing::field::Empty))]
+#[expect(clippy::too_many_arguments)]
+pub async fn distributed_oprf<T>(
     services: &[String],
     threshold: usize,
-    req: OprfRequest<Auth>,
-    blinded_request: &BlindedOprfRequest,
-) -> Result<(DLogCommitmentsShamir, DLogEqualityProof), Error>
+    oprf_public_key: OprfPublicKey,
+    oprf_key_id: OprfKeyId,
+    share_epoch: ShareEpoch,
+    query: ark_babyjubjub::Fq,
+    blinding_factor: ark_babyjubjub::Fr,
+    auth: T,
+) -> Result<VerifiableOprfOutput, Error>
 where
-    Auth: Send + Sync + Clone + Serialize + DeserializeOwned + 'static,
+    T: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
-    let share_identifier = req.share_identifier;
-    // Init the sessions at the services
+    let request_id = Uuid::new_v4();
+    let distributed_oprf_span = tracing::Span::current();
+    distributed_oprf_span.record("request_id", request_id.to_string());
+    tracing::debug!("starting with request id: {request_id}");
+
+    let share_identifier = ShareIdentifier {
+        oprf_key_id,
+        share_epoch,
+    };
+
+    let (blinded_request, blinding_factor) =
+        oprf_core::oprf::client::blind_query(query, blinding_factor);
+    let oprf_req = OprfRequest {
+        request_id,
+        blinded_query: blinded_request.blinded_query(),
+        share_identifier,
+        auth,
+    };
+
     tracing::debug!("initializing sessions at {} services", services.len());
     let reqwest_client = reqwest::Client::new();
-    let sessions = sessions::init_sessions(&reqwest_client, services, threshold, req).await?;
+    let sessions = sessions::init_sessions(&reqwest_client, services, threshold, oprf_req).await?;
 
     tracing::debug!("compute the challenges for the services..");
     let challenge_request = generate_challenge_request(request_id, share_identifier, &sessions);
@@ -89,15 +125,34 @@ where
     tracing::debug!("finishing the sessions at the remaining services..");
     let responses = sessions::finish_sessions(&reqwest_client, sessions, challenge_request).await?;
 
-    // verify the DLog Equality Proof
     let dlog_proof = verify_dlog_equality(
         request_id,
         oprf_public_key,
-        blinded_request,
+        &blinded_request,
         responses,
         challenge.clone(),
     )?;
-    Ok((challenge, dlog_proof))
+
+    let blinded_response = challenge.blinded_response();
+    let blinding_factor_prepared = blinding_factor.clone().prepare();
+    let oprf_blinded_response = BlindedOprfResponse::new(blinded_response);
+    let unblinded_response = oprf_blinded_response.unblind_response(&blinding_factor_prepared);
+
+    let digest = poseidon2::bn254::t4::permutation(&[
+        oprf_core::oprf::client::get_oprf_ds(),
+        query,
+        unblinded_response.x,
+        unblinded_response.y,
+    ]);
+
+    let output = digest[1];
+
+    Ok(VerifiableOprfOutput {
+        output,
+        blinded_response,
+        dlog_proof,
+        unblinded_response,
+    })
 }
 
 /// Combines the [`ChallengeResponse`]s of the OPRF nodes and computes the final [`DLogEqualityProof`].

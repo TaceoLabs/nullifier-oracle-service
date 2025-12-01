@@ -271,14 +271,10 @@ mod tests {
 
             let request_id = Uuid::new_v4();
             let action = ark_babyjubjub::Fq::rand(&mut rng);
-            let mt_index = rng.gen_range(0..(1 << 30)) as u64;
-            let query_hash = oprf_core::oprf::client::generate_query(
-                mt_index.into(),
-                oprf_key_id.into(),
-                action,
-            );
+            let query = action;
+            let blinding_factor = ark_babyjubjub::Fr::rand(&mut rng);
             let (blinded_request, _blinding_factor) =
-                oprf_core::oprf::client::blind_query(query_hash, &mut rng);
+                oprf_core::oprf::client::blind_query(query, blinding_factor);
             let oprf_req = OprfRequest {
                 request_id,
                 blinded_query: blinded_request.blinded_query(),

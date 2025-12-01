@@ -114,6 +114,8 @@ impl BlindedOprfResponse {
 #[cfg(feature = "server")]
 mod tests {
 
+    use rand::Rng;
+
     use crate::oprf::{
         self,
         server::{OprfKey, OprfServer},
@@ -127,13 +129,9 @@ mod tests {
         let key = OprfKey::random(&mut rng);
         let service = OprfServer::new(key);
 
-        let query = oprf::client::generate_query(
-            BaseField::from(42),
-            BaseField::from(2),
-            BaseField::from(3),
-        );
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, &mut rng);
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
+        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
         assert_ne!(blinded_request, blinded_request2);
         let response = service.answer_query(blinded_request);
 
@@ -163,13 +161,9 @@ mod tests {
         let service = OprfServer::new(key);
         let public_key = service.public_key();
 
-        let query = oprf::client::generate_query(
-            BaseField::from(42),
-            BaseField::from(2),
-            BaseField::from(3),
-        );
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, &mut rng);
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
+        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
         assert_ne!(blinded_request, blinded_request2);
         let (response, proof) = service.answer_query_with_proof(blinded_request);
 

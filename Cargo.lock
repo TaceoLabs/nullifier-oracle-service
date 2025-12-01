@@ -4410,6 +4410,7 @@ dependencies = [
  "taceo-ark-babyjubjub",
  "taceo-oprf-core 0.1.0",
  "taceo-oprf-types 0.1.0",
+ "taceo-poseidon2 0.2.0",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -4438,12 +4439,11 @@ dependencies = [
 name = "oprf-client-example"
 version = "0.1.0"
 dependencies = [
+ "ark-ff 0.5.0",
  "oprf-client 0.1.0",
  "rand 0.8.5",
  "taceo-ark-babyjubjub",
- "taceo-oprf-core 0.1.0",
  "taceo-oprf-types 0.1.0",
- "taceo-poseidon2 0.2.0",
  "tracing",
  "uuid",
 ]

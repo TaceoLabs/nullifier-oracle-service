@@ -15,6 +15,7 @@ ark-ec = { workspace = true }
 futures = { workspace = true }
 oprf-core = { workspace = true }
 oprf-types = { workspace = true }
+poseidon2 = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
