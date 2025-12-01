@@ -87,6 +87,34 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
     }
 
     /**
+     * @notice Full ERC-4337 validation pipeline
+     * @dev Handles signature check + depositing missing funds
+     */
+    function validateUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash,
+        uint256 missingAccountFunds
+    ) external virtual override returns (uint256 validationData) {
+
+        // 1. Validate the signature (your existing logic)
+        uint256 sigResult = _validateSignature(userOp, userOpHash);
+
+        // If the EntryPoint requires a top-up of funds, deposit them
+        // This ensures the AA wallet always has enough prefund to pay for gas
+        if (missingAccountFunds > 0) {
+            (bool success, ) = address(entryPoint()).call{value: missingAccountFunds}(
+                abi.encodeWithSelector(
+                    _entryPoint.depositTo.selector,
+                    address(this)
+                )
+            );
+            require(success, "Deposit failed");
+        }
+
+        return sigResult; // 0 = valid, >0 = invalid per ERC-4337 spec
+    }
+
+    /**
      * @notice Validate the signature of a user operation
      * @param userOp The user operation
      * @param userOpHash The hash of the user operation
