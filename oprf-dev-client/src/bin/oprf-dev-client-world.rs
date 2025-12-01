@@ -16,7 +16,7 @@ use alloy::{
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
-use oprf_core::oprf::BlindedOprfRequest;
+use oprf_core::oprf::{BlindedOprfRequest, BlindedOprfResponse, BlindingFactor};
 use oprf_test::{OprfKeyRegistry, health_checks, oprf_key_registry_scripts};
 use oprf_types::{
     OprfKeyId, ShareEpoch,
@@ -29,13 +29,16 @@ use tokio::task::JoinSet;
 use uuid::Uuid;
 use world_id_core::{
     Authenticator, AuthenticatorError, Credential, EdDSAPrivateKey, EdDSAPublicKey, FieldElement,
-    HashableCredential, oprf::SignedOprfQuery, proof::CircomGroth16Material,
+    HashableCredential, proof::CircomGroth16Material,
 };
 
 use world_id_primitives::{
-    Config, TREE_DEPTH, authenticator::AuthenticatorPublicKeySet,
-    circuit_inputs::NullifierProofCircuitInput, merkle::MerkleInclusionProof,
-    oprf::OprfRequestAuthV1, proof::SingleProofInput,
+    Config, TREE_DEPTH,
+    authenticator::AuthenticatorPublicKeySet,
+    circuit_inputs::{NullifierProofCircuitInput, QueryProofCircuitInput},
+    merkle::MerkleInclusionProof,
+    oprf::OprfRequestAuthV1,
+    proof::SingleProofInput,
 };
 
 #[derive(Parser, Debug)]
@@ -273,7 +276,8 @@ fn prepare_nullifier_stress_test_oprf_request(
     query_material: &CircomGroth16Material,
 ) -> eyre::Result<(
     SingleProofInput<TREE_DEPTH>,
-    SignedOprfQuery,
+    QueryProofCircuitInput<TREE_DEPTH>,
+    BlindingFactor,
     OprfRequest<OprfRequestAuthV1>,
 )> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
@@ -328,28 +332,33 @@ fn prepare_nullifier_stress_test_oprf_request(
         signal_hash: signal_hash.into(),
     };
 
-    let signed_query = world_id_core::oprf::sign_oprf_query(
+    let query_hash =
+        world_id_core::proof::query_hash(args.inclusion_proof.account_id, args.rp_id, args.action);
+    let blinding_factor = ark_babyjubjub::Fr::rand(&mut rng);
+
+    let (oprf_request_auth, query_input) = world_id_core::proof::oprf_request_auth(
         &args,
         query_material,
         authenticator_private_key,
-        request_id,
+        query_hash,
+        blinding_factor,
         &mut rng,
     )?;
 
-    let req = signed_query.get_request();
+    let (blinded_request, blinding_factor) =
+        oprf_core::oprf::client::blind_query(query_hash, blinding_factor);
 
-    // FIXME conv to our type until oprf-types is released
     let req = OprfRequest {
-        request_id: req.request_id,
-        blinded_query: req.blinded_query,
+        request_id,
+        blinded_query: blinded_request.blinded_query(),
         share_identifier: ShareIdentifier {
-            oprf_key_id: OprfKeyId::new(req.share_identifier.oprf_key_id.into_inner()),
-            share_epoch: ShareEpoch::new(req.share_identifier.share_epoch.into_inner()),
+            oprf_key_id,
+            share_epoch: ShareEpoch::default(),
         },
-        auth: req.auth,
+        auth: oprf_request_auth,
     };
 
-    Ok((args, signed_query, req))
+    Ok((args, query_input, blinding_factor, req))
 }
 
 fn avg(durations: &[Duration]) -> Duration {
@@ -382,11 +391,13 @@ async fn stress_test(
     tracing::info!("preparing requests..");
     let mut request_ids = HashMap::with_capacity(cmd.nullifier_num);
     let mut oprf_args = HashMap::with_capacity(cmd.nullifier_num);
-    let mut oprf_queries = HashMap::with_capacity(cmd.nullifier_num);
+    let mut query_inputs = HashMap::with_capacity(cmd.nullifier_num);
+    let mut blinded_queries = HashMap::with_capacity(cmd.nullifier_num);
+    let mut blinding_factors = HashMap::with_capacity(cmd.nullifier_num);
     let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
 
     for idx in 0..cmd.nullifier_num {
-        let (args, query, req) = prepare_nullifier_stress_test_oprf_request(
+        let (args, query_input, blinding_factor, req) = prepare_nullifier_stress_test_oprf_request(
             authenticator,
             &authenticator_private_key,
             oprf_key_id,
@@ -398,7 +409,9 @@ async fn stress_test(
         )?;
         request_ids.insert(idx, req.request_id);
         oprf_args.insert(idx, args);
-        oprf_queries.insert(idx, query);
+        query_inputs.insert(idx, query_input);
+        blinded_queries.insert(idx, req.blinded_query);
+        blinding_factors.insert(idx, blinding_factor);
         init_requests.push(req);
     }
 
@@ -492,28 +505,31 @@ async fn stress_test(
                 if !cmd.skip_checks {
                     let request_id = request_ids.remove(&idx).expect("is there");
                     let args = oprf_args.remove(&idx).expect("is there");
-                    let oprf_query = oprf_queries.remove(&idx).expect("is there");
+                    let query_input = query_inputs.remove(&idx).expect("is there");
+                    let blinded_query = blinded_queries.remove(&idx).expect("is there");
+                    let blinding_factor = blinding_factors.remove(&idx).expect("is there");
                     let dlog_proof = oprf_client::verify_dlog_equality(
                         request_id,
                         oprf_public_key,
-                        // FIXME conv to our type until oprf-types is released
-                        &BlindedOprfRequest::new(oprf_query.blinded_request().blinded_query()),
+                        &BlindedOprfRequest::new(blinded_query),
                         responses,
                         challenge.challenge.clone(),
                     )?;
-                    let nullifier_input = NullifierProofCircuitInput::new(
-                        oprf_query.query_input().clone(),
-                        // FIXME conv to our type until oprf-types is released
-                        &world_id_core::oprf_core::dlog_equality::DLogEqualityProof {
-                            e: dlog_proof.e,
-                            s: dlog_proof.s,
-                        },
-                        oprf_public_key.inner(),
-                        challenge.challenge.blinded_response(),
-                        *args.signal_hash,
-                        *args.rp_session_id_r_seed,
-                        oprf_query.blinding_factor().clone(),
-                    );
+                    let blinded_response = challenge.challenge.blinded_response();
+                    let blinding_factor_prepared = blinding_factor.prepare();
+                    let oprf_blinded_response = BlindedOprfResponse::new(blinded_response);
+                    let unblinded_response =
+                        oprf_blinded_response.unblind_response(&blinding_factor_prepared);
+                    let nullifier_input = NullifierProofCircuitInput::<TREE_DEPTH> {
+                        query_input,
+                        dlog_e: dlog_proof.e,
+                        dlog_s: dlog_proof.s,
+                        oprf_pk: oprf_public_key.inner(),
+                        oprf_response_blinded: blinded_response,
+                        oprf_response: unblinded_response,
+                        signal_hash: *args.signal_hash,
+                        id_commitment_r: *args.rp_session_id_r_seed,
+                    };
                     let (proof, public) =
                         nullifier_material.generate_proof(&nullifier_input, &mut rng)?;
                     nullifier_material.verify_proof(&proof, &public)?;
