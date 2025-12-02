@@ -1,4 +1,5 @@
 use crate::api::errors::Error;
+use crate::services::open_sessions::OpenSessions;
 use crate::{OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore};
 use axum::{
     Router,
@@ -28,7 +29,11 @@ enum HumanReadable {
 ///
 /// Sets the `max_message_size` for the web-socket to the provided value. Implementations are encouraged to use a very conservative value here. We only expect exactly two kinds of messages, and those are very small (of course depending on your authentication request), therefore we can reject larger requests pretty handily.
 ///
-/// The created web-socket connection holds all the information bound to the session. The generated randomness (which is not allowed to be used twice and shall not leak) only lives in the created task and is consumed when the session finishes. Furthermore, every web-socket only live for `max_connection_lifetime`. As soon as the upgrade finishes, we start the timer. If a sessions takes longer than this defined amount, the server will send a `Close` frame and deconstructs the session (also deleting all cryptographic material bound to the session).
+/// The created web-socket connection holds all the information bound to the session. At the very start of the session, tries to lock the requested session-id with the [`OpenSessions`] service, as no two sessions with the same id must be handled at the same time.
+///
+/// The generated randomness (which is not allowed to be used twice and shall not leak) only lives in the created task and is consumed when the session finishes (also releases the session-id lock).
+///
+/// Furthermore, every web-socket only live for `max_connection_lifetime`. As soon as the upgrade finishes, we start the timer. If a sessions takes longer than this defined amount, the server will send a `Close` frame and deconstructs the session (also deleting all cryptographic material bound to the session).
 ///
 /// Adds a `failed_upgrade` handler that logs the error.
 ///
@@ -39,6 +44,7 @@ async fn ws<
 >(
     ws: WebSocketUpgrade,
     party_id: PartyId,
+    open_sessions: OpenSessions,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
     max_message_size: usize,
@@ -54,6 +60,7 @@ async fn ws<
                 partial_oprf::<ReqAuth, ReqAuthError>(
                     &mut ws,
                     party_id,
+                    open_sessions,
                     oprf_material_store,
                     req_auth_service,
                 ),
@@ -96,16 +103,19 @@ async fn partial_oprf<
 >(
     socket: &mut WebSocket,
     party_id: PartyId,
+    open_sessions: OpenSessions,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
 ) -> Result<(), Error> {
     tracing::trace!("> new oprf session - reading request...");
     let (init_request, human_readable) = read_request::<OprfRequest<ReqAuth>>(socket).await?;
     let request_id = init_request.request_id;
-    let oprf_span = tracing::Span::current();
-    oprf_span.record("request_id", request_id.to_string());
 
     tracing::debug!("starting with request id: {request_id}");
+    let _session_guard = open_sessions.insert_new_session(init_request.request_id)?;
+
+    let oprf_span = tracing::Span::current();
+    oprf_span.record("request_id", request_id.to_string());
 
     tracing::debug!("verifying request with auth service...");
     req_auth_service
@@ -206,6 +216,7 @@ pub fn routes<
 >(
     party_id: PartyId,
     oprf_material_store: OprfKeyMaterialStore,
+    open_sessions: OpenSessions,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
     max_message_size: usize,
     max_connection_lifetime: Duration,
@@ -216,6 +227,7 @@ pub fn routes<
             ws::<ReqAuth, ReqAuthError>(
                 websocket_upgrade,
                 party_id,
+                open_sessions,
                 oprf_material_store,
                 req_auth_service,
                 max_message_size,

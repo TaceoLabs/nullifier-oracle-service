@@ -3,10 +3,13 @@
 use crate::services::oprf_key_material_store::OprfKeyMaterialStoreError;
 use axum::extract::ws::{CloseFrame, close_code};
 use oprf_types::api::v1::oprf_error_codes;
+use uuid::Uuid;
 
 /// All errors that may occur during an OPRF request.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
+    #[error("Session {0} already exists")]
+    SessionReuse(Uuid),
     #[error("Connection closed by peer")]
     ConnectionClosed,
     #[error(transparent)]
@@ -28,6 +31,10 @@ impl Error {
                 // nothing to do here
                 None
             }
+            err @ Error::SessionReuse(_) => Some(CloseFrame {
+                code: close_code::POLICY,
+                reason: err.to_string().into(),
+            }),
             Error::Axum(_) => Some(CloseFrame {
                 code: close_code::ERROR,
                 reason: "unexpected error".into(),

@@ -7,7 +7,10 @@
 //! - [`info`] – Info about the service (`/version` and `/wallet`).
 //! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
 
-use crate::{OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore};
+use crate::{
+    OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore,
+    services::open_sessions::OpenSessions,
+};
 use alloy::primitives::Address;
 use axum::Router;
 use oprf_types::crypto::PartyId;
@@ -41,12 +44,15 @@ pub fn routes<
     max_message_size: usize,
     max_connection_lifetime: Duration,
 ) -> Router {
+    // Create the bookkeeping service for the open-sessions. If we add a v2 at some point, we need to reuse this service, therefore we create it here.
+    let open_sessions = OpenSessions::default();
     Router::new()
         .nest(
             "/api/v1",
             v1::routes(
                 party_id,
                 oprf_material_store.clone(),
+                open_sessions,
                 req_auth_service.clone(),
                 max_message_size,
                 max_connection_lifetime,
