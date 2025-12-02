@@ -18,6 +18,7 @@
 use std::fmt;
 
 use alloy::primitives::{U160, U256};
+use ark_ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 pub mod api;
@@ -81,7 +82,12 @@ impl fmt::Display for ShareEpoch {
 impl From<OprfKeyId> for ark_babyjubjub::Fq {
     fn from(value: OprfKeyId) -> Self {
         let u256 = U256::from(value.0);
-        // this works because we now that key-id has 160 bits
-        ark_babyjubjub::Fq::new(ark_ff::BigInt(u256.into_limbs()))
+        let big_int = ark_ff::BigInt(u256.into_limbs());
+        // Explicitly check if value is larger than modulus.
+        if ark_babyjubjub::Fq::MODULUS <= big_int {
+            // This can't happen with the current implementation, but still we want to take extra care. If e.g., someone promotes the underlying primitive type from uint160 to uint256, this might happen without realizing which would be a nasty bug.
+            panic!("Field element larger than bjj-basefield")
+        }
+        ark_babyjubjub::Fq::new(big_int)
     }
 }
