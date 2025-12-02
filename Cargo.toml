@@ -2,12 +2,13 @@
 resolver = "3"
 members = [
   "oprf-client",
+  "oprf-client-example",
   "oprf-core",
   "oprf-dev-client",
   "oprf-service",
+  "oprf-service-example",
   "oprf-test",
-  "oprf-types",
-  "oprf-world-types"
+  "oprf-types"
 ]
 
 [workspace.package]
@@ -21,18 +22,13 @@ publish = false
 
 [workspace.dependencies]
 alloy = { version = "1", default-features = false }
-ark-algebra-test-templates = "0.5"
 ark-babyjubjub = { package = "taceo-ark-babyjubjub", version = "0.5" }
 ark-bn254 = { version = "0.5" }
-ark-curve-constraint-tests = "0.5"
 ark-ec = "0.5"
 ark-ff = "0.5"
 ark-groth16 = "0.5"
-ark-r1cs-std = { version = "0.5" }
-ark-relations = "0.5"
 ark-serde-compat = { package = "taceo-ark-serde-compat", version = "0.2", default-features = false }
 ark-serialize = "0.5"
-ark-std = "0.5"
 async-trait = "0.1"
 aws-config = "1"
 aws-sdk-secretsmanager = "1"
@@ -40,7 +36,6 @@ axum = "0.8"
 axum-test = "18"
 blake3 = "1"
 circom-types = { package = "taceo-circom-types", version = "0.1", default-features = false }
-circom-witness-rs = { version = "0.2.1" }
 clap = "4"
 criterion = "0.7"
 eddsa-babyjubjub = { package = "taceo-eddsa-babyjubjub", version = "0.5" }
@@ -49,7 +44,6 @@ futures = "0.3"
 git-version = "0.3"
 groth16 = { package = "taceo-groth16", version = "0.1" }
 groth16-material = { package = "taceo-groth16-material", version = "0.1", default-features = false }
-hex = "0.4"
 http = "1"
 humantime = "2"
 itertools = "0.14"
@@ -57,13 +51,13 @@ k256 = "0.13"
 metrics = "0.24"
 nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd" }
 num-bigint = "0.4"
-num-traits = "0.2"
 oprf-client = { path = "oprf-client" }
-oprf-core = { package = "taceo-oprf-core", path = "oprf-core", default-features = false, version="0.1" }
+oprf-client-example = { path = "oprf-client-example" }
+oprf-core = { package = "taceo-oprf-core", path = "oprf-core", version = "0.1", default-features = false }
 oprf-service = { path = "oprf-service" }
+oprf-service-example = { path = "oprf-service-example" }
 oprf-test = { path = "oprf-test" }
-oprf-types = { package="taceo-oprf-types", path = "oprf-types", version="0.1" }
-oprf-world-types = { path = "oprf-world-types" }
+oprf-types = { package = "taceo-oprf-types", path = "oprf-types", version = "0.1" }
 parking_lot = "0.12"
 poseidon2 = { package = "taceo-poseidon2", version = "0.2", default-features = false }
 rand = { version = "0.8" }
@@ -85,7 +79,8 @@ tower-http = "0.6"
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol", rev = "9cdaf09" }  # if this gets updated, also update indexer docker tags
+world-id-core = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "1ee700c" }
+world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "1ee700c" }
 zeroize = "1"
 
 # This profile can be used for CI in pull requests.
