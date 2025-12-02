@@ -49,10 +49,10 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     mapping(address => Types.OprfPeer) addressToPeer;
 
     // The keygen states for all OPRF key identifiers.
-    mapping(uint256 => Types.OprfKeyGenState) internal runningKeyGens;
+    mapping(uint160 => Types.OprfKeyGenState) internal runningKeyGens;
 
     // Mapping between each OPRF key identifier and the corresponding OPRF public-key.
-    mapping(uint256 => Types.BabyJubJubElement) internal oprfKeyRegistry;
+    mapping(uint160 => Types.BabyJubJubElement) internal oprfKeyRegistry;
 
     // =============================================
     //                MODIFIERS
@@ -91,7 +91,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     // =============================================
     error AlreadySubmitted();
     error BadContribution();
-    error DeletedId(uint256 id);
+    error DeletedId(uint160 id);
     error ImplementationNotInitialized();
     error InvalidProof();
     error LastAdmin();
@@ -100,7 +100,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     error OnlyAdmin();
     error OutdatedNullifier();
     error UnexpectedAmountPeers(uint256 expectedParties);
-    error UnknownId(uint256 id);
+    error UnknownId(uint160 id);
     error WrongRound();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
