@@ -2,19 +2,19 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {RpRegistry} from "../../src/RpRegistry.sol";
+import {OprfKeyRegistry} from "../../src/OprfKeyRegistry.sol";
 import {Types} from "../../src/Types.sol";
 
 contract RegisterParticipantScript is Script {
     using Types for Types.BabyJubJubElement;
 
-    RpRegistry public rpRegistry;
+    OprfKeyRegistry public oprfKeyRegistry;
 
     function setUp() public {
-        address rpRegistryAddress = vm.envAddress("RP_REGISTRY_PROXY");
-        console.log("register Participants for RpRegistry Proxy contract at:", rpRegistryAddress);
+        address oprfKeyRegistryAddress = vm.envAddress("OPRF_KEY_REGISTRY_PROXY");
+        console.log("register Participants for OprfKeyRegistry Proxy contract at:", oprfKeyRegistryAddress);
 
-        rpRegistry = RpRegistry(rpRegistryAddress);
+        oprfKeyRegistry = OprfKeyRegistry(oprfKeyRegistryAddress);
     }
 
     function run() public {
@@ -33,10 +33,10 @@ contract RegisterParticipantScript is Script {
         console.log("bob address:", bobAddress);
         console.log("carol address:", carolAddress);
 
-        rpRegistry.registerOprfPeers(peerAddresses);
+        oprfKeyRegistry.registerOprfPeers(peerAddresses);
 
         // check that contract is ready
-        assert(rpRegistry.isContractReady());
+        assert(oprfKeyRegistry.isContractReady());
         vm.stopBroadcast();
         console.log("Contract is ready!");
     }

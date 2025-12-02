@@ -1,95 +1,29 @@
-#![deny(missing_docs)]
-//! This crate provides a Rust client implementation for performing **Oblivious Pseudorandom Function (OPRF)** queries,
-//! computing **Groth16 proofs**, and generating **nullifiers** for privacy-preserving protocols.
-//! Currently, the main focus lies to be a building block for [WorldID v4.0](https://www.notion.so/worldcoin/World-ID-25-Protocol-v4-0-Product-Specs-High-Level-Technical-Specs-2588614bdf8c80e79f6bd132b8b23600#2588614bdf8c80e79f6bd132b8b23600).
+#![deny(missing_docs, clippy::unwrap_used)]
+//! This crate provides utility functions for clients of the distributed OPRF protocol.
 //!
-//! Most users will interact with the high-level [`nullifier`] function, which handles the full workflow asynchronously.
-//!
-//! ## Key Features
-//!
-//! - Sign and blind queries using user credentials.
-//! - Initiate and manage asynchronous sessions with OPRF service peers.
-//! - Compute DLog equality challenges using Shamir interpolation.
-//! - Generate and verify Groth16 proofs for queries and nullifiers.
-//!
-//! ## Asynchronous Runtime
-//!
-//! - Uses `reqwest` under the hood for HTTP requests to OPRF services.
-//! - Requires a `tokio` runtime to drive async sessions.
-//!
-//! Depending on future needs, we will add a blocking API as well.
-//!
-//! ## Notes and Best Practices
-//!
-//! - **Most users** only need [`nullifier`] for generating nullifiers in typical scenarios.
-//! - Ensure enough OPRF services are provided and `threshold` is set correctly; insufficient responses will cause errors.
-//! - Cryptographically secure randomness (`Rng + CryptoRng`) must be provided for all proof operations.
-//! - Internally, the crate uses `arkworks` for Groth16 and `eddsa_babyjubjub` for elliptic curve operations.
-//!
-//! ## Module Overview
-//!
-//! - `client` – High-level client API including [`nullifier`].
-//! - `nonblocking` – Async session management for contacting OPRF peers.
-//! - `zk` – Zero-knowledge proof generation, verification, and Groth16 helpers.
-//! - `types` – Supporting structs like `OprfQuery`, `CredentialsSignature`, `UserKeyMaterial`, and `MerkleMembership`.
-
-use std::io::Read;
-use std::path::Path;
-
-use circom_types::ark_bn254::Bn254;
-use circom_types::groth16::Proof;
-use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, PartialDLogCommitmentsShamir};
-use oprf_core::oprf::{self, BlindedOprfRequest, BlindingFactor};
-
-use ark_ec::AffineRepr;
-use groth16_material::Groth16Error;
-use oprf_types::api::v1::{
-    ChallengeRequest, ChallengeResponse, NullifierShareIdentifier, OprfRequest, OprfResponse,
+//! Most implementations will only need the [`distributed_oprf`] method. For more fine-grained workflows, we expose all necessary functions.
+use ark_ec::AffineRepr as _;
+use oprf_core::{
+    ddlog_equality::shamir::DLogCommitmentsShamir,
+    dlog_equality::DLogEqualityProof,
+    oprf::{BlindedOprfRequest, BlindedOprfResponse},
 };
-use oprf_types::crypto::{PartyId, RpNullifierKey};
-use oprf_types::{RpId, ShareEpoch};
-use oprf_world_types::api::v1::OprfRequestAuth;
-use oprf_world_types::proof_inputs::nullifier::NullifierProofInput;
-use oprf_world_types::proof_inputs::query::{MAX_PUBLIC_KEYS, QueryProofInput};
-use oprf_world_types::{CredentialsSignature, MerkleMembership, TREE_DEPTH, UserKeyMaterial};
-use rand::{CryptoRng, Rng};
+use oprf_types::{
+    OprfKeyId, ShareEpoch,
+    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, ShareIdentifier},
+    crypto::OprfPublicKey,
+};
 use reqwest::StatusCode;
+use serde::Serialize;
+use tracing::instrument;
 use uuid::Uuid;
 
-pub use groth16;
-pub mod nonblocking;
+mod sessions;
+pub use sessions::OprfSessions;
+pub use sessions::finish_sessions;
+pub use sessions::init_sessions;
 
-const QUERY_GRAPH_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQueryGraph.bin");
-const NULLIFIER_GRAPH_BYTES: &[u8] =
-    include_bytes!("../../circom/main/nullifier/OPRFNullifierGraph.bin");
-
-#[cfg(feature = "embed-zkeys")]
-const QUERY_ZKEY_BYTES: &[u8] = include_bytes!("../../circom/main/query/OPRFQuery.arks.zkey");
-#[cfg(feature = "embed-zkeys")]
-const NULLIFIER_ZKEY_BYTES: &[u8] =
-    include_bytes!("../../circom/main/nullifier/OPRFNullifier.arks.zkey");
-
-/// The SHA-256 fingerprint of the OPRFQuery ZKey.
-pub const QUERY_ZKEY_FINGERPRINT: &str =
-    "50386ea28e3c8cd01fe59ab68e7ecd0a6b8b07d3b8ad6460c04a430ef5c2121f";
-/// The SHA-256 fingerprint of the OPRFNullifier ZKey.
-pub const NULLIFIER_ZKEY_FINGERPRINT: &str =
-    "bb1301f25cbe8d624a227c5f0875fa5dec9501c09357d82b49f59ee73505e94d";
-
-/// The SHA-256 fingerprint of the OPRFQuery witness graph.
-pub const QUERY_GRAPH_FINGERPRINT: &str =
-    "1016fc75f79a872a33ec0537c074857c6750c21f7e2e4e2a34acbbad5d0997b3";
-/// The SHA-256 fingerprint of the OPRFNullifier witness graph.
-pub const NULLIFIER_GRAPH_FINGERPRINT: &str =
-    "87756ce49e17f89e28b963d53e1fd55e17f9a2b413b7630632241a9a03af663a";
-
-pub use groth16_material::circom::{
-    CircomGroth16Material, CircomGroth16MaterialBuilder, ZkeyError,
-};
-
-type Result<T> = std::result::Result<T, Error>;
-
-/// General error type for the OPRF client.
+/// Errors returned by the distributed OPRF protocol.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// API error returned by the OPRF service.
@@ -114,441 +48,156 @@ pub enum Error {
     /// The DLog equality proof failed verification.
     #[error("DLog proof could not be verified")]
     InvalidDLogProof,
-    /// Provided public key index is out of valid range.
-    #[error("Index in public-key batch must be in range [0..6], but is {0}")]
-    InvalidPublicKeyIndex(u64),
-    /// Errors originating from Groth16 proof generation or verification.
-    #[error(transparent)]
-    ZkError(#[from] Groth16Error),
-    /// Catch-all for other internal errors.
-    #[error(transparent)]
-    InternalError(#[from] eyre::Report),
 }
 
-/// The basic request a client sends to the OPRF service.
+/// The result of the distributed OPRF protocol.
+#[derive(Debug, Clone)]
+pub struct VerifiableOprfOutput {
+    /// The generated OPRF output.
+    pub output: ark_babyjubjub::Fq,
+    /// The DLog equality proof.
+    pub dlog_proof: DLogEqualityProof,
+    /// The blinded OPRF response.
+    pub blinded_response: ark_babyjubjub::EdwardsAffine,
+    /// The unblinded OPRF response.
+    pub unblinded_response: ark_babyjubjub::EdwardsAffine,
+}
+
+/// Executes the distributed OPRF protocol.
 ///
-/// It contains the relying party’s ID, the share epoch, the action
-/// the user wants to compute a nullifier for, and a fresh nonce.
-/// The RP signs `(nonce || timestamp)` (both in little-endian byte encoding)
-/// to prevent replay. That signature is included here.
-#[derive(Clone)]
-pub struct OprfQuery {
-    /// The ID of the RP that issued the nonce.
-    pub rp_id: RpId,
-    /// The epoch of the DLog share (currently always `0`).
-    pub share_epoch: ShareEpoch,
-    /// The action the user wants to compute a nullifier for.
-    pub action: ark_babyjubjub::Fq,
-    /// The nonce obtained from the RP.
-    pub nonce: ark_babyjubjub::Fq,
-    /// The timestamp obtained from the RP.
-    pub current_time_stamp: u64,
-    /// The RP's signature over `(nonce || timestamp)`.
-    pub nonce_signature: k256::ecdsa::Signature,
-}
-
-/// A signed OPRF query ready.
-///
-/// This struct holds all information needed to initiate OPRF sessions:
-/// - `request_id`: Unique identifier for this query/request.
-/// - `oprf_request`: The fully formed [`OprfRequest`] including the
-///   blinded query point and Groth16 proof.
-/// - `query`: Original query details (RP ID, action, nonce, timestamp).
-/// - `blinded_request`: The result of blinding the query with the user's key.
-/// - `query_input`: Input data for the OPRFQuery proof.
-/// - `query_hash`: The generated query hash.
-pub struct SignedOprfQuery {
-    request_id: Uuid,
-    oprf_request: OprfRequest<OprfRequestAuth>,
-    query: OprfQuery,
-    blinded_request: BlindedOprfRequest,
-    query_input: QueryProofInput<TREE_DEPTH>,
-    blinding_factor: BlindingFactor,
-}
-
-/// Holds information about active OPRF sessions with multiple peers.
-///
-/// Tracks the peer services, their party IDs, and the partial DLog equality
-/// commitments received from each peer.
-pub struct OprfSessions {
-    services: Vec<String>,
-    party_ids: Vec<PartyId>,
-    commitments: Vec<PartialDLogCommitmentsShamir>,
-}
-
-impl OprfSessions {
-    /// Creates an empty [`OprfSessions`] with preallocated capacity.
-    ///
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            services: Vec::with_capacity(capacity),
-            party_ids: Vec::with_capacity(capacity),
-            commitments: Vec::with_capacity(capacity),
-        }
-    }
-
-    /// Adds a peer's response to the sessions.
-    fn push(&mut self, service: String, response: OprfResponse) {
-        self.services.push(service);
-        self.party_ids.push(response.party_id);
-        self.commitments.push(response.commitments);
-    }
-
-    /// Returns the number of sessions currently stored.
-    fn len(&self) -> usize {
-        self.services.len()
-    }
-}
-
-/// An OPRF challenge for a given query.
-///
-/// This struct holds all information needed to compute and verify the
-/// DLogEquality challenge for a query:
-/// - `request_id`: Unique identifier for this query/request.
-/// - `challenge_request`: The challenge request that will be sent to OPRF peers.
-/// - `blinded_request`: The original blinded OPRF request from the user.
-///   generating the OPRFNullifier proof.
-/// - `blinded_response`: The combined blinded response after aggregating
-///   peer commitments.
-/// - `query_input`: Input data used to generate the OPRFQuery proof.
-/// - `query_hash`: The hash of the query used in proofs.
-/// - `rp_nullifier_key`: The RP-specific nullifier public-key.
-pub struct Challenge {
-    request_id: Uuid,
-    challenge_request: ChallengeRequest,
-    blinded_request: BlindedOprfRequest,
-    blinded_response: ark_babyjubjub::EdwardsAffine,
-    query_input: QueryProofInput<TREE_DEPTH>,
-    blinding_factor: BlindingFactor,
-    rp_nullifier_key: RpNullifierKey,
-}
-
-/// Arguments required to generate a nullifier proof.
-///
-/// This struct bundles all inputs needed for [`nullifier`] to produce a
-/// Groth16 nullifier proof. Users typically construct this from their
-/// credentials, key material, and query context.
-pub struct NullifierArgs {
-    /// Signature over the user's credentials.
-    pub credential_signature: CredentialsSignature,
-    /// Merkle membership proof of the user's credential in the registry.
-    pub merkle_membership: MerkleMembership,
-    /// The original OPRF query (RP ID, action, nonce, timestamp, etc.).
-    pub query: OprfQuery,
-    /// User's key material (private and public keys, batch index, etc.).
-    pub key_material: UserKeyMaterial,
-    /// RP-specific nullifier key.
-    pub rp_nullifier_key: RpNullifierKey,
-    /// Signal hash as in semaphore
-    pub signal_hash: ark_babyjubjub::Fq,
-    /// Commitment to the id
-    pub id_commitment_r: ark_babyjubjub::Fq,
-}
-
-impl Challenge {
-    /// Returns the [`ChallengeRequest`] for this challenge.
-    pub fn get_request(&self) -> ChallengeRequest {
-        self.challenge_request.clone()
-    }
-}
-
-impl SignedOprfQuery {
-    /// Returns the [`OprfRequest`] for this signed query.
-    pub fn get_request(&self) -> OprfRequest<OprfRequestAuth> {
-        self.oprf_request.clone()
-    }
-}
-
-/// Loads the [`CircomGroth16Material`] for the nullifier proof from the embedded keys in the binary.
-#[cfg(feature = "embed-zkeys")]
-pub fn load_embedded_nullifier_material() -> CircomGroth16Material {
-    build_nullifier_builder()
-        .build_from_bytes(NULLIFIER_ZKEY_BYTES, NULLIFIER_GRAPH_BYTES)
-        .expect("works when loading embedded groth16-material")
-}
-
-/// Loads the [`CircomGroth16Material`] for the query proof from the embedded keys in the binary.
-#[cfg(feature = "embed-zkeys")]
-pub fn load_embedded_query_material() -> CircomGroth16Material {
-    build_query_builder()
-        .build_from_bytes(QUERY_ZKEY_BYTES, QUERY_GRAPH_BYTES)
-        .expect("works when loading embedded groth16-material")
-}
-
-/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided reader.
-pub fn load_nullifier_material_from_reader(
-    zkey: impl Read,
-    graph: impl Read,
-) -> eyre::Result<CircomGroth16Material> {
-    Ok(build_nullifier_builder().build_from_reader(zkey, graph)?)
-}
-
-/// Loads the [`CircomGroth16Material`] for the query proof from the provided reader.
-pub fn load_query_material_from_reader(
-    zkey: impl Read,
-    graph: impl Read,
-) -> eyre::Result<CircomGroth16Material> {
-    Ok(build_query_builder().build_from_reader(zkey, graph)?)
-}
-
-/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
-pub fn load_nullifier_material_from_paths(
-    zkey: impl AsRef<Path>,
-    graph: impl AsRef<Path>,
-) -> CircomGroth16Material {
-    build_nullifier_builder()
-        .build_from_paths(zkey, graph)
-        .expect("works when loading embedded groth16-material")
-}
-
-/// Loads the [`CircomGroth16Material`] for the nullifier proof from the provided path.
-pub fn load_query_material_from_paths(
-    zkey: impl AsRef<Path>,
-    graph: impl AsRef<Path>,
-) -> eyre::Result<CircomGroth16Material> {
-    Ok(build_query_builder().build_from_paths(zkey, graph)?)
-}
-
-fn build_nullifier_builder() -> CircomGroth16MaterialBuilder {
-    CircomGroth16MaterialBuilder::new()
-        .fingerprint_zkey(NULLIFIER_ZKEY_FINGERPRINT.into())
-        .fingerprint_graph(NULLIFIER_GRAPH_FINGERPRINT.into())
-        .bbf_num_2_bits_helper()
-        .bbf_inv()
-        .bbf_legendre()
-        .bbf_sqrt_input()
-        .bbf_sqrt_unchecked()
-}
-
-fn build_query_builder() -> CircomGroth16MaterialBuilder {
-    CircomGroth16MaterialBuilder::new()
-        .fingerprint_zkey(QUERY_ZKEY_FINGERPRINT.into())
-        .fingerprint_graph(QUERY_GRAPH_FINGERPRINT.into())
-        .bbf_num_2_bits_helper()
-        .bbf_inv()
-        .bbf_legendre()
-        .bbf_sqrt_input()
-        .bbf_sqrt_unchecked()
-}
-
-/// Generates a nullifier proof for a given query.
-///
-/// This is the main entry point for most users. It handles the full workflow:
-/// 1. Signs and blinds the OPRF query using the user's credentials and key material.
-/// 2. Initiates sessions with the provided OPRF services and waits for enough responses.
-///    This uses asynchronous HTTP requests via [`reqwest`] and requires a [`tokio`] runtime.
-/// 3. Computes the DLog equality challenges using Shamir interpolation.
-/// 4. Collects the responses and verifies the challenges.
-/// 5. Generates the final Groth16 nullifier proof along with public inputs.
-///
-/// **Note**: the timestamps in the credentials must be given as UNIX seconds
-///
-/// # Arguments
-///
-/// * `services` - List of OPRF service URLs to contact.
-/// * `threshold` - Minimum number of valid peer responses required.
-/// * `args` - [`NullifierArgs`] containing all input data (credentials, Merkle membership, query, keys, signal, etc.).
-/// * `query_material` - Groth16 material (proving key and matrices) used for the query proof.
-/// * `nullifier_material` - Groth16 material (proving key and matrices) used for the nullifier proof.
-/// * `rng` - A cryptographically secure random number generator.
+/// This function performs the full client-side workflow of the distributed OPRF protocol:
+/// 1. Blinds the input query using the provided blinding factor.
+/// 2. Initializes sessions with the specified OPRF services, sending the blinded query and authentication information.
+/// 3. Generates the DLog equality challenge based on the commitments received from the services.
+/// 4. Finishes the sessions by sending the challenge to the services and collecting their responses
+/// 5. Verifies the combined DLog equality proof from the services.
+/// 6. Unblinds the combined OPRF response using the blinding factor.
+/// 7. Computes the final OPRF output by hashing the original query and the unblinded response.
 ///
 /// # Returns
-///
-/// On success, returns a tuple:
-/// 1. `Groth16Proof` – the generated nullifier proof,
-/// 2. `Vec<ark_babyjubjub::Fq>` – the public inputs for the proof,
-/// 3. `ark_babyjubjub::Fq` – the computed nullifier.
-/// 4. `ark_babyjubjub::Fq` – the computed identity commitment.
+/// The final [`VerifiableOprfOutput`] containing the OPRF output, the DLog equality proof, the blinded and unblinded responses.
 ///
 /// # Errors
-///
-/// Returns [`Error`] in the following cases:
-/// * `InvalidPublicKeyIndex` – the user key index is out of range.
-/// * `InvalidDLogProof` – the DLog equality proof could not be verified.
-/// * Other errors may propagate from network requests, proof generation, or Groth16 verification.
-pub async fn nullifier<R: Rng + CryptoRng>(
+/// See the [`Error`] enum for all potential errors of this function.
+#[instrument(level = "debug", skip_all, fields(request_id = tracing::field::Empty))]
+#[expect(clippy::too_many_arguments)]
+pub async fn distributed_oprf<OprfRequestAuth>(
     services: &[String],
     threshold: usize,
-    query_material: &CircomGroth16Material,
-    nullifier_material: &CircomGroth16Material,
-    args: NullifierArgs,
-    rng: &mut R,
-) -> Result<(
-    Proof<Bn254>,
-    Vec<ark_babyjubjub::Fq>,
-    ark_babyjubjub::Fq,
-    ark_babyjubjub::Fq,
-)> {
-    let NullifierArgs {
-        credential_signature,
-        merkle_membership,
-        query,
-        key_material,
-        rp_nullifier_key,
-        signal_hash,
-        id_commitment_r,
-    } = args;
-
+    oprf_public_key: OprfPublicKey,
+    oprf_key_id: OprfKeyId,
+    share_epoch: ShareEpoch,
+    query: ark_babyjubjub::Fq,
+    blinding_factor: ark_babyjubjub::Fr,
+    domain_separator: ark_babyjubjub::Fq,
+    auth: OprfRequestAuth,
+) -> Result<VerifiableOprfOutput, Error>
+where
+    OprfRequestAuth: Clone + Serialize + Send + 'static,
+{
     let request_id = Uuid::new_v4();
-    let signed_query = sign_oprf_query(
-        credential_signature,
-        merkle_membership,
-        query_material,
-        query,
-        key_material,
-        request_id,
-        rng,
-    )?;
+    let distributed_oprf_span = tracing::Span::current();
+    distributed_oprf_span.record("request_id", request_id.to_string());
+    tracing::debug!("starting with request id: {request_id}");
 
-    let client = reqwest::Client::new();
-    let req = signed_query.get_request();
-    let sessions = nonblocking::init_sessions(&client, services, threshold, req).await?;
-
-    let challenges = compute_challenges(signed_query, &sessions, rp_nullifier_key)?;
-    let req = challenges.get_request();
-    let responses = nonblocking::finish_sessions(&client, sessions, req).await?;
-    verify_challenges(
-        nullifier_material,
-        challenges,
-        responses,
-        signal_hash,
-        id_commitment_r,
-        rng,
-    )
-}
-
-/// Signs an OPRF query and prepares it for sending to OPRF peers.
-///
-/// This function performs the following steps:
-/// 1. Validates inputs, including Merkle tree depth and public key index.
-/// 2. Generates a query hash from the Merkle index, RP identifier, and requested action.
-/// 3. Blinds the query hash using the user's public key and a random blinding factor.
-/// 4. Signs the blinded query with the user’s private key.
-/// 5. Constructs a [`QueryProofInput`] containing the signature, credential data,
-///    Merkle membership information, and other metadata required for the proof.
-/// 6. Generates the OPRFQuery zero-knowledge proof using the provided
-///    proving key material.
-///
-/// # Arguments
-///
-/// * `credentials_signature` - The user's credential signature issued by the RP.
-/// * `merkle_membership` - Used to compute proof for membership in the Merkle tree.
-/// * `query_material` - Groth16 proving key and constraint matrices for query proof.
-/// * `query` - The query details (RP ID, action, nonce, timestamp).
-/// * `key_material` - User key material including private signing key.
-/// * `rng` - Cryptographically secure random number generator.
-///
-/// # Errors
-///
-/// Returns an [`Error`] if:
-/// - The public key index is out of bounds.
-/// - Groth16 proof generation fails.
-///
-/// # Returns
-///
-/// A [`SignedOprfQuery`] containing:
-/// - The generated `OprfRequest` ready to initiate sessions with OPRF peers.
-/// - The blinding factor and query hash used for later computations.
-/// - The Groth16 proof input for verification in the nullifier step.
-pub fn sign_oprf_query<R: Rng + CryptoRng>(
-    credentials_signature: CredentialsSignature,
-    merkle_membership: MerkleMembership,
-    query_material: &CircomGroth16Material,
-    query: OprfQuery,
-    key_material: UserKeyMaterial,
-    request_id: Uuid,
-    rng: &mut R,
-) -> Result<SignedOprfQuery> {
-    if key_material.pk_index >= MAX_PUBLIC_KEYS as u64 {
-        return Err(Error::InvalidPublicKeyIndex(key_material.pk_index));
-    }
-
-    let query_hash = oprf::client::generate_query(
-        merkle_membership.mt_index.into(),
-        query.rp_id.into_inner().into(),
-        query.action,
-    );
-    let (blinded_request, blinding_factor) = oprf::client::blind_query(query_hash, rng);
-    let signature = key_material.sk.sign(blinding_factor.query());
-
-    let query_input = QueryProofInput::<TREE_DEPTH> {
-        pk: key_material.pk_batch.into_inner(),
-        pk_index: key_material.pk_index.into(),
-        s: signature.s,
-        r: signature.r,
-        cred_type_id: credentials_signature.type_id,
-        cred_pk: credentials_signature.issuer.pk,
-        cred_hashes: credentials_signature.hashes,
-        cred_genesis_issued_at: credentials_signature.genesis_issued_at.into(),
-        cred_expires_at: credentials_signature.expires_at.into(),
-        cred_s: credentials_signature.signature.s,
-        cred_r: credentials_signature.signature.r,
-        current_time_stamp: query.current_time_stamp.into(),
-        merkle_root: merkle_membership.root.into_inner(),
-        depth: ark_babyjubjub::Fq::from(TREE_DEPTH as u64),
-        mt_index: merkle_membership.mt_index.into(),
-        siblings: merkle_membership.siblings,
-        beta: blinding_factor.beta(),
-        rp_id: query.rp_id.into_inner().into(),
-        action: query.action,
-        nonce: query.nonce,
+    let share_identifier = ShareIdentifier {
+        oprf_key_id,
+        share_epoch,
     };
 
-    tracing::debug!("generate query proof");
-    let (proof, _) = query_material.generate_proof(&query_input, rng)?;
-
-    Ok(SignedOprfQuery {
+    let (blinded_request, blinding_factor) =
+        oprf_core::oprf::client::blind_query(query, blinding_factor);
+    let oprf_req = OprfRequest {
         request_id,
-        blinding_factor,
-        query_input,
-        oprf_request: OprfRequest {
-            request_id,
-            blinded_query: blinded_request.blinded_query(),
-            rp_identifier: NullifierShareIdentifier {
-                rp_id: query.rp_id,
-                share_epoch: query.share_epoch,
-            },
-            auth: OprfRequestAuth {
-                proof: proof.into(),
-                action: query.action,
-                nonce: query.nonce,
-                merkle_root: merkle_membership.root,
-                cred_pk: credentials_signature.issuer,
-                current_time_stamp: query.current_time_stamp,
-                signature: query.nonce_signature,
-            },
-        },
-        blinded_request,
+        blinded_query: blinded_request.blinded_query(),
+        share_identifier,
+        auth,
+    };
+
+    tracing::debug!("initializing sessions at {} services", services.len());
+    let reqwest_client = reqwest::Client::new();
+    let sessions = sessions::init_sessions(&reqwest_client, services, threshold, oprf_req).await?;
+
+    tracing::debug!("compute the challenges for the services..");
+    let challenge_request = generate_challenge_request(request_id, share_identifier, &sessions);
+    // Extract the DLog challenge for later use
+    let challenge = challenge_request.challenge.clone();
+
+    tracing::debug!("finishing the sessions at the remaining services..");
+    let responses = sessions::finish_sessions(&reqwest_client, sessions, challenge_request).await?;
+
+    let dlog_proof = verify_dlog_equality(
+        request_id,
+        oprf_public_key,
+        &blinded_request,
+        responses,
+        challenge.clone(),
+    )?;
+
+    let blinded_response = challenge.blinded_response();
+    let blinding_factor_prepared = blinding_factor.clone().prepare();
+    let oprf_blinded_response = BlindedOprfResponse::new(blinded_response);
+    let unblinded_response = oprf_blinded_response.unblind_response(&blinding_factor_prepared);
+
+    let digest = poseidon2::bn254::t4::permutation(&[
+        domain_separator,
         query,
+        unblinded_response.x,
+        unblinded_response.y,
+    ]);
+
+    let output = digest[1];
+
+    Ok(VerifiableOprfOutput {
+        output,
+        blinded_response,
+        dlog_proof,
+        unblinded_response,
     })
 }
 
-/// Computes the DLog equality challenges for a signed OPRF query.
+/// Combines the [`ChallengeResponse`]s of the OPRF nodes and computes the final [`DLogEqualityProof`].
 ///
-/// Given a [`SignedOprfQuery`] and the corresponding [`OprfSessions`] obtained
-/// from the peers, this function computes the Lagrange coefficients over the
-/// party IDs and combines the partial commitments to generate a single blinded
-/// response and the challenge.
-///
-/// The output is a [`Challenge`] struct, which contains all information
-/// needed to later verify the responses from the OPRF peers, including the
-/// original query, proof inputs, Lagrange coefficients, and the generated
-/// [`ChallengeRequest`].
-///
-/// # Arguments
-///
-/// * `query` - The signed OPRF query produced by [`sign_oprf_query`].
-/// * `sessions` - Active OPRF sessions containing the party IDs and commitments.
-/// * `rp_nullifier_key` - The RP-specific nullifier key used for challenge computation.
-///
-/// # Errors
-///
-/// Returns an error if any internal step fails (e.g., invalid session state).
-pub fn compute_challenges(
-    query: SignedOprfQuery,
+/// Verifies the proof and returns an [`Error`] iff the proof is invalid.
+#[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
+pub fn verify_dlog_equality(
+    request_id: Uuid,
+    oprf_public_key: OprfPublicKey,
+    blinded_request: &BlindedOprfRequest,
+    responses: Vec<ChallengeResponse>,
+    challenge: DLogCommitmentsShamir,
+) -> Result<DLogEqualityProof, Error> {
+    let proofs = responses
+        .into_iter()
+        .map(|res| res.proof_share)
+        .collect::<Vec<_>>();
+    let party_ids = challenge.get_contributing_parties().to_vec();
+    let blinded_response = challenge.blinded_response();
+    let dlog_proof = challenge.combine_proofs(
+        request_id,
+        &party_ids,
+        &proofs,
+        oprf_public_key.inner(),
+        blinded_request.blinded_query(),
+    );
+    dlog_proof
+        .verify(
+            oprf_public_key.inner(),
+            blinded_request.blinded_query(),
+            blinded_response,
+            ark_babyjubjub::EdwardsAffine::generator(),
+        )
+        .map_err(|_| Error::InvalidDLogProof)?;
+    Ok(dlog_proof)
+}
+
+/// Generates the [`ChallengeRequest`] for the OPRF nodes used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
+#[instrument(level = "debug", skip(sessions))]
+pub fn generate_challenge_request(
+    request_id: Uuid,
+    share_identifier: ShareIdentifier,
     sessions: &OprfSessions,
-    rp_nullifier_key: RpNullifierKey,
-) -> Result<Challenge> {
+) -> ChallengeRequest {
     let contributing_parties = sessions
         .party_ids
         .iter()
@@ -557,111 +206,9 @@ pub fn compute_challenges(
     // Combine commitments from all sessions and create a single challenge
     let challenge =
         DLogCommitmentsShamir::combine_commitments(&sessions.commitments, contributing_parties);
-    let blinded_response = challenge.blinded_response();
-    Ok(Challenge {
-        query_input: query.query_input,
-        blinding_factor: query.blinding_factor,
-        request_id: query.request_id,
-        blinded_request: query.blinded_request,
-        blinded_response,
-        rp_nullifier_key,
-        challenge_request: ChallengeRequest {
-            request_id: query.request_id,
-            challenge,
-            rp_identifier: NullifierShareIdentifier {
-                rp_id: query.query.rp_id,
-                share_epoch: query.query.share_epoch,
-            },
-        },
-    })
-}
-
-/// Verifies the combined DLogEquality challenge and generates the
-/// corresponding OPRFNullifier proof.
-///
-/// This function performs the following steps:
-/// 1. Combines the partial proofs from peers using Lagrange coefficients.
-/// 2. Verifies the resulting DLogEquality proof against the blinded query
-///    and aggregated response.
-/// 3. Constructs a [`NullifierProofInput`] for the OPRFNullifier circuit.
-/// 4. Generates an OPRFNullifier Groth16 proof for the provided proving key.
-///
-/// # Arguments
-///
-/// * `nullifier_material` - Groth16 material (proving key and matrices) used for nullifier proof.
-/// * `challenges` - The [`Challenge`] struct containing all challenge data.
-/// * `responses` - Responses from peers during the finish session. Must be in the same order
-///   as the initial sessions to match the Lagrange coefficients.
-/// * `signal_hash` - The signal hash as in semaphore.
-/// * `id_commitment_r` - Commitment to the id.
-/// * `rng` - Cryptographically secure RNG.
-///
-/// # Returns
-///
-/// On success, returns a tuple `(proof, public_inputs, nullifier)`:
-/// - `proof`: The Groth16 nullifier proof.
-/// - `public_inputs`: Public inputs used in the proof verification.
-/// - `nullifier`: The computed nullifier.
-/// - `id_commitment`: The computed identity_commitment.
-///
-/// # Errors
-///
-/// Returns [`Error::InvalidDLogProof`] if the combined DLogEquality proof
-/// fails verification, or any [`Groth16Error`] if proof generation fails.
-pub fn verify_challenges<R: Rng + CryptoRng>(
-    nullifier_material: &CircomGroth16Material,
-    challenges: Challenge,
-    responses: Vec<ChallengeResponse>,
-    signal_hash: ark_babyjubjub::Fq,
-    id_commitment_r: ark_babyjubjub::Fq,
-    rng: &mut R,
-) -> Result<(
-    Proof<Bn254>,
-    Vec<ark_babyjubjub::Fq>,
-    ark_babyjubjub::Fq,
-    ark_babyjubjub::Fq,
-)> {
-    let proofs = responses
-        .into_iter()
-        .map(|res| res.proof_share)
-        .collect::<Vec<_>>();
-    let party_ids = challenges
-        .challenge_request
-        .challenge
-        .get_contributing_parties()
-        .to_vec();
-    let dlog_proof = challenges.challenge_request.challenge.combine_proofs(
-        challenges.request_id,
-        &party_ids,
-        &proofs,
-        challenges.rp_nullifier_key.inner(),
-        challenges.blinded_request.blinded_query(),
-    );
-    dlog_proof
-        .verify(
-            challenges.rp_nullifier_key.inner(),
-            challenges.blinded_request.blinded_query(),
-            challenges.blinded_response,
-            ark_babyjubjub::EdwardsAffine::generator(),
-        )
-        .map_err(|_| Error::InvalidDLogProof)?;
-
-    let nullifier_input = NullifierProofInput::new(
-        challenges.query_input,
-        dlog_proof,
-        challenges.rp_nullifier_key.inner(),
-        challenges.blinded_response,
-        signal_hash,
-        id_commitment_r,
-        challenges.blinding_factor,
-    );
-
-    tracing::debug!("generate nullifier proof");
-    let (proof, public) = nullifier_material.generate_proof(&nullifier_input, rng)?;
-
-    // 2 outputs, 0 is id_commitment, 1 is nullifier
-    let id_commitment = public[0];
-    let nullifier = public[1];
-
-    Ok((proof.into(), public, nullifier, id_commitment))
+    ChallengeRequest {
+        request_id,
+        challenge,
+        share_identifier,
+    }
 }

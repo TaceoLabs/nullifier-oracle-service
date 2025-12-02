@@ -27,6 +27,11 @@ pub mod server;
 pub struct BlindedOprfRequest(Affine);
 
 impl BlindedOprfRequest {
+    /// Construct a new [`BlindedOprfRequest`] from an affine point.
+    pub fn new(value: Affine) -> Self {
+        Self(value)
+    }
+
     /// Returns the public x/y coordinates of the blinded query.
     pub fn blinded_query_as_public_output(&self) -> [BaseField; 2] {
         [self.0.x, self.0.y]
@@ -109,6 +114,9 @@ impl BlindedOprfResponse {
 #[cfg(feature = "server")]
 mod tests {
 
+    use ark_ff::PrimeField as _;
+    use rand::Rng;
+
     use crate::oprf::{
         self,
         server::{OprfKey, OprfServer},
@@ -121,22 +129,20 @@ mod tests {
         let mut rng = rand::thread_rng();
         let key = OprfKey::random(&mut rng);
         let service = OprfServer::new(key);
+        let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
 
-        let query = oprf::client::generate_query(
-            BaseField::from(42),
-            BaseField::from(2),
-            BaseField::from(3),
-        );
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, &mut rng);
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
+        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
         assert_ne!(blinded_request, blinded_request2);
         let response = service.answer_query(blinded_request);
 
-        let response = oprf::client::finalize_query(response, blinding_factor.prepare());
+        let response =
+            oprf::client::finalize_query(response, blinding_factor.prepare(), domain_separator);
 
         let expected_response = &service.key * mappings::encode_to_curve(query);
         let out = poseidon2::bn254::t4::permutation(&[
-            oprf::client::get_oprf_ds(),
+            domain_separator,
             query,
             expected_response.x,
             expected_response.y,
@@ -147,7 +153,7 @@ mod tests {
         let response2 = service.answer_query(blinded_request2);
 
         let unblinded_response2 =
-            oprf::client::finalize_query(response2, blinding_factor2.prepare());
+            oprf::client::finalize_query(response2, blinding_factor2.prepare(), domain_separator);
         assert_eq!(response, unblinded_response2);
     }
 
@@ -157,14 +163,11 @@ mod tests {
         let key = OprfKey::random(&mut rng);
         let service = OprfServer::new(key);
         let public_key = service.public_key();
+        let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
 
-        let query = oprf::client::generate_query(
-            BaseField::from(42),
-            BaseField::from(2),
-            BaseField::from(3),
-        );
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, &mut rng);
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, &mut rng);
+        let query = BaseField::from(42);
+        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
+        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
         assert_ne!(blinded_request, blinded_request2);
         let (response, proof) = service.answer_query_with_proof(blinded_request);
 
@@ -173,12 +176,13 @@ mod tests {
             response.clone(),
             proof,
             blinding_factor.clone().prepare(),
+            domain_separator,
         )
         .unwrap();
 
         let expected_response = &service.key * mappings::encode_to_curve(query);
         let out = poseidon2::bn254::t4::permutation(&[
-            oprf::client::get_oprf_ds(),
+            domain_separator,
             query,
             expected_response.x,
             expected_response.y,
@@ -193,6 +197,7 @@ mod tests {
             response2,
             proof2.clone(),
             blinding_factor2.prepare(),
+            domain_separator,
         )
         .unwrap();
         assert_eq!(unblinded_response, unblinded_response2);
@@ -202,6 +207,7 @@ mod tests {
             response,
             proof2,
             blinding_factor.prepare(),
+            domain_separator,
         )
         .unwrap_err();
     }

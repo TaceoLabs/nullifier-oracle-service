@@ -2,7 +2,7 @@
 //!
 //! This module provides utilities to generate random or reshared polynomials for secret sharing, compute and commit to their coefficients, distribute encrypted shares to parties, and perform related helpers such as commitment and share accumulation.
 //!
-//! Commitments are produced both to the full coefficient vector (via a Poseidon2 sponge hash) and to the polynomial constant term (the secret, as a curve point). Secure share distribution is implemented using Diffie-Hellman-based symmetric encryption per peer.
+//! Commitments are produced both to the full coefficient vector (via a Poseidon2 sponge hash) and to the polynomial constant term (the secret, as a curve point). Secure share distribution is implemented using Diffie-Hellman-based symmetric encryption per node.
 //!
 //! We refer to [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf) for more information about the threshold OPRF protocol.
 
@@ -36,7 +36,7 @@ const COEFF_DS: &[u8] = b"KeyGenPolyCoeff";
 /// - The remaining coefficients are committed by hashing them in chunks using a Poseidon2 sponge construction
 ///   (with a domain separator included for context separation), resulting in a hash commitment `comm_coeffs`.
 ///
-/// During key generation, each party creates shares of this polynomial for their peers. When all individual shares from different parties are accumulated, the resulting shares correspond to the final shared secret key (the sum of individual secrets).
+/// During key generation, each party creates shares of this polynomial for their nodes. When all individual shares from different parties are accumulated, the resulting shares correspond to the final shared secret key (the sum of individual secrets).
 ///
 /// Parties shall forget the polynomial after key-generation.
 #[derive(ZeroizeOnDrop)]

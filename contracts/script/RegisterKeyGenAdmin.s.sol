@@ -2,20 +2,20 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {RpRegistry} from "../src/RpRegistry.sol";
+import {OprfKeyRegistry} from "../src/OprfKeyRegistry.sol";
 
 contract RevokeKeyGenAdminScript is Script {
-    RpRegistry public rpRegistry;
+    OprfKeyRegistry public oprfKeyRegistry;
 
     function setUp() public {
-        rpRegistry = RpRegistry(vm.envAddress("RP_REGISTRY_PROXY"));
+        oprfKeyRegistry = OprfKeyRegistry(vm.envAddress("OPRF_KEY_REGISTRY_PROXY"));
     }
 
     function run() public {
         address admin = vm.envAddress("ADMIN_ADDRESS_REGISTER");
         vm.startBroadcast();
-        rpRegistry.addKeyGenAdmin(admin);
+        oprfKeyRegistry.addKeyGenAdmin(admin);
         vm.stopBroadcast();
-        console.log("Added new admin:", admin, "at: ", address(rpRegistry));
+        console.log("Added new admin:", admin, "at: ", address(oprfKeyRegistry));
     }
 }
