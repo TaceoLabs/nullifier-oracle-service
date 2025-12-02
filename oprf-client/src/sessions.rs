@@ -5,9 +5,11 @@
 use crate::ws::WebSocketSession;
 
 use super::Error;
+use oprf_core::ddlog_equality::shamir::DLogCommitmentsShamir;
+use oprf_core::ddlog_equality::shamir::DLogProofShareShamir;
 use oprf_core::ddlog_equality::shamir::PartialDLogCommitmentsShamir;
+use oprf_types::api::v1::OprfRequest;
 use oprf_types::api::v1::OprfResponse;
-use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest};
 use oprf_types::crypto::PartyId;
 use serde::Serialize;
 use tokio::sync::mpsc;
@@ -67,19 +69,19 @@ async fn init_session<Auth: Serialize>(
 
 /// Write the `req` request to the provided [`WebSocketSession`].
 ///
-/// On success, returns the parsed [`ChallengeResponse`] and gracefully closes the web-socket.
+/// On success, returns the parsed [`DLogProofShareShamir`] and gracefully closes the web-socket.
 #[instrument(level = "trace", skip_all)]
 async fn finish_session(
     mut session: WebSocketSession,
-    req: ChallengeRequest,
-) -> Result<ChallengeResponse, Error> {
+    req: DLogCommitmentsShamir,
+) -> Result<DLogProofShareShamir, Error> {
     session.send(req).await?;
     let resp = session.read().await?;
     session.graceful_close().await;
     Ok(resp)
 }
 
-/// Completes all OPRF sessions in parallel by sending the provided [`ChallengeRequest`] to the open sessions.
+/// Completes all OPRF sessions in parallel by sending the provided [`DLogCommitmentsShamir`] to the open sessions.
 ///
 /// **Important:**  
 /// - These must be the *same parties* that were used during the initial
@@ -90,8 +92,8 @@ async fn finish_session(
 #[instrument(level = "debug", skip_all)]
 pub async fn finish_sessions(
     sessions: OprfSessions,
-    req: ChallengeRequest,
-) -> Result<Vec<ChallengeResponse>, super::Error> {
+    req: DLogCommitmentsShamir,
+) -> Result<Vec<DLogProofShareShamir>, super::Error> {
     futures::future::try_join_all(
         sessions
             .ws

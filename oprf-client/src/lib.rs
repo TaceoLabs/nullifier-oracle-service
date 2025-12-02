@@ -4,13 +4,13 @@
 //! Most implementations will only need the [`distributed_oprf`] method. For more fine-grained workflows, we expose all necessary functions.
 use ark_ec::AffineRepr as _;
 use oprf_core::{
-    ddlog_equality::shamir::DLogCommitmentsShamir,
+    ddlog_equality::shamir::{DLogCommitmentsShamir, DLogProofShareShamir},
     dlog_equality::DLogEqualityProof,
     oprf::{BlindedOprfRequest, BlindedOprfResponse},
 };
 use oprf_types::{
     OprfKeyId, ShareEpoch,
-    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, ShareIdentifier},
+    api::v1::{OprfRequest, ShareIdentifier},
     crypto::OprfPublicKey,
 };
 use serde::Serialize;
@@ -118,12 +118,10 @@ where
     tracing::debug!("initializing sessions at {} services", services.len());
     let sessions = sessions::init_sessions(services, threshold, oprf_req, connector).await?;
     tracing::debug!("compute the challenges for the services..");
-    let challenge_request = generate_challenge_request(&sessions);
-    // Extract the DLog challenge for later use
-    let challenge = challenge_request.challenge.clone();
+    let challenge = generate_challenge_request(&sessions);
 
     tracing::debug!("finishing the sessions at the remaining services..");
-    let responses = sessions::finish_sessions(sessions, challenge_request).await?;
+    let responses = sessions::finish_sessions(sessions, challenge.clone()).await?;
 
     let dlog_proof = verify_dlog_equality(
         request_id,
@@ -155,7 +153,7 @@ where
     })
 }
 
-/// Combines the [`ChallengeResponse`]s of the OPRF nodes and computes the final [`DLogEqualityProof`].
+/// Combines the [`DLogProofShareShamir`]s of the OPRF nodes and computes the final [`DLogEqualityProof`].
 ///
 /// Verifies the proof and returns an [`Error`] iff the proof is invalid.
 #[instrument(level = "debug", skip_all, fields(request_id = %request_id))]
@@ -163,13 +161,9 @@ pub fn verify_dlog_equality(
     request_id: Uuid,
     oprf_public_key: OprfPublicKey,
     blinded_request: &BlindedOprfRequest,
-    responses: Vec<ChallengeResponse>,
+    proofs: Vec<DLogProofShareShamir>,
     challenge: DLogCommitmentsShamir,
 ) -> Result<DLogEqualityProof, Error> {
-    let proofs = responses
-        .into_iter()
-        .map(|res| res.proof_share)
-        .collect::<Vec<_>>();
     let party_ids = challenge.get_contributing_parties().to_vec();
     let blinded_response = challenge.blinded_response();
     let dlog_proof = challenge.combine_proofs(
@@ -190,16 +184,14 @@ pub fn verify_dlog_equality(
     Ok(dlog_proof)
 }
 
-/// Generates the [`ChallengeRequest`] for the OPRF nodes used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
+/// Generates the [`DLogCommitmentsShamir`] for the OPRF nodes used for the second step of the distributed OPRF protocol, respecting the returned set of sessions.
 #[instrument(level = "debug", skip(sessions))]
-pub fn generate_challenge_request(sessions: &OprfSessions) -> ChallengeRequest {
+pub fn generate_challenge_request(sessions: &OprfSessions) -> DLogCommitmentsShamir {
     let contributing_parties = sessions
         .party_ids
         .iter()
         .map(|id| id.into_inner() + 1)
         .collect::<Vec<_>>();
     // Combine commitments from all sessions and create a single challenge
-    let challenge =
-        DLogCommitmentsShamir::combine_commitments(&sessions.commitments, contributing_parties);
-    ChallengeRequest { challenge }
+    DLogCommitmentsShamir::combine_commitments(&sessions.commitments, contributing_parties)
 }

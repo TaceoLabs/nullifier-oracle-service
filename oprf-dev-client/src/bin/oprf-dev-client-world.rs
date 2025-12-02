@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     str::FromStr as _,
+    sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -16,6 +17,7 @@ use alloy::{
 use ark_ff::{BigInteger as _, PrimeField as _, UniformRand as _};
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
+use oprf_client::Connector;
 use oprf_core::oprf::{BlindedOprfRequest, BlindedOprfResponse, BlindingFactor};
 use oprf_test::{OprfKeyRegistry, health_checks, oprf_key_registry_scripts};
 use oprf_types::{
@@ -24,6 +26,7 @@ use oprf_types::{
     crypto::OprfPublicKey,
 };
 use rand::SeedableRng;
+use rustls::{ClientConfig, RootCertStore};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 use uuid::Uuid;
@@ -215,6 +218,7 @@ async fn run_nullifier(
     authenticator: &Authenticator,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
+    _connector: Connector,
 ) -> eyre::Result<()> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
@@ -376,6 +380,7 @@ async fn stress_test(
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
     cmd: StressTestCommand,
+    connector: Connector,
 ) -> eyre::Result<()> {
     let (inclusion_proof, key_set) = authenticator.fetch_inclusion_proof().await?;
 
@@ -421,9 +426,10 @@ async fn stress_test(
     for (idx, req) in init_requests.into_iter().enumerate() {
         let services = authenticator.config.nullifier_oracle_urls().to_vec();
         let threshold = authenticator.config.nullifier_oracle_threshold();
+        let connector = connector.clone();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions = oprf_client::init_sessions(&services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&services, threshold, req, connector).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -500,9 +506,9 @@ async fn stress_test(
                         oprf_public_key,
                         &BlindedOprfRequest::new(blinded_query),
                         responses,
-                        challenge.challenge.clone(),
+                        challenge.clone(),
                     )?;
-                    let blinded_response = challenge.challenge.blinded_response();
+                    let blinded_response = challenge.blinded_response();
                     let blinding_factor_prepared = blinding_factor.prepare();
                     let oprf_blinded_response = BlindedOprfResponse::new(blinded_response);
                     let unblinded_response =
@@ -590,10 +596,18 @@ async fn main() -> eyre::Result<()> {
         .context("failed to initialize or create authenticator")?;
     let authenticator_private_key = EdDSAPrivateKey::from_bytes(seed);
 
+    // setup TLS config - even if we are http
+    let mut root_store = RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let rustls_config = ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let connector = Connector::Rustls(Arc::new(rustls_config));
+
     match config.command {
         Command::Test => {
             tracing::info!("running single nullifier");
-            run_nullifier(&authenticator, oprf_key_id, oprf_public_key).await?;
+            run_nullifier(&authenticator, oprf_key_id, oprf_public_key, connector).await?;
             tracing::info!("nullifier successful");
         }
         Command::StressTest(cmd) => {
@@ -604,6 +618,7 @@ async fn main() -> eyre::Result<()> {
                 oprf_key_id,
                 oprf_public_key,
                 cmd,
+                connector,
             )
             .await?;
             tracing::info!("stress-test successful");

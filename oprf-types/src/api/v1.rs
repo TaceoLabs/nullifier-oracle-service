@@ -9,9 +9,7 @@
 //! they can be sent over the wire.
 use std::fmt;
 
-use oprf_core::ddlog_equality::shamir::{
-    DLogCommitmentsShamir, DLogProofShareShamir, PartialDLogCommitmentsShamir,
-};
+use oprf_core::ddlog_equality::shamir::PartialDLogCommitmentsShamir;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -61,34 +59,12 @@ pub struct OprfResponse {
     pub party_id: PartyId,
 }
 
-/// A request from the client to complete the DLog equality challenge.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ChallengeRequest {
-    /// The challenge to respond to.
-    pub challenge: DLogCommitmentsShamir,
-}
-
-/// Server response to a [`ChallengeRequest`].
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChallengeResponse {
-    /// Server’s proof share for the discrete log equality proof.
-    pub proof_share: DLogProofShareShamir,
-}
-
 impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)
             .field("blinded_query", &self.blinded_query.to_string())
             .field("share_identifier", &self.share_identifier)
-            .finish()
-    }
-}
-
-impl fmt::Debug for ChallengeRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ChallengeRequest")
-            .field("challenge", &"omitted")
             .finish()
     }
 }

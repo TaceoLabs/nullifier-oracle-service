@@ -284,7 +284,7 @@ async fn stress_test(
                 oprf_public_key,
                 &blinded_req,
                 responses,
-                challenge.challenge.clone(),
+                challenge.clone(),
             )?;
             eyre::Ok((idx, dlog_proof, challenge, duration))
         });

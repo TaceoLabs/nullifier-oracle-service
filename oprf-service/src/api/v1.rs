@@ -8,8 +8,9 @@ use axum::{
     },
     routing::any,
 };
+use oprf_core::ddlog_equality::shamir::DLogCommitmentsShamir;
 use oprf_types::{
-    api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse, oprf_error_codes},
+    api::v1::{OprfRequest, OprfResponse, oprf_error_codes},
     crypto::PartyId,
 };
 use serde::Deserialize;
@@ -84,7 +85,7 @@ async fn ws<
 /// 2) Verifies the implementation dependent authentication part with the provided [`OprfRequestAuthService`].
 /// 3) Computes the nodes partial contribution for the session. The created randomness does not leave the task.
 /// 4) Sends the commitment back to the user (using same serialization as the user).
-/// 5) Read the [`ChallengeRequest`] of the user. Accepts `Text` and `Binary` frames and deserializes the request with `json` or `cbor` respectively.
+/// 5) Read the [`DLogCommitmentsShamir`] of the user. Accepts `Text` and `Binary` frames and deserializes the request with `json` or `cbor` respectively.
 /// 6) Finalizes the proof share for the session and sends it back to the user (same serialization as the initial request of the user).
 ///
 /// Clients may and will close the connection at any point because they only need `threshold` amount of sessions, therefore it is very much expected that sane clients send a `Close` frame at any point (or simply drop the connection). This method handles this gracefully at any point.
@@ -135,8 +136,7 @@ async fn partial_oprf<
     write_response(response, human_readable, socket).await?;
 
     tracing::debug!("reading challenge...");
-    let (challenge, _) = read_request::<ChallengeRequest>(socket).await?;
-    let ChallengeRequest { challenge } = challenge;
+    let (challenge, _) = read_request::<DLogCommitmentsShamir>(socket).await?;
 
     tracing::debug!("finalizing session...");
     let proof_share = oprf_material_store.challenge(
@@ -146,10 +146,9 @@ async fn partial_oprf<
         challenge,
         init_request.share_identifier,
     )?;
-    let challenge_response = ChallengeResponse { proof_share };
 
     tracing::debug!("sending challenge response to client...");
-    write_response(challenge_response, human_readable, socket).await?;
+    write_response(proof_share, human_readable, socket).await?;
     Ok(())
 }
 
