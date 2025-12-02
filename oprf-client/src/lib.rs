@@ -24,6 +24,7 @@ pub use oprf_core::oprf::BlindingFactor;
 pub use sessions::OprfSessions;
 pub use sessions::finish_sessions;
 pub use sessions::init_sessions;
+pub use tokio_tungstenite::Connector;
 
 /// Errors returned by the distributed OPRF protocol.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +92,7 @@ pub async fn distributed_oprf<OprfRequestAuth>(
     blinding_factor: BlindingFactor,
     domain_separator: ark_babyjubjub::Fq,
     auth: OprfRequestAuth,
+    connector: Connector,
 ) -> Result<VerifiableOprfOutput, Error>
 where
     OprfRequestAuth: Clone + Serialize + Send + 'static,
@@ -114,7 +116,7 @@ where
     };
 
     tracing::debug!("initializing sessions at {} services", services.len());
-    let sessions = sessions::init_sessions(services, threshold, oprf_req).await?;
+    let sessions = sessions::init_sessions(services, threshold, oprf_req, connector).await?;
     tracing::debug!("compute the challenges for the services..");
     let challenge_request = generate_challenge_request(&sessions);
     // Extract the DLog challenge for later use

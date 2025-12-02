@@ -1,11 +1,12 @@
-use ark_ff::PrimeField;
-use oprf_client::BlindingFactor;
+use ark_ff::PrimeField as _;
+use oprf_client::{BlindingFactor, Connector};
 use oprf_types::crypto::OprfPublicKey;
 use oprf_types::{OprfKeyId, ShareEpoch};
 use rand::{CryptoRng, Rng};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip_all)]
+#[allow(clippy::too_many_arguments)]
 pub async fn distributed_oprf<R: Rng + CryptoRng>(
     services: &[String],
     threshold: usize,
@@ -13,6 +14,7 @@ pub async fn distributed_oprf<R: Rng + CryptoRng>(
     oprf_key_id: OprfKeyId,
     share_epoch: ShareEpoch,
     action: ark_babyjubjub::Fq,
+    connector: Connector,
     rng: &mut R,
 ) -> Result<ark_babyjubjub::Fq, oprf_client::Error> {
     let query = action;
@@ -30,6 +32,7 @@ pub async fn distributed_oprf<R: Rng + CryptoRng>(
         blinding_factor,
         domain_separator,
         auth,
+        connector,
     )
     .await?;
 

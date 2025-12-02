@@ -9,6 +9,7 @@ use oprf_test::oprf_key_registry_scripts::{self};
 use oprf_test::{OprfKeyRegistry, TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY, health_checks};
 use oprf_types::ShareEpoch;
 use oprf_types::crypto::OprfPublicKey;
+use tokio_tungstenite::Connector;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
@@ -73,6 +74,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
         oprf_key_id,
         ShareEpoch::default(),
         action,
+        Connector::Plain,
         &mut rng,
     )
     .await?;

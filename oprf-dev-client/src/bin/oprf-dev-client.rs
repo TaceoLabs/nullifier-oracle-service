@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     str::FromStr as _,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -13,7 +14,7 @@ use alloy::{
 use ark_ff::UniformRand as _;
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
-use oprf_client::BlindingFactor;
+use oprf_client::{BlindingFactor, Connector};
 use oprf_core::oprf::BlindedOprfRequest;
 use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{health_checks, oprf_key_registry_scripts};
@@ -23,6 +24,7 @@ use oprf_types::{
     crypto::OprfPublicKey,
 };
 use rand::SeedableRng;
+use rustls::{ClientConfig, RootCertStore};
 use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 use uuid::Uuid;
@@ -142,6 +144,7 @@ async fn run_nullifier(
     threshold: usize,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
+    connector: Connector,
 ) -> eyre::Result<()> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
 
@@ -154,6 +157,7 @@ async fn run_nullifier(
         oprf_key_id,
         ShareEpoch::default(),
         action,
+        connector,
         &mut rng,
     )
     .await?;
@@ -200,6 +204,7 @@ async fn stress_test(
     threshold: usize,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
+    connector: Connector,
 ) -> eyre::Result<()> {
     tracing::info!("preparing requests..");
     let mut request_ids = HashMap::with_capacity(cmd.nullifier_num);
@@ -220,9 +225,10 @@ async fn stress_test(
     let start = Instant::now();
     for (idx, req) in init_requests.into_iter().enumerate() {
         let services = services.to_vec();
+        let connector = connector.clone();
         init_results.spawn(async move {
             let init_start = Instant::now();
-            let sessions = oprf_client::init_sessions(&services, threshold, req).await?;
+            let sessions = oprf_client::init_sessions(&services, threshold, req, connector).await?;
             eyre::Ok((idx, sessions, init_start.elapsed()))
         });
         if cmd.sequential {
@@ -350,6 +356,14 @@ async fn main() -> eyre::Result<()> {
         (oprf_key_id, oprf_public_key)
     };
 
+    // setup TLS config - even if we are http
+    let mut root_store = RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let rustls_config = ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let connector = Connector::Rustls(Arc::new(rustls_config));
+
     match config.command {
         Command::Test => {
             tracing::info!("running single nullifier");
@@ -358,6 +372,7 @@ async fn main() -> eyre::Result<()> {
                 config.threshold,
                 oprf_key_id,
                 oprf_public_key,
+                connector,
             )
             .await?;
             tracing::info!("nullifier successful");
@@ -370,6 +385,7 @@ async fn main() -> eyre::Result<()> {
                 config.threshold,
                 oprf_key_id,
                 oprf_public_key,
+                connector,
             )
             .await?;
             tracing::info!("stress-test successful");

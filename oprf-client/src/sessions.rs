@@ -12,6 +12,7 @@ use oprf_types::crypto::PartyId;
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
+use tokio_tungstenite::Connector;
 use tracing::instrument;
 
 /// Holds the active OPRF sessions with multiple nodes.
@@ -52,12 +53,13 @@ impl OprfSessions {
 /// Tries to establish a web-socket connection to the given service. On success sends the provided `req` to the service and reads the [`OprfResponse`].
 ///
 /// Returns the [`WebSocketSession`] and the response on success.
-#[instrument(level = "trace", skip(req))]
+#[instrument(level = "trace", skip(req, connector))]
 async fn init_session<Auth: Serialize>(
     service: String,
     req: OprfRequest<Auth>,
+    connector: Connector,
 ) -> Result<(WebSocketSession, OprfResponse), super::Error> {
-    let mut session = WebSocketSession::new(service).await?;
+    let mut session = WebSocketSession::new(service, connector).await?;
     session.send(req).await?;
     let response = session.read::<OprfResponse>().await?;
     Ok((session, response))
@@ -109,6 +111,7 @@ pub async fn init_sessions<OprfRequestAuth: Clone + Serialize + Send + 'static>(
     oprf_services: &[String],
     threshold: usize,
     req: OprfRequest<OprfRequestAuth>,
+    connector: Connector,
 ) -> Result<OprfSessions, super::Error> {
     // only has one producer
     let (tx, mut rx) = mpsc::channel(1);
@@ -118,7 +121,7 @@ pub async fn init_sessions<OprfRequestAuth: Clone + Serialize + Send + 'static>(
         async move {
             let mut join_set = oprf_services
                 .into_iter()
-                .map(|service| init_session(service, req.clone()))
+                .map(|service| init_session(service, req.clone(), connector.clone()))
                 .collect::<JoinSet<_>>();
             while let Some(session_handle) = join_set.join_next().await {
                 match session_handle.expect("Can join") {

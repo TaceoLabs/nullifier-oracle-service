@@ -4372,7 +4372,6 @@ dependencies = [
  "taceo-ark-babyjubjub",
  "taceo-oprf-types 0.1.0",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -4391,7 +4390,6 @@ dependencies = [
  "oprf-test",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "reqwest",
  "rustls 0.23.35",
  "secrecy",
  "taceo-ark-babyjubjub",
@@ -4400,6 +4398,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "webpki-roots 1.0.4",
  "world-id-core",
  "world-id-primitives",
 ]
@@ -4504,6 +4503,7 @@ dependencies = [
  "taceo-oprf-core 0.1.0",
  "taceo-oprf-types 0.1.0",
  "tokio",
+ "tokio-tungstenite 0.28.0",
  "tracing",
 ]
 

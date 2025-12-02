@@ -3,12 +3,13 @@
 //! This module exposes functionality for handling a single web-socket connection with tungstenite. The sessions are very thin and handle errors very conservatively. If the implementation encounters anything that is unexpected, the session will be immediately terminated.
 //!
 //! What is more, we implement the closing handshake at a best-effort basis. This means we try to send `Close` frames if we close the connection, but if there are problems with sending the `Close` frame we simply ignore the errors.
+
 use crate::Error;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream,
+    Connector, MaybeTlsStream, WebSocketStream,
     tungstenite::{
         self,
         protocol::{CloseFrame, frame::coding::CloseCode},
@@ -28,13 +29,19 @@ impl WebSocketSession {
     /// Creates a new session at the provided service. Replaces `http` and `https` protocol prefixes with `ws` or `wss` respectively.
     ///
     /// The service string should only contain how to connect to the host, the implementation will append `/api/v1/oprf`.
-    pub(crate) async fn new(service: String) -> Result<Self, Error> {
-        let url = format!(
-            "{}/api/v1/oprf",
-            service.replace("http", "ws").replace("https", "wss")
-        );
-        tracing::trace!("> sending request to {url}..");
-        let (ws, _) = tokio_tungstenite::connect_async(url).await?;
+    pub(crate) async fn new(service: String, connector: Connector) -> Result<Self, Error> {
+        let endpoint = format!("{service}/api/v1/oprf")
+            .replace("https", "wss")
+            .replace("http", "ws");
+        tracing::trace!("> sending request to {endpoint}..");
+
+        let (ws, _) = tokio_tungstenite::connect_async_tls_with_config(
+            endpoint,
+            None,
+            false,
+            Some(connector),
+        )
+        .await?;
         Ok(Self { inner: ws })
     }
 

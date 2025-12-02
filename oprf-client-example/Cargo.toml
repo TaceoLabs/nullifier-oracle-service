@@ -16,4 +16,3 @@ oprf-client = { workspace = true }
 oprf-types = { workspace = true }
 rand.workspace = true
 tracing.workspace = true
-uuid = { workspace = true, features = ["serde", "v4"] }
