@@ -86,7 +86,7 @@ async fn finish_session(
 /// **Important:**  
 /// - These must be the *same parties* that were used during the initial
 ///   `init_sessions` call.
-/// - The order of the sessions matter: we return responses in the order provided and they need to match the original session list. This is crucial because Lagrange coefficients are computed in the meantime, and they need to match the shares obtained earlier.
+/// - The order of the sessions matters: we return responses in the order provided and they need to match the original session list. This is crucial because Lagrange coefficients are computed in the meantime, and they need to match the shares obtained earlier.
 ///
 /// Fails fast if any single request errors.
 #[instrument(level = "debug", skip_all)]

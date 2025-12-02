@@ -458,7 +458,6 @@ async fn stress_test(
     let mut finish_challenges = sessions
         .iter()
         .map(|(idx, sessions)| {
-            let _request_id = request_ids.get(idx).expect("is there");
             let challenge_request = oprf_client::generate_challenge_request(sessions);
             eyre::Ok((*idx, challenge_request))
         })

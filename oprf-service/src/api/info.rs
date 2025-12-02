@@ -9,7 +9,7 @@
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
 use alloy::primitives::Address;
 use axum::{
-    Extension, Json, Router,
+    Json, Router,
     extract::Path,
     http::{HeaderValue, StatusCode, header},
     response::IntoResponse,
@@ -27,8 +27,10 @@ pub(crate) fn routes(oprf_material_store: OprfKeyMaterialStore, wallet_address: 
     Router::new()
         .route("/version", get(version))
         .route("/wallet", get(move || wallet(wallet_address)))
-        .route("/oprf_pub/{id}", get(oprf_key_available))
-        .layer(Extension(oprf_material_store))
+        .route(
+            "/oprf_pub/{id}",
+            get(move |path| oprf_key_available(oprf_material_store, path)),
+        )
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache"),
@@ -54,7 +56,7 @@ async fn wallet(wallet_address: Address) -> impl IntoResponse {
 /// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKey`].
 /// Returns `404 Not Found` if not registered.
 async fn oprf_key_available(
-    Extension(oprf_material_store): Extension<OprfKeyMaterialStore>,
+    oprf_material_store: OprfKeyMaterialStore,
     Path(id): Path<OprfKeyId>,
 ) -> impl IntoResponse {
     if let Some(public_material) = oprf_material_store.get_oprf_public_key(id) {

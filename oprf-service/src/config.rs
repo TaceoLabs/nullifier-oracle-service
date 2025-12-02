@@ -63,8 +63,8 @@ pub struct OprfNodeConfig {
 
     /// Max message size the websocket connection accepts.
     ///
-    /// Default value: 512 kilobytes
-    #[clap(long, env = "OPRF_SERVICE_MAX_MESSAGE_SIZE", default_value = "524288")]
+    /// Default value: 8 kilobytes
+    #[clap(long, env = "OPRF_SERVICE_MAX_MESSAGE_SIZE", default_value = "8192")]
     pub ws_max_message_size: usize,
 
     /// Max time a created session is valid.

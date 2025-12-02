@@ -75,7 +75,7 @@ serde = { version = "1" }
 serde_json = { version = "1" }
 thiserror = { version = "2" }
 tokio = { version = "1" }
-tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 tokio-util = "0.7"
 tower-http = "0.6"
 tracing = { version = "0.1" }

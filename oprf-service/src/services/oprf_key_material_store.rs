@@ -99,10 +99,6 @@ impl OprfKeyMaterialStore {
         share_identifier: ShareIdentifier,
     ) -> OprfKeyMaterialStoreResult<(DLogSessionShamir, PartialDLogCommitmentsShamir)> {
         tracing::debug!("computing partial commitment");
-        // check that blinded query (B) is not the identity element
-        if point_b.is_zero() {
-            // return Err(OprfServiceError::BlindedQueryIsIdentity);
-        }
         let share = self
             .get(share_identifier.oprf_key_id)
             .ok_or(OprfKeyMaterialStoreError::UnknownOprfKeyId(
