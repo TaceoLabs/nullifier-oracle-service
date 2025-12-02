@@ -155,9 +155,8 @@ impl SecretManager for AwsSecretManager {
                 tracing::info!("loaded wallet private key from secret-manager");
                 SecretString::from(
                     secret_string
-                        .secret_string()
-                        .context("expected string private-key, but is byte")?
-                        .to_owned(),
+                        .secret_string
+                        .context("expected string private-key, but is byte")?,
                 )
             }
             Err(x) => {
@@ -166,8 +165,10 @@ impl SecretManager for AwsSecretManager {
                         tracing::info!("secret not found - will create wallet");
                         // Create a new wallet
                         let private_key = SigningKey::random(&mut rand::thread_rng());
+                        let mut private_key_bytes = private_key.to_bytes();
                         let hex_string =
-                            SecretString::from(hex::encode_prefixed(private_key.to_bytes()));
+                            SecretString::from(hex::encode_prefixed(private_key_bytes));
+                        private_key_bytes.zeroize();
                         tracing::debug!("uploading secret to AWS..");
                         self.client
                             .create_secret()
