@@ -108,7 +108,7 @@ run-setup:
     echo "register oprf-nodes..."
     OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
     echo "starting OPRF services..."
-    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-services-example
+    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-nodes
     echo "stopping containers..."
     docker compose -f ./oprf-service-example/deploy/docker-compose.yml down 
 
