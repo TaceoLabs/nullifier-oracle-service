@@ -85,23 +85,31 @@ async function main() {
   
   // ABIs
   const entryPointABI = [
-    "function handleOps(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, uint256 callGasLimit, uint256 verificationGasLimit, uint256 preVerificationGas, uint256 maxFeePerGas, uint256 maxPriorityFeePerGas, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)",
-    "function getUserOpHash(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, uint256 callGasLimit, uint256 verificationGasLimit, uint256 preVerificationGas, uint256 maxFeePerGas, uint256 maxPriorityFeePerGas, bytes paymasterAndData, bytes signature) userOp) view returns (bytes32)",
+    "function handleOps(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerficationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)",
+    "function getUserOpHash(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature) userOp) view returns (bytes32)",
     "function getNonce(address sender, uint192 key) view returns (uint256)"
   ];
   
   const accountABI = [
-    "function submitRound1Contribution(address rpRegistry, bytes32 rpId, tuple(tuple(uint256 x, uint256 y) commShare, bytes commCoeffs, tuple(uint256 x, uint256 y) ephPubKey) contribution)",
+      "function submitRound1Contribution("
+      + "address rpRegistryProxy,"
+      + "uint128 rpId,"
+      + "tuple("
+          + "tuple(uint256 x, uint256 y) commShare,"
+          + "uint256 commCoeffs,"
+          + "tuple(uint256 x, uint256 y) ephPubKey"
+      + ") data"
+  + ")",
     "function owner() view returns (address)",
     "function execute(address dest, uint256 value, bytes calldata func)",
     "function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func)"
   ];
   
   const rpRegistryABI = [
-    "function initKeyGen(bytes32 rpId) returns (bool)",
+    "function initKeyGen(uint128 rpId, tuple(bytes32 x, uint256 yParity) ecdsaPubKey)",
     "function isContractReady() view returns (bool)",
     "function owner() view returns (address)", 
-    "function submitRound1Contribution(bytes32 rpId, tuple(tuple(uint256 x, uint256 y) commShare, bytes commCoeffs, tuple(uint256 x, uint256 y) ephPubKey) contribution) returns (bool)"
+    "function submitRound1Contribution(address rpRegistryProxy, uint128 rpId, tuple(tuple(uint256 x, uint256 y) commShare, uint256 commCoeffs, tuple(uint256 x, uint256 y) ephPubKey) contribution) returns (bool)"
   ];
   
   // Create contract instances
@@ -147,7 +155,7 @@ async function main() {
         console.log(`\nProxy #${proxyCount}:`);
         console.log(`  Address: ${tx.contractAddress}`);
         console.log(`  Input preview: ${tx.transaction.input.substring(0, 200)}...`);
-        
+
         // Check what's in the input
         if (tx.transaction.input.toLowerCase().includes("14dc79964da2c08b23698b3d3cc7ca32193d9955")) {
           console.log("  -> Contains Alice's EOA");
@@ -166,7 +174,7 @@ async function main() {
 
 
   console.log("\n🔑 Skipping key generation, testing gasless transactions...");
-  const rpId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("test-rp-id"));
+  const rpId = ethers.BigNumber.from(5)
   console.log("  Using test rpId:", rpId);
   
   // Get nonce for Alice's account
@@ -192,39 +200,67 @@ async function main() {
     rpId,
     contribution
   ]);
-  
-  // Create UserOperation
+
+  // Create Packed UserOperation
   const userOp = {
     sender: contracts.aliceAccount,
     nonce: nonce,
     initCode: "0x",
     callData: callData,
-    callGasLimit: ethers.BigNumber.from("300000"),
-    verificationGasLimit: ethers.BigNumber.from("150000"),
+    accountGasLimits: ethers.utils.hexConcat([
+      ethers.utils.hexZeroPad(ethers.BigNumber.from("150000").toHexString(), 16), // verificationGasLimit (16 bytes)
+      ethers.utils.hexZeroPad(ethers.BigNumber.from("300000").toHexString(), 16)  // callGasLimit (16 bytes)
+    ]), // bytes32: packed verificationGasLimit and callGasLimit
     preVerificationGas: ethers.BigNumber.from("50000"),
-    maxFeePerGas: ethers.utils.parseUnits("10", "gwei"),
-    maxPriorityFeePerGas: ethers.utils.parseUnits("1", "gwei"),
+    gasFees: ethers.utils.hexConcat([
+      ethers.utils.hexZeroPad(ethers.utils.parseUnits("1", "gwei").toHexString(), 16),  // maxPriorityFeePerGas (16 bytes)
+      ethers.utils.hexZeroPad(ethers.utils.parseUnits("10", "gwei").toHexString(), 16)  // maxFeePerGas (16 bytes)
+    ]), // bytes32: packed maxPriorityFeePerGas and maxFeePerGas
     paymasterAndData: contracts.paymaster,
     signature: "0x"
   };
-  
+
   console.log("\n📝 Creating UserOperation...");
   console.log("  Sender:", userOp.sender);
   console.log("  Paymaster:", userOp.paymasterAndData);
-  
+
+  // TODO: Make sure Alices account is authorized to receive sponsorship in paymaster
+
   // Get user op hash
   const userOpHash = await entryPoint.getUserOpHash(userOp);
   console.log("  UserOp hash:", userOpHash);
-  
+
   // Sign the hash with Alice's private key
   const signature = await aliceSigner.signMessage(ethers.utils.arrayify(userOpHash));
   userOp.signature = signature;
   console.log("  Signature:", signature);
-  
+
   // Check Alice's balance before
   const balanceBefore = await provider.getBalance(aliceSigner.address);
   console.log("\n💰 Alice's balance before:", ethers.utils.formatEther(balanceBefore), "ETH");
-  
+
+  // Prepare InitKeygen in RpRegistry TODO: Question: Should this be gasless as well..?
+  const ecdsaPubKey = {
+    x: ethers.utils.hexZeroPad("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", 32),
+    yParity: 2
+  };
+
+  console.log(rpRegistry.interface.format(ethers.utils.FormatTypes.full));
+
+  try {
+    const initTx = await rpRegistry.connect(adminSigner).initKeyGen(
+      rpId,
+      ecdsaPubKey,
+      { gasLimit: 3000000 }
+    );
+    const receipt = await initTx.wait();
+    console.log("  ✅ Success! Gas used:", receipt.gasUsed.toString());
+    console.log("  Transaction hash:", receipt.transactionHash);
+  } catch (error: any) {
+    console.log("  ❌ Transaction failed:", error.message);
+  }
+
+
   // Submit UserOperation via EntryPoint
   console.log("\n🚀 Submitting UserOperation...");
   try {
@@ -232,7 +268,7 @@ async function main() {
     const handleOpsTx = await entryPointWithSigner.handleOps(
       [userOp],
       adminSigner.address,
-      { gasLimit: 1000000 }
+      { gasLimit: 2000000 }
     );
     
     const receipt = await handleOpsTx.wait();
