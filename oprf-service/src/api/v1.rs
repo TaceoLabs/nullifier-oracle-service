@@ -9,20 +9,22 @@
 
 use axum::{Extension, Json, Router, response::IntoResponse, routing::post};
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest, OprfResponse};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Deserialize;
 use tracing::instrument;
 
-use crate::{OprfReqAuthService, services::oprf::OprfService};
+use crate::{OprfRequestAuthService, services::oprf::OprfService};
 
 /// Handles `POST /init`.
 ///
 /// Validates the nonce signature, retrieves the relevant merkle root for the requested epoch,
 /// and initializes a new OPRF session via [`OprfService`].
 #[instrument(level = "debug", skip_all, fields(request_id=%request.request_id))]
-async fn oprf_request<ReqAuth: Clone + Serialize + DeserializeOwned, ReqAuthError: IntoResponse>(
+async fn oprf_request<RequestAuth, RequestAuthError: IntoResponse>(
     Extension(oprf_service): Extension<OprfService>,
-    Extension(oprf_req_auth_service): Extension<OprfReqAuthService<ReqAuth, ReqAuthError>>,
-    Json(request): Json<OprfRequest<ReqAuth>>,
+    Extension(oprf_req_auth_service): Extension<
+        OprfRequestAuthService<RequestAuth, RequestAuthError>,
+    >,
+    Json(request): Json<OprfRequest<RequestAuth>>,
 ) -> axum::response::Result<Json<OprfResponse>> {
     tracing::debug!("received new oprf request: {request:?}");
     let request_id = request.request_id;
@@ -58,14 +60,14 @@ async fn oprf_challenge(
 
 /// Builds the router for v1 OPRF endpoints.
 pub fn routes<
-    ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    ReqAuthError: IntoResponse + Send + Sync + 'static,
+    RequestAuth: for<'de> Deserialize<'de> + Send + 'static,
+    RequestAuthError: IntoResponse + 'static,
 >(
     oprf_service: OprfService,
-    req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
+    req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
 ) -> Router {
     Router::new()
-        .route("/init", post(oprf_request::<ReqAuth, ReqAuthError>))
+        .route("/init", post(oprf_request::<RequestAuth, RequestAuthError>))
         .route("/finish", post(oprf_challenge))
         .layer(Extension(req_auth_service))
         .layer(Extension(oprf_service))

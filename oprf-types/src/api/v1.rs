@@ -12,7 +12,7 @@ use std::fmt;
 use oprf_core::ddlog_equality::shamir::{
     DLogCommitmentsShamir, DLogProofShareShamir, PartialDLogCommitmentsShamir,
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{OprfKeyId, ShareEpoch, crypto::PartyId};
@@ -20,11 +20,7 @@ use ark_serde_compat::babyjubjub;
 
 /// A request sent by a client to perform an OPRF evaluation.
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(bound = "")]
-pub struct OprfRequest<OprfRequestAuth>
-where
-    OprfRequestAuth: Clone + Serialize + DeserializeOwned,
-{
+pub struct OprfRequest<OprfRequestAuth> {
     /// Unique ID of the request (used to correlate responses).
     pub request_id: Uuid,
     /// Input point `B` of the OPRF, serialized as a BabyJubJub affine point.
@@ -77,10 +73,7 @@ pub struct ChallengeResponse {
     pub proof_share: DLogProofShareShamir,
 }
 
-impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth>
-where
-    OprfReqestAuth: Clone + Serialize + DeserializeOwned,
-{
+impl<OprfReqestAuth> fmt::Debug for OprfRequest<OprfReqestAuth> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OprfRequest")
             .field("req_id", &self.request_id)

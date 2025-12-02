@@ -14,7 +14,7 @@ use oprf_types::{
     crypto::OprfPublicKey,
 };
 use reqwest::StatusCode;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Serialize;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -81,7 +81,7 @@ pub struct VerifiableOprfOutput {
 /// See the [`Error`] enum for all potential errors of this function.
 #[instrument(level = "debug", skip_all, fields(request_id = tracing::field::Empty))]
 #[expect(clippy::too_many_arguments)]
-pub async fn distributed_oprf<T>(
+pub async fn distributed_oprf<OprfRequestAuth>(
     services: &[String],
     threshold: usize,
     oprf_public_key: OprfPublicKey,
@@ -90,10 +90,10 @@ pub async fn distributed_oprf<T>(
     query: ark_babyjubjub::Fq,
     blinding_factor: ark_babyjubjub::Fr,
     domain_separator: ark_babyjubjub::Fq,
-    auth: T,
+    auth: OprfRequestAuth,
 ) -> Result<VerifiableOprfOutput, Error>
 where
-    T: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    OprfRequestAuth: Clone + Serialize + Send + 'static,
 {
     let request_id = Uuid::new_v4();
     let distributed_oprf_span = tracing::Span::current();

@@ -3,7 +3,7 @@
 //! This example project shall help projects incorporate at TACEO:Oprf. Explain in detail what implementations need to do to build their flavor.
 use std::sync::Arc;
 
-use crate::{auth::ExampleOprfReqAuthenticator, config::ExampleOprfNodeConfig};
+use crate::{auth::ExampleOprfRequestAuthenticator, config::ExampleOprfNodeConfig};
 use oprf_service::secret_manager::SecretManagerService;
 
 pub(crate) mod auth;
@@ -19,7 +19,7 @@ pub async fn start(
     let cancellation_token = oprf_service::spawn_shutdown_task(shutdown_signal);
 
     tracing::info!("init oprf request auth service..");
-    let oprf_req_auth_service = Arc::new(ExampleOprfReqAuthenticator);
+    let oprf_req_auth_service = Arc::new(ExampleOprfRequestAuthenticator);
 
     tracing::info!("init oprf service..");
     let (oprf_service_router, key_event_watcher) = oprf_service::init(

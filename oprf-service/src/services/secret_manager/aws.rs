@@ -166,16 +166,17 @@ impl SecretManager for AwsSecretManager {
                         tracing::info!("secret not found - will create wallet");
                         // Create a new wallet
                         let private_key = SigningKey::random(&mut rand::thread_rng());
-                        let hex_string = hex::encode_prefixed(private_key.to_bytes());
+                        let hex_string =
+                            SecretString::from(hex::encode_prefixed(private_key.to_bytes()));
                         tracing::debug!("uploading secret to AWS..");
                         self.client
                             .create_secret()
                             .name(&self.wallet_private_key_secret_id)
-                            .secret_string(&hex_string)
+                            .secret_string(hex_string.expose_secret())
                             .send()
                             .await
                             .context("while creating wallet secret")?;
-                        SecretString::from(hex_string)
+                        hex_string
                     }
                     x => Err(x)?,
                 }

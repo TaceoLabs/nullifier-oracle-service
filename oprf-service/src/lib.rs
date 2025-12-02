@@ -3,12 +3,12 @@
 //!
 //! When implementing a concrete instantiation of TACEO:Oprf, projects use this composable library to build their flavor of the distributed OPRF protocol. The main entry point for implementations is the [`init`] method. It returns an `axum::Router` that should be incorporated into a larger `axum` server that provides project-based functionality for authentication.
 //!
-//! Additionally, implementations must provide their project-specific authentication. For that, this library exposes the [`OprfReqAuthenticator`] trait. A call to `init` expects an [`OprfReqAuthService`], which is a dyn object of `OprfReqAuthenticator`.
+//! Additionally, implementations must provide their project-specific authentication. For that, this library exposes the [`OprfRequestAuthenticator`] trait. A call to `init` expects an [`OprfRequestAuthService`], which is a dyn object of `OprfRequestAuthenticator`.
 //!
 //! The general workflow is as follows:
 //! 1) End-users initiate a session at $n$ nodes.
 //!    - the router created by `init` receives the request
-//!    - the router calls [`OprfReqAuthenticator::verify`] of the provided authentication implementation. This can be anything from no verification to providing credentials.
+//!    - the router calls [`OprfRequestAuthenticator::verify`] of the provided authentication implementation. This can be anything from no verification to providing credentials.
 //!    - the node creates a session identified by a UUID and sends a commitment back to the user.
 //! 2) As soon as end-users have opened $t$ sessions, they compute challenges for the answering nodes.
 //!    - the router answers the challenge and deletes all information containing the sessions.
@@ -31,7 +31,7 @@ use eyre::Context as _;
 use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::api::v1::OprfRequest;
 use secrecy::ExposeSecret as _;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -52,19 +52,39 @@ pub use services::secret_manager;
 /// by authentication services that can validate the authenticity of incoming
 /// OPRF requests.
 #[async_trait]
-pub trait OprfReqAuthenticator: Send + Sync {
+pub trait OprfRequestAuthenticator: Send + Sync {
     /// Represents the authentication data type included in the OPRF request.
-    type ReqAuth: Clone + Serialize + DeserializeOwned;
+    type RequestAuth;
     /// Represents the error type returned if authentication fails.
-    type ReqAuthError: axum::response::IntoResponse;
+    type RequestAuthError: axum::response::IntoResponse;
 
     /// Verifies the authenticity of an OPRF request.
-    async fn verify(&self, req: &OprfRequest<Self::ReqAuth>) -> Result<(), Self::ReqAuthError>;
+    async fn verify(
+        &self,
+        req: &OprfRequest<Self::RequestAuth>,
+    ) -> Result<(), Self::RequestAuthError>;
 }
 
-/// Dynamic trait object for `OprfReqAuthenticator` service.
-pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
-    Arc<dyn OprfReqAuthenticator<ReqAuth = ReqAuth, ReqAuthError = ReqAuthError>>;
+/// An implementation of `OprfRequestAuthenticator` that performs no authentication.
+pub struct WithoutAuthentication;
+
+#[async_trait]
+impl OprfRequestAuthenticator for WithoutAuthentication {
+    type RequestAuth = ();
+    type RequestAuthError = ();
+
+    async fn verify(
+        &self,
+        _req: &OprfRequest<Self::RequestAuth>,
+    ) -> Result<(), Self::RequestAuthError> {
+        Ok(())
+    }
+}
+
+/// Dynamic trait object for `OprfRequestAuthenticator` service.
+pub type OprfRequestAuthService<RequestAuth, RequestAuthError> = Arc<
+    dyn OprfRequestAuthenticator<RequestAuth = RequestAuth, RequestAuthError = RequestAuthError>,
+>;
 
 /// Initializes the OPRF service.
 ///
@@ -86,12 +106,12 @@ pub type OprfReqAuthService<ReqAuth, ReqAuthError> =
 /// - An Axum `Router` instance with the configured REST API routes.
 /// - A `JoinHandle` for the key event watcher task.
 pub async fn init<
-    ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    ReqAuthError: IntoResponse + Send + Sync + 'static,
+    RequestAuth: for<'de> Deserialize<'de> + Send + 'static,
+    RequestAuthError: IntoResponse + 'static,
 >(
     config: OprfNodeConfig,
     secret_manager: SecretManagerService,
-    oprf_req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
+    oprf_req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<(axum::Router, tokio::task::JoinHandle<eyre::Result<()>>)> {
     tracing::info!("loading private from secret manager..");
@@ -224,7 +244,6 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
 
     use ark_ff::UniformRand;
-    use async_trait::async_trait;
     use axum::Router;
     use axum_test::TestServer;
     use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
@@ -238,21 +257,6 @@ mod tests {
     use crate::services::oprf_key_material_store::{OprfKeyMaterial, OprfKeyMaterialStore};
 
     use super::*;
-
-    struct TestOprfReqAuthenticator;
-
-    #[async_trait]
-    impl OprfReqAuthenticator for TestOprfReqAuthenticator {
-        type ReqAuth = ();
-        type ReqAuthError = ();
-
-        async fn verify(
-            &self,
-            _req: &OprfRequest<Self::ReqAuth>,
-        ) -> Result<(), Self::ReqAuthError> {
-            Ok(())
-        }
-    }
 
     struct TestSetup {
         server: TestServer,
@@ -321,7 +325,7 @@ mod tests {
             );
             let routes = Router::new().nest(
                 "/api/v1",
-                api::v1::routes(oprf_service.clone(), Arc::new(TestOprfReqAuthenticator)),
+                api::v1::routes(oprf_service.clone(), Arc::new(WithoutAuthentication)),
             );
             let server = TestServer::builder()
                 .expect_success_by_default()

@@ -3,7 +3,7 @@ use oprf_core::ddlog_equality::shamir::PartialDLogCommitmentsShamir;
 use oprf_types::api::v1::OprfResponse;
 use oprf_types::api::v1::{ChallengeRequest, ChallengeResponse, OprfRequest};
 use oprf_types::crypto::PartyId;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Serialize;
 use tokio::task::JoinSet;
 use tracing::instrument;
 
@@ -45,10 +45,10 @@ impl OprfSessions {
 ///
 /// Returns the node's URL alongside the parsed [`OprfResponse`].
 #[instrument(level = "trace", skip(client, req))]
-async fn oprf_request<T: Clone + Serialize + DeserializeOwned>(
+async fn oprf_request<OprfRequestAuth: Serialize>(
     client: reqwest::Client,
     service: String,
-    req: OprfRequest<T>,
+    req: OprfRequest<OprfRequestAuth>,
 ) -> Result<(String, OprfResponse), super::Error> {
     let url = format!("{service}/api/v1/init");
     tracing::trace!("> sending request to {url}..");
@@ -120,11 +120,11 @@ pub async fn finish_sessions(
 ///
 /// Returns an [`OprfSessions`] ready to be finalized with [`finish_sessions`].
 #[instrument(level = "debug", skip_all)]
-pub async fn init_sessions<Auth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static>(
+pub async fn init_sessions<OprfRequestAuth: Clone + Serialize + Send + 'static>(
     client: &reqwest::Client,
     oprf_services: &[String],
     threshold: usize,
-    req: OprfRequest<Auth>,
+    req: OprfRequest<OprfRequestAuth>,
 ) -> Result<OprfSessions, super::Error> {
     let mut requests = oprf_services
         .iter()

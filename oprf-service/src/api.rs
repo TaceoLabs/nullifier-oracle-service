@@ -9,10 +9,10 @@
 
 use alloy::primitives::Address;
 use axum::{Router, response::IntoResponse};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 use tower_http::trace::TraceLayer;
 
-use crate::{OprfReqAuthService, services::oprf::OprfService};
+use crate::{OprfRequestAuthService, services::oprf::OprfService};
 
 pub(crate) mod errors;
 pub(crate) mod health;
@@ -30,11 +30,11 @@ pub(crate) mod v1;
 ///
 /// The returned [`Router`] can be incorporated into another router or be served directly by axum. Implementations don't need to configure anything in their `State`, the service is inlined as [`Extension`](https://docs.rs/axum/latest/axum/struct.Extension.html).
 pub fn routes<
-    ReqAuth: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    ReqAuthError: IntoResponse + Send + Sync + 'static,
+    RequestAuth: DeserializeOwned + Send + 'static,
+    RequestAuthError: IntoResponse + 'static,
 >(
     oprf_service: OprfService,
-    req_auth_service: OprfReqAuthService<ReqAuth, ReqAuthError>,
+    req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
     wallet_address: Address,
 ) -> Router {
     Router::new()

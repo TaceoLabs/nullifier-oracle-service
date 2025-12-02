@@ -1,17 +1,17 @@
 use async_trait::async_trait;
 use axum::{http::StatusCode, response::IntoResponse};
-use oprf_service::OprfReqAuthenticator;
+use oprf_service::OprfRequestAuthenticator;
 use oprf_types::api::v1::OprfRequest;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct ExampleOprfReqAuth;
+pub(crate) struct ExampleOprfRequestAuth;
 
-/// Errors returned by the [`ExampleOprfReqAuthError`].
+/// Errors returned by the [`ExampleOprfRequestAuthError`].
 #[derive(Debug, thiserror::Error)]
 #[allow(unused)]
-pub(crate) enum ExampleOprfReqAuthError {
+pub(crate) enum ExampleOprfRequestAuthError {
     #[error("invalid")]
     Invalid,
     /// Internal server error
@@ -19,13 +19,13 @@ pub(crate) enum ExampleOprfReqAuthError {
     InternalServerError(#[from] eyre::Report),
 }
 
-impl IntoResponse for ExampleOprfReqAuthError {
+impl IntoResponse for ExampleOprfRequestAuthError {
     fn into_response(self) -> axum::response::Response {
         match self {
-            ExampleOprfReqAuthError::Invalid => {
+            ExampleOprfRequestAuthError::Invalid => {
                 (StatusCode::BAD_REQUEST, "invalid").into_response()
             }
-            ExampleOprfReqAuthError::InternalServerError(err) => {
+            ExampleOprfRequestAuthError::InternalServerError(err) => {
                 let error_id = Uuid::new_v4();
                 tracing::error!("{error_id} - {err:?}");
                 (
@@ -38,17 +38,17 @@ impl IntoResponse for ExampleOprfReqAuthError {
     }
 }
 
-pub(crate) struct ExampleOprfReqAuthenticator;
+pub(crate) struct ExampleOprfRequestAuthenticator;
 
 #[async_trait]
-impl OprfReqAuthenticator for ExampleOprfReqAuthenticator {
-    type ReqAuth = ExampleOprfReqAuth;
-    type ReqAuthError = ExampleOprfReqAuthError;
+impl OprfRequestAuthenticator for ExampleOprfRequestAuthenticator {
+    type RequestAuth = ExampleOprfRequestAuth;
+    type RequestAuthError = ExampleOprfRequestAuthError;
 
     async fn verify(
         &self,
-        _request: &OprfRequest<Self::ReqAuth>,
-    ) -> Result<(), Self::ReqAuthError> {
+        _request: &OprfRequest<Self::RequestAuth>,
+    ) -> Result<(), Self::RequestAuthError> {
         Ok(())
     }
 }
