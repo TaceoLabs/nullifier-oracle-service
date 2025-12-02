@@ -9,7 +9,7 @@ use crate::dlog_equality::{DLogEqualityProof, InvalidProof};
 
 use crate::oprf::{
     Affine, BaseField, BlindedOprfRequest, BlindedOprfResponse, BlindingFactor, Curve,
-    PreparedBlindingFactor, ScalarField, mappings,
+    PreparedBlindingFactor, mappings,
 };
 
 /// Blinds a query for the OPRF server using a randomly generated blinding factor.
@@ -20,28 +20,19 @@ use crate::oprf::{
 /// # Arguments
 ///
 /// * `query` - Query field element to be blinded.
-/// * `rng` - Cryptographically secure random number generator.
+/// * `blinding_factor` - Blinding factor to use for blinding.
 ///
 /// # Returns
 ///
 /// Tuple of [`BlindedOprfRequest`] and [`BlindingFactor`].
-pub fn blind_query(
-    query: BaseField,
-    blinding_factor: ScalarField,
-) -> (BlindedOprfRequest, BlindingFactor) {
+pub fn blind_query(query: BaseField, blinding_factor: BlindingFactor) -> BlindedOprfRequest {
     // The blinding factor shall not be zero. As the chance of getting a zero is negligible
-    if blinding_factor.is_zero() {
+    if blinding_factor.beta().is_zero() {
         panic!("blinding_factor cannot be zero");
     }
     let encoded_input = mappings::encode_to_curve(query);
-    let blinded_query = (encoded_input * blinding_factor).into_affine();
-    (
-        BlindedOprfRequest(blinded_query),
-        BlindingFactor {
-            factor: blinding_factor,
-            query,
-        },
-    )
+    let blinded_query = (encoded_input * blinding_factor.beta()).into_affine();
+    BlindedOprfRequest(blinded_query)
 }
 
 /// Unblinds an OPRF server response and hashes it to produce the final output for the query. This method is for the non-threshold variant of the OPRF protocol.
@@ -50,13 +41,16 @@ pub fn blind_query(
 ///
 /// # Arguments
 ///
+/// * `query` - Query field element.
 /// * `response` - Blinded OPRF server response.
 /// * `blinding_factor` - Prepared blinding factor for unblinding.
+/// * `domain_separator` - Domain separator for hashing.
 ///
 /// # Returns
 ///
 /// OPRF output as a `BaseField` element.
 pub fn finalize_query(
+    query: BaseField,
     response: BlindedOprfResponse,
     blinding_factor: PreparedBlindingFactor,
     domain_separator: BaseField,
@@ -68,7 +62,7 @@ pub fn finalize_query(
     // out = H(query, unblinded_point)
     let hash_input = [
         domain_separator,
-        blinding_factor.query,
+        query,
         unblinded_point.x,
         unblinded_point.y,
     ];
@@ -84,6 +78,7 @@ pub fn finalize_query(
 /// # Arguments
 ///
 /// * `a` - Prover's public parameter.
+/// * `query` - Query field element.
 /// * `response` - Blinded OPRF server response.
 /// * `proof` - Discrete log equality proof.
 /// * `blinding_factor` - Prepared blinding factor for unblinding.
@@ -93,6 +88,7 @@ pub fn finalize_query(
 /// Returns the OPRF output if the proof is valid, else returns `InvalidProof`.
 pub fn finalize_query_and_verify_proof(
     a: Affine,
+    query: BaseField,
     response: BlindedOprfResponse,
     proof: DLogEqualityProof,
     blinding_factor: PreparedBlindingFactor,
@@ -102,13 +98,17 @@ pub fn finalize_query_and_verify_proof(
     use ark_ec::PrimeGroup as _;
     use ark_ff::Field as _;
     let d = Curve::generator().into_affine();
-    let b = (mappings::encode_to_curve(blinding_factor.query)
-        * blinding_factor.factor.inverse().unwrap())
-    .into_affine();
+    let b = (mappings::encode_to_curve(query) * blinding_factor.factor().inverse().unwrap())
+        .into_affine();
     let c = response.0;
 
     proof.verify(a, b, c, d)?;
 
     // Call finalize_query to unblind the response
-    Ok(finalize_query(response, blinding_factor, domain_separator))
+    Ok(finalize_query(
+        query,
+        response,
+        blinding_factor,
+        domain_separator,
+    ))
 }

@@ -9,7 +9,8 @@
 //! See the `client` module for client-side helpers, and the `server` module (when enabled) for non-threshold server operations.
 
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::Field;
+use ark_ff::{Field, UniformRand};
+use rand::{CryptoRng, Rng};
 
 pub(crate) type Affine = <Curve as CurveGroup>::Affine;
 pub(crate) type BaseField = <Curve as CurveGroup>::BaseField;
@@ -47,46 +48,42 @@ impl BlindedOprfRequest {
 ///
 /// The blinding factor shall not be zero, otherwise [`BlindingFactor::prepare`] will panic.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlindingFactor {
-    /// The scalar blinding factor used to blind the query.
-    factor: ScalarField,
-    /// The original (unblinded) query field element.
-    query: BaseField,
-}
+pub struct BlindingFactor(ScalarField);
 
 impl BlindingFactor {
+    /// Generate a new random blinding factor using the provided RNG.
+    pub fn rand<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let beta = ScalarField::rand(rng);
+        Self(beta)
+    }
+
     /// Prepare the blinding factor for unblinding (by inverting the blinding scalar).
     ///
     /// # Panics
     /// This method panics if the blinding factor is 0.
     pub fn prepare(self) -> PreparedBlindingFactor {
-        PreparedBlindingFactor {
-            factor: self
-                .factor
+        PreparedBlindingFactor(
+            self.0
                 .inverse()
                 .expect("Blinding factor should not be zero"),
-            query: self.query,
-        }
+        )
     }
 
     /// Returns the (non-inverted) blinding factor.
     pub fn beta(&self) -> ScalarField {
-        self.factor
-    }
-
-    /// Returns the original query.
-    pub fn query(&self) -> BaseField {
-        self.query
+        self.0
     }
 }
 
-/// Prepared blinding factor, storing the inverse for unblinding as well as the original query.
+/// Prepared blinding factor, storing the inverse for unblinding.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PreparedBlindingFactor {
-    /// The inverse of the blinding factor used for unblinding.
-    factor: ScalarField,
-    /// The original query value.
-    query: BaseField,
+pub struct PreparedBlindingFactor(ScalarField);
+
+impl PreparedBlindingFactor {
+    /// Returns the (inverted) blinding factor.
+    pub fn factor(&self) -> ScalarField {
+        self.0
+    }
 }
 
 /// The blinded OPRF response from the server, as an affine curve point.
@@ -101,7 +98,7 @@ impl BlindedOprfResponse {
 
     /// Unblind the server response using the prepared blinding factor.
     pub fn unblind_response(&self, blinding_factor: &PreparedBlindingFactor) -> Affine {
-        (self.0 * blinding_factor.factor).into_affine()
+        (self.0 * blinding_factor.factor()).into_affine()
     }
 
     /// Return the affine curve point of the response.
@@ -115,7 +112,6 @@ impl BlindedOprfResponse {
 mod tests {
 
     use ark_ff::PrimeField as _;
-    use rand::Rng;
 
     use crate::oprf::{
         self,
@@ -130,15 +126,21 @@ mod tests {
         let key = OprfKey::random(&mut rng);
         let service = OprfServer::new(key);
         let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
+        let blinding_factor = BlindingFactor::rand(&mut rng);
+        let blinding_factor2 = BlindingFactor::rand(&mut rng);
 
         let query = BaseField::from(42);
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
+        let blinded_request = oprf::client::blind_query(query, blinding_factor.clone());
+        let blinded_request2 = oprf::client::blind_query(query, blinding_factor2.clone());
         assert_ne!(blinded_request, blinded_request2);
         let response = service.answer_query(blinded_request);
 
-        let response =
-            oprf::client::finalize_query(response, blinding_factor.prepare(), domain_separator);
+        let response = oprf::client::finalize_query(
+            query,
+            response,
+            blinding_factor.prepare(),
+            domain_separator,
+        );
 
         let expected_response = &service.key * mappings::encode_to_curve(query);
         let out = poseidon2::bn254::t4::permutation(&[
@@ -152,8 +154,12 @@ mod tests {
         assert_eq!(response, expected_output);
         let response2 = service.answer_query(blinded_request2);
 
-        let unblinded_response2 =
-            oprf::client::finalize_query(response2, blinding_factor2.prepare(), domain_separator);
+        let unblinded_response2 = oprf::client::finalize_query(
+            query,
+            response2,
+            blinding_factor2.prepare(),
+            domain_separator,
+        );
         assert_eq!(response, unblinded_response2);
     }
 
@@ -164,15 +170,18 @@ mod tests {
         let service = OprfServer::new(key);
         let public_key = service.public_key();
         let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
+        let blinding_factor = BlindingFactor::rand(&mut rng);
+        let blinding_factor2 = BlindingFactor::rand(&mut rng);
 
         let query = BaseField::from(42);
-        let (blinded_request, blinding_factor) = oprf::client::blind_query(query, rng.r#gen());
-        let (blinded_request2, blinding_factor2) = oprf::client::blind_query(query, rng.r#gen());
+        let blinded_request = oprf::client::blind_query(query, blinding_factor.clone());
+        let blinded_request2 = oprf::client::blind_query(query, blinding_factor2.clone());
         assert_ne!(blinded_request, blinded_request2);
         let (response, proof) = service.answer_query_with_proof(blinded_request);
 
         let unblinded_response = oprf::client::finalize_query_and_verify_proof(
             public_key,
+            query,
             response.clone(),
             proof,
             blinding_factor.clone().prepare(),
@@ -194,6 +203,7 @@ mod tests {
         let (response2, proof2) = service.answer_query_with_proof(blinded_request2);
         let unblinded_response2 = oprf::client::finalize_query_and_verify_proof(
             public_key,
+            query,
             response2,
             proof2.clone(),
             blinding_factor2.prepare(),
@@ -204,6 +214,7 @@ mod tests {
 
         oprf::client::finalize_query_and_verify_proof(
             public_key,
+            query,
             response,
             proof2,
             blinding_factor.prepare(),

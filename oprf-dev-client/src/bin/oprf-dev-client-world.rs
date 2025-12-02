@@ -334,19 +334,18 @@ fn prepare_nullifier_stress_test_oprf_request(
 
     let query_hash =
         world_id_core::proof::query_hash(args.inclusion_proof.account_id, args.rp_id, args.action);
-    let blinding_factor = ark_babyjubjub::Fr::rand(&mut rng);
+    let blinding_factor = BlindingFactor::rand(&mut rng);
 
     let (oprf_request_auth, query_input) = world_id_core::proof::oprf_request_auth(
         &args,
         query_material,
         authenticator_private_key,
         query_hash,
-        blinding_factor,
+        blinding_factor.beta(), // TODO dont pass beta once updated
         &mut rng,
     )?;
 
-    let (blinded_request, blinding_factor) =
-        oprf_core::oprf::client::blind_query(query_hash, blinding_factor);
+    let blinded_request = oprf_core::oprf::client::blind_query(query_hash, blinding_factor.clone());
 
     let req = OprfRequest {
         request_id,

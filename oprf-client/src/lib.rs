@@ -19,6 +19,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 mod sessions;
+pub use oprf_core::oprf::BlindingFactor;
 pub use sessions::OprfSessions;
 pub use sessions::finish_sessions;
 pub use sessions::init_sessions;
@@ -88,7 +89,7 @@ pub async fn distributed_oprf<OprfRequestAuth>(
     oprf_key_id: OprfKeyId,
     share_epoch: ShareEpoch,
     query: ark_babyjubjub::Fq,
-    blinding_factor: ark_babyjubjub::Fr,
+    blinding_factor: BlindingFactor,
     domain_separator: ark_babyjubjub::Fq,
     auth: OprfRequestAuth,
 ) -> Result<VerifiableOprfOutput, Error>
@@ -105,8 +106,7 @@ where
         share_epoch,
     };
 
-    let (blinded_request, blinding_factor) =
-        oprf_core::oprf::client::blind_query(query, blinding_factor);
+    let blinded_request = oprf_core::oprf::client::blind_query(query, blinding_factor.clone());
     let oprf_req = OprfRequest {
         request_id,
         blinded_query: blinded_request.blinded_query(),
