@@ -138,7 +138,7 @@ deploy-oprf-key-registry-with-deps-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-oprf-key-registry-with-deps *args:
-    forge script OprfKeyRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+    forge script OprfKeyRegistryWithDeps.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
@@ -148,7 +148,7 @@ deploy-oprf-key-registry-dry-run *args:
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
 deploy-oprf-key-registry *args:
-    forge script OprfKeyRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL
+    forge script OprfKeyRegistry.s.sol --broadcast --interactives 1 -vvvvv {{ args }} --rpc-url $RPC_URL --verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY
 
 [group('deploy')]
 [working-directory('contracts/script/deploy')]
