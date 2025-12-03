@@ -82,8 +82,6 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3" }
 uuid = { version = "1" }
 webpki-roots = { version = "1.0" }
-world-id-core = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "1ee700c" }
-world-id-primitives = { git = "https://github.com/worldcoin/world-id-protocol.git", rev = "1ee700c" }
 zeroize = "1"
 
 # This profile can be used for CI in pull requests.

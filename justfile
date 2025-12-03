@@ -117,11 +117,6 @@ run-dev-client *args:
     cargo build --workspace --release
     ./target/release/oprf-dev-client {{ args }}
 
-[group('dev-client')]
-run-dev-client-world *args:
-    cargo build --workspace --release
-    ./target/release/oprf-dev-client-world {{ args }}
-
 [working-directory('contracts')]
 show-contract-errors:
     forge inspect src/OprfKeyRegistry.sol:OprfKeyRegistry errors
