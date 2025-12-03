@@ -1,4 +1,5 @@
-use ark_ff::{PrimeField, UniformRand as _};
+use ark_ff::PrimeField;
+use oprf_client::BlindingFactor;
 use oprf_types::crypto::OprfPublicKey;
 use oprf_types::{OprfKeyId, ShareEpoch};
 use rand::{CryptoRng, Rng};
@@ -15,7 +16,7 @@ pub async fn distributed_oprf<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Result<ark_babyjubjub::Fq, oprf_client::Error> {
     let query = action;
-    let blinding_factor = ark_babyjubjub::Fr::rand(rng);
+    let blinding_factor = BlindingFactor::rand(rng);
     let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
     let auth = ();
 

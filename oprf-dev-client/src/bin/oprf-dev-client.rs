@@ -13,6 +13,7 @@ use alloy::{
 use ark_ff::UniformRand as _;
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
+use oprf_client::BlindingFactor;
 use oprf_core::oprf::BlindedOprfRequest;
 use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{health_checks, oprf_key_registry_scripts};
@@ -167,10 +168,9 @@ fn prepare_nullifier_stress_test_oprf_request(
 
     let request_id = Uuid::new_v4();
     let action = ark_babyjubjub::Fq::rand(&mut rng);
-    let blinding_factor = ark_babyjubjub::Fr::rand(&mut rng);
+    let blinding_factor = BlindingFactor::rand(&mut rng);
     let query = action;
-    let (blinded_request, _blinding_factor) =
-        oprf_core::oprf::client::blind_query(query, blinding_factor);
+    let blinded_request = oprf_core::oprf::client::blind_query(query, blinding_factor);
     let oprf_req = OprfRequest {
         request_id,
         blinded_query: blinded_request.blinded_query(),

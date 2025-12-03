@@ -246,6 +246,7 @@ mod tests {
     use ark_ff::UniformRand;
     use axum::Router;
     use axum_test::TestServer;
+    use oprf_client::BlindingFactor;
     use oprf_core::ddlog_equality::shamir::{DLogCommitmentsShamir, DLogShareShamir};
     use oprf_types::api::v1::{ChallengeRequest, OprfRequest, ShareIdentifier};
     use oprf_types::crypto::{OprfPublicKey, PartyId};
@@ -276,9 +277,8 @@ mod tests {
             let request_id = Uuid::new_v4();
             let action = ark_babyjubjub::Fq::rand(&mut rng);
             let query = action;
-            let blinding_factor = ark_babyjubjub::Fr::rand(&mut rng);
-            let (blinded_request, _blinding_factor) =
-                oprf_core::oprf::client::blind_query(query, blinding_factor);
+            let blinding_factor = BlindingFactor::rand(&mut rng);
+            let blinded_request = oprf_core::oprf::client::blind_query(query, blinding_factor);
             let oprf_req = OprfRequest {
                 request_id,
                 blinded_query: blinded_request.blinded_query(),
