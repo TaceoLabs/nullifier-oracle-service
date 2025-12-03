@@ -80,6 +80,8 @@ fn is_quadratic_residue_or_zero(x: Field) -> bool {
     // For l =  1: (l(l-1)) = 0 and (l+1) = 2 => b^2 = a
     // For l = -1: (l(l-1)) = 2 and (l+1) = 0 => b^2 = n*a
     // For l =  0: (l(l-1)) = 0 and (l+1) = 1 => b^2 = a (which forces a to be 0 or a quadratic residue)
+    // Note that the above checks from the paper would also allow for a=0,b=0, but l=-1.
+    // Therefore we add another constraint enforcing a=0 => l=0, see below.
     let l = unsafe { legendre(x) };
     assert(l * (l - 1) * (l + 1) == 0, "l must be in {-1,0,1}"); // l in {-1,0,1}
 
@@ -97,7 +99,16 @@ fn is_quadratic_residue_or_zero(x: Field) -> bool {
     let c_na = b2 - na;
     let c_a = b2 - x;
     assert(s_na * c_na + s_a * c_a == 0, "b must be a square root of na or a");
+
+    // Constraint a=0 => l=0
+    // at least one of l and (isZero(a)) need to be 0
+    // This disallows the case of l!=0 and a==0, the case l==0 and a==0 is as expected, same with l!=0 and a!=0.
+    // There is still the case of l==0 and a!=0 which would be allowed by this and would give an invalid legendre symbol for a.
+    // However we enforce in that case (l = 0) that a = b^2, which still produces the correct high-level output for this gadget, since l in {0,1} and we do not directly return l.
+    assert((x==0) as Field * l == 0);
     l != -1
+
+
 }
 
 fn sgn0(x: Field) -> bool {
