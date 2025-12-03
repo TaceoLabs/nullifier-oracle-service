@@ -40,27 +40,6 @@ pub struct OprfNodeConfig {
     #[clap(long, env = "OPRF_NODE_ENVIRONMENT", default_value = "prod")]
     pub environment: Environment,
 
-    /// Max time a request is valid, after that it is automatically cancelled and will be cleaned up.
-    #[clap(
-        long,
-        env = "OPRF_NODE_REQUEST_LIFETIME",
-        default_value="5min",
-        value_parser = humantime::parse_duration
-    )]
-    pub request_lifetime: Duration,
-
-    /// Cleanup interval for session store.
-    ///
-    /// This interval specifies the time for the cleanup task to check
-    /// old sessions, not the validity of a session.
-    #[clap(
-        long,
-        env = "OPRF_NODE_SESSION_CLEANUP_INTERVAL",
-        default_value="5min",
-        value_parser = humantime::parse_duration
-    )]
-    pub session_cleanup_interval: Duration,
-
     /// Max message size the websocket connection accepts.
     ///
     /// Default value: 8 kilobytes

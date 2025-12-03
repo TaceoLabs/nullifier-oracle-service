@@ -36,8 +36,6 @@ async fn start_node(
         max_wait_time_shutdown: Duration::from_secs(10),
         service_config: oprf_service::config::OprfNodeConfig {
             environment: oprf_service::config::Environment::Dev,
-            request_lifetime: Duration::from_secs(5 * 60),
-            session_cleanup_interval: Duration::from_micros(1000000),
             rp_secret_id_prefix: format!("oprf/rp/n{id}"),
             oprf_key_registry_contract: rp_registry_contract,
             chain_ws_rpc_url: chain_ws_rpc_url.into(),
