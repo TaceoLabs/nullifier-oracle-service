@@ -26,7 +26,7 @@ use crate::oprf::{
 ///
 /// Tuple of [`BlindedOprfRequest`] and [`BlindingFactor`].
 pub fn blind_query(query: BaseField, blinding_factor: BlindingFactor) -> BlindedOprfRequest {
-    // The blinding factor shall not be zero. As the chance of getting a zero is negligible
+    // The blinding factor shall not be zero. As the chance of getting a zero is negligible we just panic here.
     if blinding_factor.beta().is_zero() {
         panic!("blinding_factor cannot be zero");
     }
@@ -98,7 +98,7 @@ pub fn finalize_query_and_verify_proof(
     use ark_ec::PrimeGroup as _;
     use ark_ff::Field as _;
     let d = Curve::generator().into_affine();
-    let b = (mappings::encode_to_curve(query) * blinding_factor.factor().inverse().unwrap())
+    let b = (mappings::encode_to_curve(query) * blinding_factor.beta_inv().inverse().unwrap())
         .into_affine();
     let c = response.0;
 

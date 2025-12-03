@@ -81,7 +81,7 @@ pub struct PreparedBlindingFactor(ScalarField);
 
 impl PreparedBlindingFactor {
     /// Returns the (inverted) blinding factor.
-    pub fn factor(&self) -> ScalarField {
+    pub fn beta_inv(&self) -> ScalarField {
         self.0
     }
 }
@@ -98,7 +98,7 @@ impl BlindedOprfResponse {
 
     /// Unblind the server response using the prepared blinding factor.
     pub fn unblind_response(&self, blinding_factor: &PreparedBlindingFactor) -> Affine {
-        (self.0 * blinding_factor.factor()).into_affine()
+        (self.0 * blinding_factor.beta_inv()).into_affine()
     }
 
     /// Return the affine curve point of the response.
