@@ -117,6 +117,7 @@ pub async fn init_sessions<OprfRequestAuth: Clone + Serialize + Send + 'static>(
 ) -> Result<OprfSessions, super::Error> {
     // only has one producer
     let (tx, mut rx) = mpsc::channel(1);
+    // We spawn a dedicated task so that the dangling web-socket connections can gracefully close when we have threshold amount of sessions and continue with the normal flow.
     tokio::task::spawn({
         let oprf_services = oprf_services.to_vec();
         let mut open_sessions = 0;
