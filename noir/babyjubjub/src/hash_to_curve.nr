@@ -11,7 +11,8 @@ global C3: Field = 4077002941042049829335213777657090702755072042423493106607013
 global C5: Field = 19103219067921713944291392827692070036145651957329286315305642004821462161904;
 
 fn hash_to_field(input: Field) -> Field {
-    let hash_input = [0, input, 0];
+    // element 0 is the DS string "OPRF_HashToField_BabyJubJub"
+    let hash_input = [32627786498498119128812045057993354633158048678109587794777765218, input, 0];
     let hash_result = perm::x5_3(hash_input);
 
     hash_result[1]
@@ -230,15 +231,44 @@ pub fn encode(input: Field) -> (Field, Field) {
 }
 
 #[test]
-fn test_encode_to_curve() {
+fn test_encode_to_curve_kat0() {
     let input = 0x03e4070110668921a99c37627dedddb5ab65fae33c19e24d9ee19d7065fdeca8;
     let (x, y) = encode(input);
+
     assert(
-        x == 10175058421265066103271621309400893795433239363389874688251488422849525264799,
+        x == 10317659717708787122683977912952208883341451354299498236440964928299898571531,
         "encode x mismatch for test vector",
     );
     assert(
-        y == 3628966387438731209966022732278382991713986757399185528286224796904478655258,
+        y == 2771878628977713302835201233169750856073682825638128695522023521672351725258,
+        "encode y mismatch for test vector",
+    );
+}
+
+#[test]
+fn test_encode_to_curve_kat1() {
+    let input = 0x42;
+    let (x, y) = encode(input);
+    assert(
+        x == 16453178030699411958341692808730701741568100876455568813278163225032347056514,
+        "encode x mismatch for test vector",
+    );
+    assert(
+        y == 5447922750205248208490261749483809853022174346498064122782172531486866662376,
+        "encode y mismatch for test vector",
+    );
+}
+
+#[test]
+fn test_encode_to_curve_kat2() {
+    let input = 0;
+    let (x, y) = encode(input);
+    assert(
+        x == 16605852874433019712683889710166313607515083375138125349412270828059484170936,
+        "encode x mismatch for test vector",
+    );
+    assert(
+        y == 12075050546928691602283582412953179086742727007172364313655633055645374686589,
         "encode y mismatch for test vector",
     );
 }
