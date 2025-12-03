@@ -8,7 +8,7 @@ use std::{
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, U160},
-    providers::{ProviderBuilder, WsConnect},
+    providers::ProviderBuilder,
     signers::local::PrivateKeySigner,
 };
 use ark_ff::UniformRand as _;
@@ -79,10 +79,10 @@ pub struct OprfDevClientConfig {
     /// The RPC for chain communication
     #[clap(
         long,
-        env = "OPRF_DEV_CLIENT_CHAIN_WS_RPC_URL",
-        default_value = "ws://localhost:8545"
+        env = "OPRF_DEV_CLIENT_CHAIN_RPC_URL",
+        default_value = "http://localhost:8545"
     )]
-    pub chain_ws_rpc_url: SecretString,
+    pub chain_rpc_url: SecretString,
 
     /// The PRIVATE_KEY of the TACEO admin wallet - used to register the OPRF nodes
     ///
@@ -113,10 +113,9 @@ async fn fetch_oprf_public_key(
     config: &OprfDevClientConfig,
 ) -> eyre::Result<OprfPublicKey> {
     tracing::info!("fetching OPRF public-key..");
-    let ws = WsConnect::new(config.chain_ws_rpc_url.expose_secret());
     let provider = ProviderBuilder::new()
         .wallet(wallet)
-        .connect_ws(ws)
+        .connect(config.chain_rpc_url.expose_secret())
         .await
         .context("while connecting to RPC")?;
     let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider.clone());
@@ -346,7 +345,7 @@ async fn main() -> eyre::Result<()> {
         (oprf_key_id, oprf_public_key)
     } else {
         let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
-            config.chain_ws_rpc_url.expose_secret(),
+            config.chain_rpc_url.expose_secret(),
             config.oprf_key_registry_contract,
             config.taceo_private_key.expose_secret(),
         );
