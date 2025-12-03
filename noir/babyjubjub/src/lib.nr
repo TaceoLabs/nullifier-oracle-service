@@ -182,7 +182,7 @@ impl BabyJubJubPoint {
 
     /// Validates that a field element is in the BabyJubJub scalar field Fr
     pub fn validate_babyjubjub_field(field_element: Field) {
-        bn254::assert_lt(field_element, BABYJUBJUB_Fr );
+        bn254::assert_lt(field_element, BABYJUBJUB_Fr);
     }
 
     pub fn validate_scalar_field_with_bits(field_element: Field) -> [u1; 251] {
