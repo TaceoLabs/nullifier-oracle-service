@@ -191,6 +191,7 @@ impl BabyJubJubPoint {
         bits
     }
 
+    // This method expects that the point is on-curve.
     pub fn check_sub_group(self) -> bool {
         let characteristic: [u1; 251] = [
             1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1,
