@@ -101,7 +101,7 @@ impl WebSocketSession {
                     .inner
                     .close(Some(CloseFrame {
                         code: CloseCode::Error,
-                        reason: "encountered an error".into(),
+                        reason: err.to_string().into(),
                     }))
                     .await;
                 Err(Error::WsError(err))
