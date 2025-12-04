@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
 import {OprfKeyRegistry} from "../../src/OprfKeyRegistry.sol";
-import {Groth16Verifier as Groth16VerifierKeyGen13} from "../../src/Groth16VerifierKeyGen13.sol";
+import {Verifier as VerifierKeyGen13} from "../../src/VerifierKeyGen13.sol";
 import {BabyJubJub} from "../../src/BabyJubJub.sol";
 import {Types} from "../../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -17,8 +17,8 @@ contract DeployOprfKeyRegistryWithDepsScript is Script {
     function setUp() public {}
 
     function deployGroth16VerifierKeyGen() public returns (address) {
-        Groth16VerifierKeyGen13 verifier = new Groth16VerifierKeyGen13();
-        console.log("Groth16VerifierKeyGen13 deployed to:", address(verifier));
+        VerifierKeyGen13 verifier = new VerifierKeyGen13();
+        console.log("VerifierKeyGen13 deployed to:", address(verifier));
         return address(verifier);
     }
 
