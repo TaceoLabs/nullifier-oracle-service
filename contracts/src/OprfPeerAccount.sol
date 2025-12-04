@@ -213,7 +213,7 @@ contract OprfPeerAccount is BaseAccount, Initializable, UUPSUpgradeable {
         address rpRegistryProxy,
         uint128 rpId,
         Types.Round1Contribution calldata data
-    ) external onlyOwner {
+    ) external onlyOwnerOrEntryPoint {
         bytes memory callData = abi.encodeCall(
             IRpRegistry.addRound1Contribution,
             (rpId, data)

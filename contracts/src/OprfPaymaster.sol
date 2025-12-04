@@ -28,7 +28,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     mapping(address => uint256) public gasLimitByAccount;
 
     // Global settings
-    uint256 public maxGasPerOp = 1000000; // 1M gas max per operation
+    uint256 public maxGasPerOp = 10000000000; // 10B gas max per operation
     uint256 public globalGasUsed;
     uint256 public globalGasLimit;
     bool public isPaused;
@@ -179,6 +179,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
         bytes4 selector = bytes4(userOp.callData[:4]);
 
         // Check for execute() or executeBatch()
+        // TODO: Is it best to just replace these calculations of function selectors with constants?
         if (selector == bytes4(keccak256("execute(address,uint256,bytes)"))) {
             // Decode to check the target
             (address target,,) = abi.decode(
@@ -216,7 +217,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
      * @return valid Whether it's a valid helper
      */
     function _isHelperFunction(bytes4 selector) internal pure returns (bool) {
-        return selector == bytes4(keccak256("submitRound1Contribution(address,uint128,uint256,uint256,uint256,uint256,uint256)")) ||
+        return selector == bytes4(keccak256("submitRound1Contribution(address,uint128,((uint256,uint256),uint256,(uint256,uint256)))")) ||
                selector == bytes4(keccak256("submitRound2Contribution(address,uint128,bytes,uint256[2],uint256[2][2],uint256[2])")) ||
                selector == bytes4(keccak256("submitRound3Contribution(address,uint128)")) ||
                selector == bytes4(keccak256("batchRound1Contributions(address,uint128[],bytes[])")) ||

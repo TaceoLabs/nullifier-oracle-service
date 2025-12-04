@@ -18,15 +18,15 @@ async function getDeployedContracts(): Promise<DeployedContracts> {
     __dirname,
     "../contracts/broadcast/RpRegistryWithDeps.s.sol/31337/run-latest.json"
   );
-  
+
   if (!fs.existsSync(broadcastFile)) {
     throw new Error("No deployment found. Run deployment first!");
   }
-  
+
   const data = JSON.parse(fs.readFileSync(broadcastFile, "utf8"));
   const contracts: DeployedContracts = {};
   const proxies: any[] = [];
-  
+
   // Parse transactions to find our contracts
   for (const tx of data.transactions) {
     if (tx.contractName === "RpRegistry") {
@@ -43,53 +43,47 @@ async function getDeployedContracts(): Promise<DeployedContracts> {
     }
   }
 
-  
-  // Identify proxies more carefully
-  // Peer addresses (lowercase, no 0x)
-  const peerAddresses = {
-    alice: "14dc79964da2c08b23698b3d3cc7ca32193d9955",
-    bob: "23618e81e3f5cdf7f54c3d65f7fbc0abf5b21e8f", 
-    carol: "a0ee7a142d267c1f36714e4a8f75612f20a79720"
-  };
-  
-
 if (proxies.length >= 4) {
-  contracts.rpRegistry = proxies[0].address;  
-  contracts.aliceAccount = proxies[2].address; 
+  contracts.rpRegistry = proxies[0].address;
+  contracts.aliceAccount = proxies[2].address;
   contracts.bobAccount = proxies[3].address;
-  contracts.carolAccount = proxies[1].address; 
+  contracts.carolAccount = proxies[1].address;
 }
-  
+
   return contracts;
 }
 
 async function main() {
   console.log("🚀 Testing ERC-4337 Gasless Transactions");
-  
+
   const provider = new ethers.providers.JsonRpcProvider("http://127.0.0.1:8545");
-  
+
   // Get deployed contracts
   const contracts = await getDeployedContracts();
   console.log("Found contracts:");
   Object.entries(contracts).forEach(([name, addr]) => {
     console.log(`  ${name}: ${addr}`);
   });
-  
+
   // Validate we have everything we need
   const required = ['rpRegistry', 'entryPoint', 'paymaster', 'aliceAccount'];
   const missing = required.filter(key => !contracts[key as keyof DeployedContracts]);
-  
+
   if (missing.length > 0) {
     throw new Error(`Missing required contracts: ${missing.join(', ')}`);
   }
-  
+
   // ABIs
+  // TODO: Just import artifacts instead via json...
   const entryPointABI = [
-    "function handleOps(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerficationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)",
+    "function handleOps(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature)[] ops, address beneficiary)",
     "function getUserOpHash(tuple(address sender, uint256 nonce, bytes initCode, bytes callData, bytes32 accountGasLimits, uint256 preVerificationGas, bytes32 gasFees, bytes paymasterAndData, bytes signature) userOp) view returns (bytes32)",
-    "function getNonce(address sender, uint192 key) view returns (uint256)"
+    "function getNonce(address sender, uint192 key) view returns (uint256)",
+    "function balanceOf(address account) view returns (uint256)",
+    "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)",
+    "event UserOperationRevertReason(bytes32 indexed userOpHash, address indexed sender, uint256 nonce, bytes revertReason)"
   ];
-  
+
   const accountABI = [
       "function submitRound1Contribution("
       + "address rpRegistryProxy,"
@@ -102,51 +96,58 @@ async function main() {
   + ")",
     "function owner() view returns (address)",
     "function execute(address dest, uint256 value, bytes calldata func)",
-    "function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func)"
+    "function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func)",
+    "function entryPoint() view returns (address)"
   ];
-  
+
   const rpRegistryABI = [
     "function initKeyGen(uint128 rpId, tuple(bytes32 x, uint256 yParity) ecdsaPubKey)",
     "function isContractReady() view returns (bool)",
-    "function owner() view returns (address)", 
+    "function owner() view returns (address)",
     "function submitRound1Contribution(address rpRegistryProxy, uint128 rpId, tuple(tuple(uint256 x, uint256 y) commShare, uint256 commCoeffs, tuple(uint256 x, uint256 y) ephPubKey) contribution) returns (bool)"
   ];
-  
+
+  // Check if smart account is properly registered in RpRegistry
+  const paymasterABI = [
+    "function authorizedAccounts(address) view returns (bool)"
+  ];
+
   // Create contract instances
   const entryPoint = new ethers.Contract(contracts.entryPoint!, entryPointABI, provider);
   const aliceAccount = new ethers.Contract(contracts.aliceAccount!, accountABI, provider);
   const rpRegistry = new ethers.Contract(contracts.rpRegistry!, rpRegistryABI, provider);
-  
+  const paymaster = new ethers.Contract(contracts.paymaster!, paymasterABI, provider);
+
   // Setup signers
   const adminPrivateKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
   const alicePrivateKey = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
-  
+
   const adminSigner = new ethers.Wallet(adminPrivateKey, provider);
   const aliceSigner = new ethers.Wallet(alicePrivateKey, provider);
-  
+
   console.log("\n📋 Contract State:");
   console.log("  Admin address:", adminSigner.address);
   console.log("  Alice EOA:", aliceSigner.address);
-  
+
   // Check if registry is ready
   const isReady = await rpRegistry.isContractReady();
   console.log("  Registry ready:", isReady);
-  
+
   // Check Alice's account owner
   const owner = await aliceAccount.owner();
   console.log("  Alice account owner:", owner);
   console.log("  Expected owner:", aliceSigner.address);
-  
+
   if (owner.toLowerCase() !== aliceSigner.address.toLowerCase()) {
     console.error("❌ Alice's account has wrong owner!");
     console.log("\n🔍 Debugging: Let's check all proxy deployments...");
-    
+
     // Re-read the file to debug
     const data = JSON.parse(fs.readFileSync(
       path.join(__dirname, "../nullifier-oracle-service/contracts/broadcast/DeployRpRegistryWithDepsScript.s.sol/31337/run-latest.json"),
       "utf8"
     ));
-    
+
     console.log("\nAll ERC1967Proxy deployments:");
     let proxyCount = 0;
     for (const tx of data.transactions) {
@@ -168,7 +169,7 @@ async function main() {
         }
       }
     }
-    
+
     throw new Error("Account ownership mismatch - deployment may be incorrect");
   }
 
@@ -176,11 +177,11 @@ async function main() {
   console.log("\n🔑 Skipping key generation, testing gasless transactions...");
   const rpId = ethers.BigNumber.from(5)
   console.log("  Using test rpId:", rpId);
-  
+
   // Get nonce for Alice's account
   const nonce = await entryPoint.getNonce(contracts.aliceAccount, 0);
   console.log("  Alice account nonce:", nonce.toString());
-  
+
  // Create Round 1 contribution
   const contribution = {
    commShare: {
@@ -192,7 +193,7 @@ async function main() {
     x: "0x1583c671e97dd91df79d8c5b311d452a3eec14932c89d9cff0364d5b98ef215e",
     y: "0x03f5c610720cfa296066965732468ea34a8f7e3725899e1b4470c6b5a76321a3" // Also added leading 0 here
    }
-  }; 
+  };
   // Encode the call data for the account to execute
   const iface = new ethers.utils.Interface(accountABI);
   const callData = iface.encodeFunctionData("submitRound1Contribution", [
@@ -216,15 +217,18 @@ async function main() {
       ethers.utils.hexZeroPad(ethers.utils.parseUnits("1", "gwei").toHexString(), 16),  // maxPriorityFeePerGas (16 bytes)
       ethers.utils.hexZeroPad(ethers.utils.parseUnits("10", "gwei").toHexString(), 16)  // maxFeePerGas (16 bytes)
     ]), // bytes32: packed maxPriorityFeePerGas and maxFeePerGas
-    paymasterAndData: contracts.paymaster,
+    paymasterAndData: ethers.utils.hexConcat([
+  contracts.paymaster,  // 20 bytes - paymaster address
+  ethers.utils.hexZeroPad(ethers.BigNumber.from("100000").toHexString(), 16),  // paymasterVerificationGasLimit (16 bytes)
+  ethers.utils.hexZeroPad(ethers.BigNumber.from("50000").toHexString(), 16),   // paymasterPostOpGasLimit (16 bytes)
+  // paymasterData (if any) goes here
+]),
     signature: "0x"
   };
 
   console.log("\n📝 Creating UserOperation...");
   console.log("  Sender:", userOp.sender);
   console.log("  Paymaster:", userOp.paymasterAndData);
-
-  // TODO: Make sure Alices account is authorized to receive sponsorship in paymaster
 
   // Get user op hash
   const userOpHash = await entryPoint.getUserOpHash(userOp);
@@ -245,8 +249,6 @@ async function main() {
     yParity: 2
   };
 
-  console.log(rpRegistry.interface.format(ethers.utils.FormatTypes.full));
-
   try {
     const initTx = await rpRegistry.connect(adminSigner).initKeyGen(
       rpId,
@@ -260,53 +262,111 @@ async function main() {
     console.log("  ❌ Transaction failed:", error.message);
   }
 
+  // Check paymaster's deposit in EntryPoint
+  const entryPointDepositABI = [
+    "function balanceOf(address account) view returns (uint256)"
+  ];
+  const paymasterDepositBalance = await entryPoint.balanceOf(contracts.paymaster);
+  console.log("Paymaster deposit in EntryPoint:", ethers.utils.formatEther(paymasterDepositBalance), "ETH");
 
-  // Submit UserOperation via EntryPoint
-  console.log("\n🚀 Submitting UserOperation...");
-  try {
-    const entryPointWithSigner = entryPoint.connect(adminSigner);
-    const handleOpsTx = await entryPointWithSigner.handleOps(
-      [userOp],
-      adminSigner.address,
-      { gasLimit: 2000000 }
-    );
-    
-    const receipt = await handleOpsTx.wait();
-    console.log("  ✅ Transaction successful!");
-    console.log("  Gas used:", receipt.gasUsed.toString());
-    console.log("  Transaction hash:", receipt.transactionHash);
-    
-    // Check Alice's balance after
-    const balanceAfter = await provider.getBalance(aliceSigner.address);
-    console.log("\n💰 Alice's balance after:", ethers.utils.formatEther(balanceAfter), "ETH");
-    
-    if (balanceBefore.eq(balanceAfter)) {
-      console.log("  ✅ GASLESS SUCCESS! Alice paid no gas!");
-    } else {
-      console.log("  ❌ Alice's balance changed - gas was paid");
-    }
-    
-  } catch (error: any) {
-    console.error("  ❌ UserOperation failed:", error.message);
-    
-    // Try direct call for debugging
-    console.log("\n🔍 Attempting direct call for debugging...");
-    try {
-      const aliceAccountWithSigner = aliceAccount.connect(aliceSigner);
-      const directTx = await aliceAccountWithSigner.submitRound1Contribution(
-        contracts.rpRegistry,
-        rpId,
-        contribution,
-        { gasLimit: 500000 }
-      );
-      await directTx.wait();
-      console.log("  Direct call succeeded - issue is with UserOp validation");
-    } catch (directError: any) {
-      console.error("  Direct call also failed:", directError.message);
-    }
+console.log("\n🔍 Simulating UserOperation...");
+try {
+  const entryPointWithSigner = entryPoint.connect(adminSigner);
+  await entryPointWithSigner.callStatic.handleOps(
+    [userOp],
+    adminSigner.address,
+    { gasLimit: 2000000 }
+  );
+  console.log("Simulation passed");
+} catch (simError: any) {
+  console.log("Simulation failed:");
+  console.log("  Reason:", simError.reason);
+  console.log("  Message:", simError.message);
+  console.log("  Error code:", simError.code);
+  if (simError.errorArgs) {
+    console.log("  Error args:", simError.errorArgs);
+  }
+  if (simError.data) {
+    console.log("  Error data:", simError.data);
   }
 }
 
+// Simulate what the account would execute
+const aliceAccountWithSigner = aliceAccount.connect(aliceSigner);
+
+try {
+  await aliceAccountWithSigner.callStatic.submitRound1Contribution(
+    contracts.rpRegistry,
+    rpId,
+    contribution
+  );
+  console.log("Inner call simulation passed");
+} catch (error: any) {
+  console.log("Inner call would revert:", error.reason || error.message);
+}
+
+// Submit UserOperation via EntryPoint
+console.log("\n📤 Submitting UserOperation for real...");
+try {
+  const entryPointWithSigner = entryPoint.connect(adminSigner);
+  const tx = await entryPointWithSigner.handleOps(
+    [userOp],
+    adminSigner.address,
+    { gasLimit: 2000000 }
+  );
+  console.log("Transaction sent:", tx.hash);
+
+  const receipt = await tx.wait();
+  console.log("✅ Transaction confirmed!");
+  console.log("  Gas used:", receipt.gasUsed.toString());
+  console.log("  Status:", receipt.status);
+
+// Parse EntryPoint events
+for (const log of receipt.logs) {
+  try {
+    const parsed = entryPoint.interface.parseLog(log);
+    if (parsed.name === "UserOperationEvent") {
+      console.log("\nUserOperationEvent:");
+      console.log("  success:", parsed.args.success);
+      console.log("  actualGasCost:", parsed.args.actualGasCost.toString());
+      console.log("  actualGasUsed:", parsed.args.actualGasUsed.toString());
+    }
+  } catch {}
+}
+
+for (const log of receipt.logs) {
+  try {
+    const parsed = entryPoint.interface.parseLog(log);
+    if (parsed.name === "UserOperationRevertReason") {
+      console.log("UserOperationRevertReason:");
+      console.log("  raw revertReason:", parsed.args.revertReason);
+
+      // Try to decode the error
+      const revertData = parsed.args.revertReason;
+      if (revertData.length >= 10) {
+        const selector = revertData.slice(0, 10);
+        console.log("  error selector:", selector);
+        // Try to match known selectors from contracts
+        // Can compute these with ethers.utils.id("ErrorName()").slice(0, 10)
+      }
+    }
+  } catch {}
+}
+
+  // Check Alice's balance after
+  const balanceAfter = await provider.getBalance(aliceSigner.address);
+  console.log("\n💰 Alice's balance after:", ethers.utils.formatEther(balanceAfter), "ETH");
+
+  if (balanceBefore.eq(balanceAfter)) {
+    console.log("✅ GASLESS SUCCESS! Alice paid no gas!");
+  } else {
+    console.log("❌ Alice's balance changed - gas was paid");
+  }
+} catch (error: any) {
+  console.log("❌ Submission failed:", error.message);
+}
+
+}
 main().catch(error => {
   console.error("Fatal error:", error);
   process.exit(1);
