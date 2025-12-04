@@ -121,14 +121,14 @@ contract OprfKeyRegistryUpgradeTest is Test {
 
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -139,7 +139,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(oprfKeyId);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
@@ -172,7 +172,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenFinalize(oprfKeyId);
+        emit Types.SecretGenFinalize(oprfKeyId, 0);
         vm.prank(carol);
         oprfKeyRegistry.addRound3Contribution(oprfKeyId);
         vm.stopPrank();
@@ -209,14 +209,14 @@ contract OprfKeyRegistryUpgradeTest is Test {
 
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             newOprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             newOprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -227,7 +227,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(newOprfKeyId);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             newOprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
@@ -260,7 +260,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenFinalize(newOprfKeyId);
+        emit Types.SecretGenFinalize(newOprfKeyId, 0);
         vm.prank(carol);
         oprfKeyRegistry.addRound3Contribution(newOprfKeyId);
         vm.stopPrank();

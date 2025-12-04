@@ -47,6 +47,16 @@ impl ShareEpoch {
     pub fn new(value: u128) -> Self {
         Self(value)
     }
+
+    /// Returns `true` iff this epoch is the 0 epoch.
+    pub fn is_initial_epoch(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns the next epoch.
+    pub fn next(self) -> ShareEpoch {
+        Self(self.0 + 1)
+    }
 }
 
 impl OprfKeyId {
@@ -63,6 +73,12 @@ impl OprfKeyId {
 
 impl From<U160> for OprfKeyId {
     fn from(value: U160) -> Self {
+        Self(value)
+    }
+}
+
+impl From<u128> for ShareEpoch {
+    fn from(value: u128) -> Self {
         Self(value)
     }
 }

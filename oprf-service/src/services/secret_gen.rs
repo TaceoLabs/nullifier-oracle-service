@@ -26,7 +26,7 @@ use oprf_core::{
     keygen::{self, KeyGenPoly},
 };
 use oprf_types::{
-    OprfKeyId,
+    OprfKeyId, ShareEpoch,
     chain::{
         SecretGenRound1Contribution, SecretGenRound2Contribution, SecretGenRound3Contribution,
     },
@@ -45,6 +45,12 @@ use crate::services::{
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SharingType {
+    Linear,
+    Shamir(Vec<ark_babyjubjub::Fr>),
+}
 
 /// Service for managing the distributed secret generation protocol.
 ///
@@ -82,7 +88,6 @@ struct ToxicWasteRound1 {
 /// Contains the ephemeral private key for a single key generation and the associated public keys of all nodes.
 /// The public key list is not toxic waste per se, but for simplicity we store it together with the private key.
 struct ToxicWasteRound2 {
-    pks: Vec<EphemeralEncryptionPublicKey>,
     sk: EphemeralEncryptionPrivateKey,
 }
 
@@ -122,6 +127,12 @@ impl ToxicWasteRound1 {
         Self { poly, sk }
     }
 
+    fn reshare<R: Rng + CryptoRng>(old_share: DLogShareShamir, degree: usize, rng: &mut R) -> Self {
+        let poly = KeyGenPoly::reshare(rng, old_share.into(), degree);
+        let sk = EphemeralEncryptionPrivateKey::generate(rng);
+        Self { poly, sk }
+    }
+
     /// Advances to the second round of key generation.
     ///
     /// Consumes `self` and combines the secret material from round one with the public keys of all nodes.
@@ -135,8 +146,8 @@ impl ToxicWasteRound1 {
     /// # Returns
     ///
     /// A `ToxicWasteRound2` instance containing the ephemeral private key and the node public key list.
-    fn next(self, pks: Vec<EphemeralEncryptionPublicKey>) -> ToxicWasteRound2 {
-        ToxicWasteRound2 { pks, sk: self.sk }
+    fn next(self) -> ToxicWasteRound2 {
+        ToxicWasteRound2 { sk: self.sk }
     }
 }
 
@@ -252,13 +263,15 @@ impl DLogSecretGenService {
         &mut self,
         oprf_key_id: OprfKeyId,
         ciphers: Vec<SecretGenCiphertext>,
+        sharing_type: SharingType,
+        pks: Vec<EphemeralEncryptionPublicKey>,
     ) -> eyre::Result<SecretGenRound3Contribution> {
         tracing::info!("calling round3 with {}", ciphers.len());
         let toxic_waste_r2 = self
             .toxic_waste_round2
             .remove(&oprf_key_id)
             .expect("todo what if not here?");
-        let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2)
+        let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2, sharing_type, pks)
             .context("while computing DLogShare")?;
         // We need to store the computed share - as soon as we get ready
         // event, we will store the share inside the crypto-device.
@@ -276,19 +289,58 @@ impl DLogSecretGenService {
         &mut self,
         oprf_key_id: OprfKeyId,
         oprf_public_key: OprfPublicKey,
+        epoch: ShareEpoch,
     ) -> eyre::Result<StoreDLogShare> {
-        tracing::info!("calling finalize");
+        tracing::info!("calling finalize with epoch: {epoch}");
         let dlog_share = self
             .finished_shares
             .remove(&oprf_key_id)
             .context("cannot find computed DLogShare")?;
         self.oprf_key_material_store
-            .add(oprf_key_id, oprf_public_key, dlog_share.clone());
+            .add(oprf_key_id, oprf_public_key, dlog_share.clone(), epoch);
         Ok(StoreDLogShare {
             oprf_key_id,
             oprf_public_key,
             share: dlog_share,
+            epoch,
         })
+    }
+
+    pub(crate) fn reshare_round1(
+        &mut self,
+        oprf_key_id: OprfKeyId,
+        threshold: u16,
+    ) -> Option<SecretGenRound1Contribution> {
+        tracing::info!("reshare round1..");
+        let mut rng = rand::thread_rng();
+        let degree = usize::from(threshold - 1);
+        let old_share = self.oprf_key_material_store.get_latest_share(oprf_key_id)?;
+        let toxic_waste = ToxicWasteRound1::reshare(old_share, degree, &mut rng);
+        let contribution = SecretGenCommitment {
+            comm_share: toxic_waste.poly.get_pk_share(),
+            comm_coeffs: toxic_waste.poly.get_coeff_commitment(),
+            eph_pub_key: toxic_waste.sk.get_public_key(),
+        };
+        let old_value = self.toxic_waste_round1.insert(oprf_key_id, toxic_waste);
+        // TODO handle this more gracefully
+        assert!(
+            old_value.is_none(),
+            "already had this round1 - this is a bug"
+        );
+        Some(SecretGenRound1Contribution {
+            oprf_key_id,
+            contribution,
+        })
+    }
+
+    pub(crate) fn reshare_round2(&mut self, oprf_key_id: OprfKeyId) {
+        tracing::debug!("reverting reshare...");
+        let toxic_waste_round1 = self
+            .toxic_waste_round1
+            .remove(&oprf_key_id)
+            .expect("how to handle this");
+        self.toxic_waste_round2
+            .insert(oprf_key_id, toxic_waste_round1.next());
     }
 }
 
@@ -298,8 +350,10 @@ impl DLogSecretGenService {
 fn decrypt_key_gen_ciphertexts(
     ciphers: Vec<SecretGenCiphertext>,
     toxic_waste: ToxicWasteRound2,
+    sharing_type: SharingType,
+    pks: Vec<EphemeralEncryptionPublicKey>,
 ) -> eyre::Result<DLogShareShamir> {
-    let ToxicWasteRound2 { pks, sk } = toxic_waste;
+    let ToxicWasteRound2 { sk } = toxic_waste;
     // In some later version, we maybe need some meaningful way
     // to tell which party produced a wrong ciphertext. Currently,
     // we trust the smart-contract to verify the proof, therefore
@@ -331,7 +385,12 @@ fn decrypt_key_gen_ciphertexts(
             }
         })
         .collect::<eyre::Result<Vec<_>>>()?;
-    Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares)))
+    match sharing_type {
+        SharingType::Linear => Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares))),
+        SharingType::Shamir(lagrange) => Ok(DLogShareShamir::from(
+            keygen::accumulate_lagrange_shares(&shares, &lagrange),
+        )),
+    }
 }
 
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
@@ -427,5 +486,5 @@ fn compute_keygen_proof_max_degree1_parties3(
     }
 
     let ciphers = SecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
-    Ok((ciphers, toxic_waste.next(pks)))
+    Ok((ciphers, toxic_waste.next()))
 }

@@ -30,6 +30,8 @@ pub struct StoreDLogShare {
     pub oprf_public_key: OprfPublicKey,
     /// The actual secret-share from the created secret part of the nullifier key
     pub share: DLogShareShamir,
+    /// The epoch for the new share.
+    pub epoch: ShareEpoch,
 }
 
 /// Trait that implementations of secret managers must provide.
@@ -45,25 +47,13 @@ pub trait SecretManager {
     /// Loads the DLog secrets and creates a [`OprfKeyMaterialStore`].
     async fn load_secrets(&self) -> eyre::Result<OprfKeyMaterialStore>;
 
-    /// Stores the provided [`DLogShareShamir`] for the given [`OprfKeyId`] at epoch 0 and the computed [`OprfPublicKey`].
+    /// Stores the provided [`DLogShareShamir`] for the given [`OprfKeyId`] at [`ShareEpoch`] and the computed [`OprfPublicKey`].
     ///
-    /// This method is intended **only** for initializing a new RP. For updating
-    /// existing shares, use [`Self::update_dlog_share`].
+    /// This method shall handle whether the underlying secret manager needs extra work for the special case, where share is 0.
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()>;
 
     /// Removes all information stored associated with the specified [`OprfKeyId`].
     ///
     /// Certain secret-managers might not be able to immediately delete the secret. In that case it shall mark the secret for deletion.
     async fn remove_dlog_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<()>;
-
-    /// Updates the [`DLogShareShamir`] of an existing [`OprfKeyId`] to a new epoch.
-    ///
-    /// Use this method for updating existing shares. For creating a new share,
-    /// use [`Self::store_dlog_share`].
-    async fn update_dlog_share(
-        &self,
-        oprf_key_id: OprfKeyId,
-        epoch: ShareEpoch,
-        share: DLogShareShamir,
-    ) -> eyre::Result<()>;
 }

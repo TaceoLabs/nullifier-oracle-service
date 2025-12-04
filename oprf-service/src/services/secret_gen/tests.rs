@@ -165,9 +165,12 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .collect_vec();
     let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
 
-    let dlog_secret_gen0_round3 = dlog_secret_gen0.round3(oprf_key_id, ciphers0)?;
-    let dlog_secret_gen1_round3 = dlog_secret_gen1.round3(oprf_key_id, ciphers1)?;
-    let dlog_secret_gen2_round3 = dlog_secret_gen2.round3(oprf_key_id, ciphers2)?;
+    let dlog_secret_gen0_round3 =
+        dlog_secret_gen0.round3(oprf_key_id, ciphers0, SharingType::Linear, pks.to_vec())?;
+    let dlog_secret_gen1_round3 =
+        dlog_secret_gen1.round3(oprf_key_id, ciphers1, SharingType::Linear, pks.to_vec())?;
+    let dlog_secret_gen2_round3 =
+        dlog_secret_gen2.round3(oprf_key_id, ciphers2, SharingType::Linear, pks.to_vec())?;
     assert_eq!(dlog_secret_gen0_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen1_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen2_round3.oprf_key_id, oprf_key_id);
@@ -199,9 +202,21 @@ async fn test_secret_gen() -> eyre::Result<()> {
     assert_eq!(is_public_key, should_public_key);
 
     // finalize round
-    let finalize0 = dlog_secret_gen0.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
-    let finalize1 = dlog_secret_gen1.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
-    let finalize2 = dlog_secret_gen2.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
+    let finalize0 = dlog_secret_gen0.finalize(
+        oprf_key_id,
+        OprfPublicKey::from(is_public_key),
+        ShareEpoch::from(0),
+    )?;
+    let finalize1 = dlog_secret_gen1.finalize(
+        oprf_key_id,
+        OprfPublicKey::from(is_public_key),
+        ShareEpoch::from(0),
+    )?;
+    let finalize2 = dlog_secret_gen2.finalize(
+        oprf_key_id,
+        OprfPublicKey::from(is_public_key),
+        ShareEpoch::from(0),
+    )?;
     assert_eq!(finalize0.oprf_key_id, oprf_key_id);
     assert_eq!(finalize1.oprf_key_id, oprf_key_id);
     assert_eq!(finalize2.oprf_key_id, oprf_key_id);

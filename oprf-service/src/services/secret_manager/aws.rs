@@ -18,7 +18,7 @@ use aws_sdk_secretsmanager::operation::get_secret_value::GetSecretValueError;
 use k256::ecdsa::SigningKey;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_types::crypto::OprfPublicKey;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr as _;
 use zeroize::Zeroize as _;
 
@@ -128,7 +128,7 @@ impl From<AwsOprfSecret> for OprfKeyMaterial {
     ///
     /// Includes both current and previous epoch secrets if available.
     fn from(value: AwsOprfSecret) -> Self {
-        let mut shares = HashMap::new();
+        let mut shares = BTreeMap::new();
         shares.insert(value.current.epoch, value.current.secret);
         if let Some(previous) = value.previous {
             shares.insert(previous.epoch, previous.secret);
@@ -257,22 +257,11 @@ impl SecretManager for AwsSecretManager {
     /// Creates a new secret with the configured prefix and OPRF key id.
     #[instrument(level = "info", skip_all)]
     async fn store_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
-        let StoreDLogShare {
-            oprf_key_id,
-            oprf_public_key,
-            share,
-        } = store;
-        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
-        let secret = AwsOprfSecret::new(oprf_key_id, oprf_public_key, share);
-        self.client
-            .create_secret()
-            .name(secret_id)
-            .secret_string(serde_json::to_string(&secret).expect("can serialize"))
-            .send()
-            .await
-            .context("while creating secret")?;
-        tracing::info!("created new OPRF secret for {oprf_key_id}");
-        Ok(())
+        if store.epoch.is_initial_epoch() {
+            self.create_dlog_share(store).await
+        } else {
+            self.update_dlog_share(store).await
+        }
     }
 
     /// Removes an OPRF secret from AWS Secrets Manager.
@@ -291,18 +280,44 @@ impl SecretManager for AwsSecretManager {
         tracing::info!("deleted secret from AWS {oprf_key_id}");
         Ok(())
     }
+}
 
+impl AwsSecretManager {
+    /// Stores a new DLog share for an OPRF secret-key in AWS Secrets Manager.
+    ///
+    /// Creates a new secret with the configured prefix and OPRF key id.
+    #[instrument(level = "info", skip_all)]
+    async fn create_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
+        let StoreDLogShare {
+            oprf_key_id,
+            oprf_public_key,
+            share,
+            epoch: _,
+        } = store;
+        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
+        let secret = AwsOprfSecret::new(oprf_key_id, oprf_public_key, share);
+        self.client
+            .create_secret()
+            .name(secret_id)
+            .secret_string(serde_json::to_string(&secret).expect("can serialize"))
+            .send()
+            .await
+            .context("while creating secret")?;
+        tracing::info!("created new OPRF secret for {oprf_key_id}");
+        Ok(())
+    }
     /// Updates an OPRF secret with a new epoch.
     ///
     /// Loads the existing secret, moves the current epoch to previous,
     /// and stores the new share as the current epoch.
-    #[instrument(level = "info", skip(self, share))]
-    async fn update_dlog_share(
-        &self,
-        oprf_key_id: OprfKeyId,
-        epoch: ShareEpoch,
-        share: DLogShareShamir,
-    ) -> eyre::Result<()> {
+    #[instrument(level = "info", skip(self, store))]
+    async fn update_dlog_share(&self, store: StoreDLogShare) -> eyre::Result<()> {
+        let StoreDLogShare {
+            oprf_key_id,
+            oprf_public_key: _,
+            share,
+            epoch,
+        } = store;
         // Load old secret to preserve previous epoch
         let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
         tracing::info!("loading old secret first at {secret_id}");

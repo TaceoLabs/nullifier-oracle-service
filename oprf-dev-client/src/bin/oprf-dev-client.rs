@@ -102,13 +102,18 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_KEY_GEN_WAIT_TIME", default_value="2min", value_parser=humantime::parse_duration)]
     pub max_wait_time_key_gen: Duration,
 
+    /// Whether we want to do a reshare as well.
+    #[clap(long, env = "OPRF_DEV_CLIENT_WITH_RESHARE")]
+    pub reshare: bool,
+
     /// Command
     #[command(subcommand)]
     pub command: Command,
 }
 
-async fn fetch_oprf_public_key(
+async fn fetch_oprf_public_key_by_epoch(
     oprf_key_id: OprfKeyId,
+    epoch: ShareEpoch,
     wallet: &EthereumWallet,
     config: &OprfDevClientConfig,
 ) -> eyre::Result<OprfPublicKey> {
@@ -124,11 +129,13 @@ async fn fetch_oprf_public_key(
         loop {
             interval.tick().await;
             let maybe_oprf_public_key = contract
-                .getOprfPublicKey(oprf_key_id.into_inner())
+                .getOprfPublicKeyAndEpoch(oprf_key_id.into_inner())
                 .call()
                 .await;
-            if let Ok(oprf_public_key) = maybe_oprf_public_key {
-                return eyre::Ok(OprfPublicKey::new(oprf_public_key.try_into()?));
+            if let Ok(oprf_public_key) = maybe_oprf_public_key
+                && oprf_public_key.epoch == epoch.into_inner()
+            {
+                return eyre::Ok(OprfPublicKey::new(oprf_public_key.key.try_into()?));
             }
         }
     })
@@ -140,6 +147,7 @@ async fn fetch_oprf_public_key(
 
 async fn run_nullifier(
     nodes: &[String],
+    epoch: ShareEpoch,
     threshold: usize,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
@@ -154,7 +162,7 @@ async fn run_nullifier(
         threshold,
         oprf_public_key,
         oprf_key_id,
-        ShareEpoch::default(),
+        epoch,
         action,
         connector,
         &mut rng,
@@ -339,9 +347,12 @@ async fn main() -> eyre::Result<()> {
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
 
+    let start_epoch = ShareEpoch::default();
+
     let (oprf_key_id, oprf_public_key) = if let Some(oprf_key_id) = config.oprf_key_id {
         let oprf_key_id = OprfKeyId::new(oprf_key_id);
-        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+        let oprf_public_key =
+            fetch_oprf_public_key_by_epoch(oprf_key_id, start_epoch, &wallet, &config).await?;
         (oprf_key_id, oprf_public_key)
     } else {
         let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
@@ -351,7 +362,9 @@ async fn main() -> eyre::Result<()> {
         );
         tracing::info!("registered OPRF key with: {oprf_key_id}");
 
-        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+        let oprf_public_key =
+            fetch_oprf_public_key_by_epoch(oprf_key_id, start_epoch, &wallet, &config).await?;
+
         (oprf_key_id, oprf_public_key)
     };
 
@@ -368,13 +381,40 @@ async fn main() -> eyre::Result<()> {
             tracing::info!("running single nullifier");
             run_nullifier(
                 &config.services,
+                start_epoch,
                 config.threshold,
                 oprf_key_id,
                 oprf_public_key,
-                connector,
+                connector.clone(),
             )
             .await?;
             tracing::info!("nullifier successful");
+            if config.reshare {
+                tracing::info!("running reshare test");
+                oprf_key_registry_scripts::init_reshare(
+                    oprf_key_id,
+                    config.chain_rpc_url.expose_secret(),
+                    config.oprf_key_registry_contract,
+                    config.taceo_private_key.expose_secret(),
+                );
+                tracing::info!("started reshare for OPRF key with: {oprf_key_id}");
+                let next_epoch = start_epoch.next();
+
+                let oprf_public_key =
+                    fetch_oprf_public_key_by_epoch(oprf_key_id, next_epoch, &wallet, &config)
+                        .await?;
+                tracing::info!("running nullifier after reshare");
+                run_nullifier(
+                    &config.services,
+                    next_epoch,
+                    config.threshold,
+                    oprf_key_id,
+                    oprf_public_key,
+                    connector,
+                )
+                .await?;
+                tracing::info!("nullifier successful");
+            }
         }
         Command::StressTest(cmd) => {
             tracing::info!("running stress-test");
