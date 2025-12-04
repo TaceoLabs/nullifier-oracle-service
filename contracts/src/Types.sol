@@ -9,6 +9,17 @@ library Types {
         uint256 partyId;
     }
 
+    struct RegisteredOprfPublicKey {
+        BabyJubJubElement key;
+        uint128 epoch;
+        BabyJubJubElement[] shareCommitments;
+    }
+
+    struct OprfPublicKeyAndEpoch {
+        BabyJubJubElement key;
+        uint128 epoch;
+    }
+
     struct Round1Contribution {
         BabyJubJubElement commShare;
         // Hash of the polynomial created by participant
@@ -32,6 +43,7 @@ library Types {
     struct OprfKeyGenState {
         Round1Contribution[] round1;
         SecretGenCiphertext[][] round2;
+        BabyJubJubElement[] shareCommitments;
         BabyJubJubElement keyAggregate;
         bool[] round2Done;
         bool[] round3Done;

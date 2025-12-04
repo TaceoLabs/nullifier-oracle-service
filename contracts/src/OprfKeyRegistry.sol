@@ -47,7 +47,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     mapping(uint160 => Types.OprfKeyGenState) internal runningKeyGens;
 
     // Mapping between each OPRF key identifier and the corresponding OPRF public-key.
-    mapping(uint160 => Types.BabyJubJubElement) internal oprfKeyRegistry;
+    mapping(uint160 => Types.RegisteredOprfPublicKey) internal oprfKeyRegistry;
 
     // =============================================
     //                MODIFIERS
@@ -181,6 +181,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         for (uint256 i = 0; i < numPeers; i++) {
             st.round2[i] = new Types.SecretGenCiphertext[](numPeers);
         }
+        st.shareCommitments = new Types.BabyJubJubElement[](numPeers);
         st.round2Done = new bool[](numPeers);
         st.round3Done = new bool[](numPeers);
         st.exists = true;
@@ -188,6 +189,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         // Emit Round1 event for everyone
         emit Types.SecretGenRound1(oprfKeyId, threshold);
     }
+
 
     /// @notice Deletes the OPRF public-key and its associated material. Works during key-gen or afterwards.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
@@ -199,6 +201,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             // delete all the material and set to deleted
             delete st.round1;
             delete st.round2;
+            delete st.shareCommitments;
             delete st.keyAggregate;
             delete st.round2Done;
             delete st.round3Done;
@@ -211,8 +214,8 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             needToEmitEvent = true;
         }
 
-        Types.BabyJubJubElement memory oprfPublicKey = oprfKeyRegistry[oprfKeyId];
-        if (!_isEmpty(oprfPublicKey)) {
+        Types.RegisteredOprfPublicKey memory oprfPublicKey = oprfKeyRegistry[oprfKeyId];
+        if (!_isEmpty(oprfPublicKey.key)) {
             // delete the created key
             delete oprfPublicKey;
             needToEmitEvent = true;
@@ -254,7 +257,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         if (!_isEmpty(st.round1[partyId].commShare)) revert AlreadySubmitted();
 
         // Add BabyJubJub Elements together and keep running total
-        _addToAggregate(st, data.commShare.x, data.commShare.y);
+        _addToAggregate(st.keyAggregate, data.commShare.x, data.commShare.y);
         st.round1[partyId] = data;
         _tryEmitRound2Event(oprfKeyId, st);
     }
@@ -284,7 +287,9 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         if (st.round2Done[partyId]) revert AlreadySubmitted();
 
         // everything looks good - push the ciphertexts
+        // additionally accumulate all commitments for the parties to have the correct commitment during the reshare process.
         for (uint256 i = 0; i < numPeers; ++i) {
+            _addToAggregate(st.shareCommitments[i], data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
             st.round2[i][partyId] = data.ciphers[i];
         }
         // set the contribution to done
@@ -344,10 +349,12 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
         if (allRound3Submitted(st)) {
             // We are done! Register the OPRF public-key and emit event!
-            oprfKeyRegistry[oprfKeyId] = st.keyAggregate;
+            oprfKeyRegistry[oprfKeyId] =
+                Types.RegisteredOprfPublicKey({key: st.keyAggregate, epoch: 0, shareCommitments: st.shareCommitments});
             // cleanup all old data
             delete st.round1;
             delete st.round2;
+            delete st.shareCommitments;
             delete st.keyAggregate;
             delete st.round2Done;
             delete st.round3Done;
@@ -430,9 +437,25 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         isReady
         returns (Types.BabyJubJubElement memory)
     {
-        Types.BabyJubJubElement storage oprfPublicKey = oprfKeyRegistry[oprfKeyId];
-        if (_isEmpty(oprfPublicKey)) revert UnknownId(oprfKeyId);
-        return oprfPublicKey;
+        Types.RegisteredOprfPublicKey storage oprfPublicKey = oprfKeyRegistry[oprfKeyId];
+        if (_isEmpty(oprfPublicKey.key)) revert UnknownId(oprfKeyId);
+        return oprfPublicKey.key;
+    }
+
+    /// @notice Retrieves the specified OPRF public-key along with its current epoch.
+    /// @param oprfKeyId The unique identifier for the OPRF public-key.
+    /// @return The BabyJubJub element representing the nullifier public key and the current epoch.
+    function getOprfPublicKeyAndEpoch(uint160 oprfKeyId)
+        public
+        view
+        virtual
+        onlyProxy
+        isReady
+        returns (Types.OprfPublicKeyAndEpoch memory)
+    {
+        Types.RegisteredOprfPublicKey storage oprfPublicKey = oprfKeyRegistry[oprfKeyId];
+        if (_isEmpty(oprfPublicKey.key)) revert UnknownId(oprfKeyId);
+        return Types.OprfPublicKeyAndEpoch({key: oprfPublicKey.key, epoch: oprfPublicKey.epoch});
     }
 
     function allRound1Submitted(Types.OprfKeyGenState storage st) internal view virtual returns (bool) {
@@ -487,23 +510,28 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         emit Types.SecretGenRound3(oprfKeyId);
     }
 
-    function _addToAggregate(Types.OprfKeyGenState storage st, uint256 newPointX, uint256 newPointY) internal virtual {
+    function _addToAggregate(Types.BabyJubJubElement storage keyAggregate, uint256 newPointX, uint256 newPointY)
+        internal
+        virtual
+    {
         if (!accumulator.isOnCurve(newPointX, newPointY)) {
             revert BadContribution();
         }
 
-        if (_isEmpty(st.keyAggregate)) {
+        if (_isEmpty(keyAggregate)) {
             // We checked above that the point is on curve, so we can just set it
-            st.keyAggregate = Types.BabyJubJubElement(newPointX, newPointY);
+            keyAggregate.x = newPointX;
+            keyAggregate.y = newPointY;
             return;
         }
 
         // we checked above that the new point is on curve
         // the initial aggregate is on curve as well, checked inside the if above
         // induction: sum of two on-curve points is on-curve, so the result is on-curve as well
-        (uint256 resultX, uint256 resultY) = accumulator.add(st.keyAggregate.x, st.keyAggregate.y, newPointX, newPointY);
+        (uint256 resultX, uint256 resultY) = accumulator.add(keyAggregate.x, keyAggregate.y, newPointX, newPointY);
 
-        st.keyAggregate = Types.BabyJubJubElement(resultX, resultY);
+        keyAggregate.x = resultX;
+        keyAggregate.y = resultY;
     }
 
     function _isInfinity(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
