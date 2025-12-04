@@ -45,6 +45,7 @@ futures = "0.3"
 git-version = "0.3"
 groth16 = { package = "taceo-groth16", version = "0.1" }
 groth16-material = { package = "taceo-groth16-material", version = "0.1", default-features = false }
+groth16-sol = { package = "taceo-groth16-sol", version = "0.1" }
 http = "1"
 humantime = "2"
 itertools = "0.14"
