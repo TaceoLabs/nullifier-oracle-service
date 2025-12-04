@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {OprfKeyRegistry} from "../src/OprfKeyRegistry.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
-import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
+import {Verifier as VerifierKeyGen13} from "../src/VerifierKeyGen13.sol";
 import {Types} from "../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -17,7 +17,7 @@ contract OprfKeyRegistryTest is Test {
 
     OprfKeyRegistry public oprfKeyRegistry;
     BabyJubJub public accumulator;
-    Groth16VerifierKeyGen13 public verifierKeyGen;
+    VerifierKeyGen13 public verifierKeyGen;
     ERC1967Proxy public proxy;
 
     address alice = address(0x1);
@@ -67,7 +67,7 @@ contract OprfKeyRegistryTest is Test {
 
     function setUp() public {
         accumulator = new BabyJubJub();
-        verifierKeyGen = new Groth16VerifierKeyGen13();
+        verifierKeyGen = new VerifierKeyGen13();
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
@@ -583,73 +583,31 @@ contract OprfKeyRegistryTest is Test {
     }
 }
 
-function aliceProof() pure returns (Types.Groth16Proof memory) {
-    return Types.Groth16Proof({
-        pA: [
-            0x02d426aeb4bdbc458021dbdb04b03075df20f91ead8abd9561711960287e8f1a,
-            0x1ef3643eb0d7b87e8007089fb21cfd69966f7f9e574cce694656204039c43e42
-        ],
-        pB: [
-            [
-                0x24fafb9c47b411d9466c1e5f12b35792ec297c0520a8e4f225639c08f474cf4f,
-                0x220a805ad4d15dc5241e296753d645bfea896691603f3caab8beb442dea2b9d6
-            ],
-            [
-                0x217d0611d75ffda4385cb0ed737b1ef58ce85825ae3c556ff20e05d4a76f037c,
-                0x0244b8cc06256016d00281662f32ef0f970bc62d0ff2abff26b2de59f3712f2b
-            ]
-        ],
-        pC: [
-            0x23623f67629728787e692a1e96ec463eb1e85de56972ca495b95c79be1785afc,
-            0x0265a96ebd271c1bb3c94647b65b8ae48305fee3aedb964ce68500ccf2fef178
-        ]
-    });
+function aliceProof() pure returns (uint256[4] memory) {
+    return [
+        8595238773827085680320045924497803598603613200348231750229208299239351792510,
+        12832017633324760341401456583117472694742403926190354618114795531229144106281,
+        22366478487166355479955517408452526381559049224578434693929261114104497232286,
+        9940604352747749382034608639477132230093237313412854017121016470540538565742
+    ];
 }
 
-function bobProof() pure returns (Types.Groth16Proof memory) {
-    return Types.Groth16Proof({
-        pA: [
-            0x1ec0cda76ce6427de77f8f04a9a75a3e0b97a38dad3c8c04c7ffab019b94f97b,
-            0x2f6d0a0dd98693d43b40e837e60162f8988534437ae0bcaf05e44a68ed3ebeea
-        ],
-        pB: [
-            [
-                0x10e835f46a442f362f7c1b8fe214da79fdbb4d75de434292d76d88afa6392399,
-                0x03aa6b6261249751c496298d5aaa61a72f7cd23eec4db79313a791e0deb3c2e3
-            ],
-            [
-                0x0e85dd5fed92425825d4246d68536265e266ad49e486316784145013ed80d5c6,
-                0x0ce500b3f77e03c4b7ecd519c09490b3c214db22d7b269ae8ce6478c0e32cd18
-            ]
-        ],
-        pC: [
-            0x0f7fafe9d43b2bf6b52af59a8f9e50b8aaacbd4ba61aef4fbb711f19c163695f,
-            0x283d0425e9f41055484757a501757db5151c880c78bdb890924172b087a74df6
-        ]
-    });
+function bobProof() pure returns (uint256[4] memory) {
+    return [
+        21815794014313459856431754568674408638447568964630669771748834163755411471532,
+        19876177613448728175188469345910454223484905858109475650193993921651574187049,
+        40453368139174633724260109470574725394669824032837050264345984722986924218019,
+        26237483739074046920276106914388956999981554977567898156934936993341505032716
+    ];
 }
 
-function carolProof() pure returns (Types.Groth16Proof memory) {
-    return Types.Groth16Proof({
-        pA: [
-            0x2894143e50b0401aa65a2d446b79f30280cf673579ab5a325a129ae14ebf7eae,
-            0x24e49f24a3bfd6a5c6b272fae1e0bd140c08c362ebf6aac9c4d9efb015d71dfd
-        ],
-        pB: [
-            [
-                0x09353482013fe78f4bd2fd007012d1300bfa4ea02eee7e3ec05dca73a9e450fd,
-                0x1c92b9f1a256875ea863dd3a39ce8cd69e82ed142632a869ea176301f499c81f
-            ],
-            [
-                0x04aa8e18614388657b5a172b2474f39723820c4f4f5e5448e7a36d5b76004262,
-                0x14309a0d1eff86870a91091e7f7d43abfdae7d5cf5846f5908e934d30df3182a
-            ]
-        ],
-        pC: [
-            0x14177ba03c780cba11f2582c1b9c1bd13dacbd8817d35cf1acb37a9b85838e7f,
-            0x2be36650ef268ba6efdec3ad5ca6feb1d0883fcb2fb4f87162da0fd6d3a5d7be
-        ]
-    });
+function carolProof() pure returns (uint256[4] memory) {
+    return [
+        5471086096827440523179036806299649705503911265458874097699223960338042974378,
+        3499369405011747183092433134693989875304730508594401452366932983798628170454,
+        86659962491038677172639408899389799124173161784056049801101979769032098870911,
+        9946641058101129735566192091696792375901792350839822299724120415382143805906
+    ];
 }
 
 function aliceRound2Contribution() pure returns (Types.Round2Contribution memory) {
@@ -675,7 +633,7 @@ function aliceRound2Contribution() pure returns (Types.Round2Contribution memory
         y: 0x20bb39169676c06bd11bc45475ca73499e5e1bd6ef5934908be9b1e7ed261f93
     });
 
-    return Types.Round2Contribution({proof: aliceProof(), ciphers: ciphers});
+    return Types.Round2Contribution({compressedProof: aliceProof(), ciphers: ciphers});
 }
 
 function bobRound2Contribution() pure returns (Types.Round2Contribution memory) {
@@ -701,7 +659,7 @@ function bobRound2Contribution() pure returns (Types.Round2Contribution memory) 
         y: 0x29647d1fd7116608b00a5b1aca74e3183fe9dff0d4dead1bae563a571a4be06f
     });
 
-    return Types.Round2Contribution({proof: bobProof(), ciphers: ciphers});
+    return Types.Round2Contribution({compressedProof: bobProof(), ciphers: ciphers});
 }
 
 function carolRound2Contribution() pure returns (Types.Round2Contribution memory) {
@@ -727,5 +685,5 @@ function carolRound2Contribution() pure returns (Types.Round2Contribution memory
         y: 0x1ecdc7e068d459804aee2bfe03654947ca95c740095904b90f97519df06179f7
     });
 
-    return Types.Round2Contribution({proof: carolProof(), ciphers: ciphers});
+    return Types.Round2Contribution({compressedProof: carolProof(), ciphers: ciphers});
 }

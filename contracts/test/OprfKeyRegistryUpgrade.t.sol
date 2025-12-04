@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {OprfKeyRegistry} from "../src/OprfKeyRegistry.sol";
 import {BabyJubJub} from "../src/BabyJubJub.sol";
-import {Groth16Verifier as Groth16VerifierKeyGen13} from "../src/Groth16VerifierKeyGen13.sol";
+import {Verifier as VerifierKeyGen13} from "../src/VerifierKeyGen13.sol";
 import {Types} from "../src/Types.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {aliceRound2Contribution, bobRound2Contribution, carolRound2Contribution} from "./OprfKeyRegistry.t.sol";
@@ -41,7 +41,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
 
     OprfKeyRegistry public oprfKeyRegistry;
     BabyJubJub public accumulator;
-    Groth16VerifierKeyGen13 public verifierKeyGen;
+    VerifierKeyGen13 public verifierKeyGen;
     ERC1967Proxy public proxy;
 
     address alice = address(0x1);
@@ -91,7 +91,7 @@ contract OprfKeyRegistryUpgradeTest is Test {
 
     function setUp() public {
         accumulator = new BabyJubJub();
-        verifierKeyGen = new Groth16VerifierKeyGen13();
+        verifierKeyGen = new VerifierKeyGen13();
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call

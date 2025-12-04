@@ -10,13 +10,8 @@ uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
 uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 30;
 
-interface IGroth16VerifierKeyGen13 {
-    function verifyProof(
-        uint256[2] calldata _pA,
-        uint256[2][2] calldata _pB,
-        uint256[2] calldata _pC,
-        uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] calldata _pubSignals
-    ) external view returns (bool);
+interface IVerifierKeyGen13 {
+    function verifyCompressedProof(uint256[4] calldata compressedProof, uint256[24] calldata input) external view;
 }
 
 interface IBabyJubJub {
@@ -38,7 +33,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     mapping(address => bool) public keygenAdmins;
     uint256 public amountKeygenAdmins;
 
-    IGroth16VerifierKeyGen13 public keyGenVerifier;
+    IVerifierKeyGen13 public keyGenVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
     uint256 public numPeers;
@@ -93,7 +88,6 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     error BadContribution();
     error DeletedId(uint160 id);
     error ImplementationNotInitialized();
-    error InvalidProof();
     error LastAdmin();
     error NotAParticipant();
     error NotReady();
@@ -121,7 +115,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         __Ownable2Step_init();
         keygenAdmins[_keygenAdmin] = true;
         amountKeygenAdmins += 1;
-        keyGenVerifier = IGroth16VerifierKeyGen13(_keyGenVerifierAddress);
+        keyGenVerifier = IVerifierKeyGen13(_keyGenVerifierAddress);
         accumulator = IBabyJubJub(_accumulatorAddress);
         // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
         threshold = 2;
@@ -328,9 +322,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         }
         _tryEmitRound3Event(oprfKeyId, st);
         // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
-        if (!keyGenVerifier.verifyProof(data.proof.pA, data.proof.pB, data.proof.pC, publicInputs)) {
-            revert InvalidProof();
-        }
+        keyGenVerifier.verifyCompressedProof(data.compressedProof, publicInputs);
     }
 
     /// @notice Adds a Round 3 contribution to the key generation process. Only callable by registered OPRF peers.

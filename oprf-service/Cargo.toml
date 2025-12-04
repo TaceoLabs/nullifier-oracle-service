@@ -26,6 +26,7 @@ eyre.workspace = true
 futures = { workspace = true }
 git-version = { workspace = true }
 groth16-material = { workspace = true, features = ["circom"] }
+groth16-sol = { workspace = true }
 http = { workspace = true }
 humantime.workspace = true
 itertools = { workspace = true }

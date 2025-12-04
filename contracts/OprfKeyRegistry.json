@@ -124,26 +124,9 @@
         "internalType": "struct Types.Round2Contribution",
         "components": [
           {
-            "name": "proof",
-            "type": "tuple",
-            "internalType": "struct Types.Groth16Proof",
-            "components": [
-              {
-                "name": "pA",
-                "type": "uint256[2]",
-                "internalType": "uint256[2]"
-              },
-              {
-                "name": "pB",
-                "type": "uint256[2][2]",
-                "internalType": "uint256[2][2]"
-              },
-              {
-                "name": "pC",
-                "type": "uint256[2]",
-                "internalType": "uint256[2]"
-              }
-            ]
+            "name": "compressedProof",
+            "type": "uint256[4]",
+            "internalType": "uint256[4]"
           },
           {
             "name": "ciphers",
@@ -404,7 +387,7 @@
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IGroth16VerifierKeyGen13"
+        "internalType": "contract IVerifierKeyGen13"
       }
     ],
     "stateMutability": "view"
@@ -764,8 +747,8 @@
     "inputs": [
       {
         "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ]
   },
@@ -798,11 +781,6 @@
   {
     "type": "error",
     "name": "InvalidInitialization",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidProof",
     "inputs": []
   },
   {
@@ -890,8 +868,8 @@
     "inputs": [
       {
         "name": "id",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint160",
+        "internalType": "uint160"
       }
     ]
   },

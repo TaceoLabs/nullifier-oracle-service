@@ -18,7 +18,7 @@ library Types {
     }
 
     struct Round2Contribution {
-        Groth16Proof proof;
+        uint256[4] compressedProof;
         // Hash of the polynomial created by participant
         SecretGenCiphertext[] ciphers;
     }

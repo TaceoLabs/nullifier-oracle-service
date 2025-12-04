@@ -3,8 +3,6 @@
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
 use alloy::{primitives::Address, providers::DynProvider, sol};
-use ark_bn254::Bn254;
-use circom_types::groth16::Proof;
 use oprf_types::crypto::{
     EphemeralEncryptionPublicKey, PartyId, SecretGenCiphertext, SecretGenCiphertexts,
     SecretGenCommitment,
@@ -67,20 +65,6 @@ impl From<SecretGenCommitment> for Types::Round1Contribution {
     }
 }
 
-impl From<Proof<Bn254>> for Types::Groth16Proof {
-    fn from(value: Proof<Bn254>) -> Self {
-        Self {
-            pA: [value.pi_a.x.into(), value.pi_a.y.into()],
-            // This is not a typo - must be c1 and then c0
-            pB: [
-                [value.pi_b.x.c1.into(), value.pi_b.x.c0.into()],
-                [value.pi_b.y.c1.into(), value.pi_b.y.c0.into()],
-            ],
-            pC: [value.pi_c.x.into(), value.pi_c.y.into()],
-        }
-    }
-}
-
 impl From<SecretGenCiphertext> for Types::SecretGenCiphertext {
     fn from(value: SecretGenCiphertext) -> Self {
         Self {
@@ -106,7 +90,7 @@ impl TryFrom<Types::SecretGenCiphertext> for SecretGenCiphertext {
 impl From<SecretGenCiphertexts> for Types::Round2Contribution {
     fn from(value: SecretGenCiphertexts) -> Self {
         Self {
-            proof: value.proof.into(),
+            compressedProof: groth16_sol::prepare_compressed_proof(&value.proof.into()),
             ciphers: value.ciphers.into_iter().map(Into::into).collect(),
         }
     }
