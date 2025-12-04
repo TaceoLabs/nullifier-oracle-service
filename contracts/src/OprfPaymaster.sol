@@ -28,7 +28,7 @@ contract OprfPaymaster is IPaymaster, Ownable {
     mapping(address => uint256) public gasLimitByAccount;
 
     // Global settings
-    uint256 public maxGasPerOp = 10000000000; // 10B gas max per operation
+    uint256 public maxGasPerOp = 10000000; // 10M gas max per operation
     uint256 public globalGasUsed;
     uint256 public globalGasLimit;
     bool public isPaused;

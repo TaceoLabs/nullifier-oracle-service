@@ -209,8 +209,8 @@ async function main() {
     initCode: "0x",
     callData: callData,
     accountGasLimits: ethers.utils.hexConcat([
-      ethers.utils.hexZeroPad(ethers.BigNumber.from("150000").toHexString(), 16), // verificationGasLimit (16 bytes)
-      ethers.utils.hexZeroPad(ethers.BigNumber.from("300000").toHexString(), 16)  // callGasLimit (16 bytes)
+      ethers.utils.hexZeroPad(ethers.BigNumber.from("500000").toHexString(), 16), // verificationGasLimit (16 bytes)
+      ethers.utils.hexZeroPad(ethers.BigNumber.from("800000").toHexString(), 16)  // callGasLimit (16 bytes)
     ]), // bytes32: packed verificationGasLimit and callGasLimit
     preVerificationGas: ethers.BigNumber.from("50000"),
     gasFees: ethers.utils.hexConcat([
@@ -219,8 +219,8 @@ async function main() {
     ]), // bytes32: packed maxPriorityFeePerGas and maxFeePerGas
     paymasterAndData: ethers.utils.hexConcat([
   contracts.paymaster,  // 20 bytes - paymaster address
-  ethers.utils.hexZeroPad(ethers.BigNumber.from("100000").toHexString(), 16),  // paymasterVerificationGasLimit (16 bytes)
-  ethers.utils.hexZeroPad(ethers.BigNumber.from("50000").toHexString(), 16),   // paymasterPostOpGasLimit (16 bytes)
+  ethers.utils.hexZeroPad(ethers.BigNumber.from("200000").toHexString(), 16),  // paymasterVerificationGasLimit (16 bytes)
+  ethers.utils.hexZeroPad(ethers.BigNumber.from("100000").toHexString(), 16),   // paymasterPostOpGasLimit (16 bytes)
   // paymasterData (if any) goes here
 ]),
     signature: "0x"
@@ -262,10 +262,6 @@ async function main() {
     console.log("  ❌ Transaction failed:", error.message);
   }
 
-  // Check paymaster's deposit in EntryPoint
-  const entryPointDepositABI = [
-    "function balanceOf(address account) view returns (uint256)"
-  ];
   const paymasterDepositBalance = await entryPoint.balanceOf(contracts.paymaster);
   console.log("Paymaster deposit in EntryPoint:", ethers.utils.formatEther(paymasterDepositBalance), "ETH");
 
