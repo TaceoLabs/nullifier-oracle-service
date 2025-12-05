@@ -16,7 +16,7 @@ pub async fn start(
 ) -> eyre::Result<()> {
     tracing::info!("starting oprf-service with config: {config:#?}");
     let service_config = config.service_config;
-    let cancellation_token = oprf_service::spawn_shutdown_task(shutdown_signal);
+    let cancellation_token = nodes_common::spawn_shutdown_task(shutdown_signal);
 
     tracing::info!("init oprf request auth service..");
     let oprf_req_auth_service = Arc::new(ExampleOprfRequestAuthenticator);

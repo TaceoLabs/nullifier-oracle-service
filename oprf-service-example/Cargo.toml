@@ -16,7 +16,8 @@ axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 humantime = { workspace = true }
-nodes-telemetry = { workspace = true }
+nodes-common = { workspace = true }
+nodes-observability = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 rustls = { workspace = true }

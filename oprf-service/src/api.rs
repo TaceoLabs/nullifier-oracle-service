@@ -4,12 +4,12 @@
 //!
 //! - [`errors`] – Defines API error types and conversions from internal service errors.
 //! - [`health`] – Provides health endpoints (`/health`).
-//! - [`info`] – Info about the service (`/version` and `/wallet`).
-//! - [`v1`] – Version 1 of the main OPRF endpoints, including `/init` and `/finish`.
+//! - [`info`] – Info about the service (`/version`, `/wallet` and `/oprf_pub/{id}`).
+//! - [`v1`] – Version 1 of the OPRF WebSocket endpoint `/oprf`.
 
 use crate::{
-    OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore,
-    services::open_sessions::OpenSessions,
+    OprfRequestAuthService,
+    services::{open_sessions::OpenSessions, oprf_key_material_store::OprfKeyMaterialStore},
 };
 use alloy::primitives::Address;
 use axum::Router;

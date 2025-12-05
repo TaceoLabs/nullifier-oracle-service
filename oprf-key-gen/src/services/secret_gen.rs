@@ -31,17 +31,13 @@ use oprf_types::{
         SecretGenRound1Contribution, SecretGenRound2Contribution, SecretGenRound3Contribution,
     },
     crypto::{
-        EphemeralEncryptionPublicKey, OprfPublicKey, SecretGenCiphertext, SecretGenCiphertexts,
+        EphemeralEncryptionPublicKey, SecretGenCiphertext, SecretGenCiphertexts,
         SecretGenCommitment,
     },
 };
 use rand::{CryptoRng, Rng};
 use tracing::instrument;
 use zeroize::ZeroizeOnDrop;
-
-use crate::services::{
-    oprf_key_material_store::OprfKeyMaterialStore, secret_manager::StoreDLogShare,
-};
 
 #[cfg(test)]
 mod tests;
@@ -57,7 +53,6 @@ pub(crate) struct DLogSecretGenService {
     toxic_waste_round2: HashMap<OprfKeyId, ToxicWasteRound2>,
     finished_shares: HashMap<OprfKeyId, DLogShareShamir>,
     key_gen_material: CircomGroth16Material,
-    oprf_key_material_store: OprfKeyMaterialStore,
 }
 
 /// The ephemeral private key of an OPRF node.
@@ -142,16 +137,12 @@ impl ToxicWasteRound1 {
 
 impl DLogSecretGenService {
     /// Initializes a new DLog secret generation service.
-    pub(crate) fn init(
-        oprf_key_material_store: OprfKeyMaterialStore,
-        key_gen_material: CircomGroth16Material,
-    ) -> Self {
+    pub(crate) fn init(key_gen_material: CircomGroth16Material) -> Self {
         Self {
             toxic_waste_round1: HashMap::new(),
             toxic_waste_round2: HashMap::new(),
             finished_shares: HashMap::new(),
             key_gen_material,
-            oprf_key_material_store,
         }
     }
 
@@ -160,7 +151,6 @@ impl DLogSecretGenService {
     /// * [`ToxicWasteRound1`]
     /// * [`ToxicWasteRound2`]
     /// * Any finished shares that wait for finalize from all nodes
-    /// * The [`crate::services::oprf_key_material_store::OprfKeyMaterial`] in the [`OprfKeyMaterialStore`].
     pub(crate) fn delete_oprf_key_material(&mut self, oprf_key_id: OprfKeyId) {
         if self.toxic_waste_round1.remove(&oprf_key_id).is_some() {
             tracing::debug!("removed {oprf_key_id:?} toxic waste round 1 from secret-gen");
@@ -171,7 +161,6 @@ impl DLogSecretGenService {
         if self.finished_shares.remove(&oprf_key_id).is_some() {
             tracing::debug!("removed {oprf_key_id:?} finished share from secret-gen");
         };
-        self.oprf_key_material_store.remove(oprf_key_id);
     }
 
     /// Executes round 1 of the secret generation protocol.
@@ -266,29 +255,18 @@ impl DLogSecretGenService {
         Ok(SecretGenRound3Contribution { oprf_key_id })
     }
 
-    /// Marks the generated secret as finished and stores it to the [`OprfKeyMaterialStore`] along with its public key.
+    /// Marks the generated secret as finished.
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the RP for which the secret is being finalized.
-    /// * `oprf_public_key` - The public point P of the created secret x, where P=xG and G is the generator of BabyJubJub.
-    #[instrument(level = "info", skip(self, oprf_public_key))]
-    pub(crate) fn finalize(
-        &mut self,
-        oprf_key_id: OprfKeyId,
-        oprf_public_key: OprfPublicKey,
-    ) -> eyre::Result<StoreDLogShare> {
+    #[instrument(level = "info", skip(self))]
+    pub(crate) fn finalize(&mut self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
         tracing::info!("calling finalize");
         let dlog_share = self
             .finished_shares
             .remove(&oprf_key_id)
             .context("cannot find computed DLogShare")?;
-        self.oprf_key_material_store
-            .add(oprf_key_id, oprf_public_key, dlog_share.clone());
-        Ok(StoreDLogShare {
-            oprf_key_id,
-            oprf_public_key,
-            share: dlog_share,
-        })
+        Ok(dlog_share)
     }
 }
 

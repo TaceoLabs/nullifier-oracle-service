@@ -18,29 +18,22 @@
 //! Clients will connect via web-sockets to the OPRF node. Axum supports both HTTP/1.1 and HTTP/2.0 web-socket connections, therefore we accept connections with `any`.
 ///
 /// If you want to enable HTTP/2.0, you either have to do it by hand or by calling `axum::serve`, which enabled HTTP/2.0 by default. Have a look at [Axum's HTTP2.0 example](https://github.com/tokio-rs/axum/blob/aeff16e91af6fa76efffdee8f3e5f464b458785b/examples/websockets-http2/src/main.rs#L57).
-use crate::{
-    config::OprfNodeConfig,
-    services::{secret_gen::DLogSecretGenService, secret_manager::SecretManagerService},
-};
-use alloy::{
-    network::EthereumWallet,
-    providers::{Provider as _, ProviderBuilder, WsConnect},
-};
+use crate::{config::OprfNodeConfig, services::secret_manager::SecretManagerService};
+use alloy::providers::{Provider as _, ProviderBuilder, WsConnect};
 use async_trait::async_trait;
 use core::fmt;
 use eyre::Context as _;
-use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::api::v1::OprfRequest;
+use oprf_types::chain::OprfKeyRegistry;
+use oprf_types::crypto::PartyId;
 use secrecy::ExposeSecret as _;
 use serde::Deserialize;
 use std::sync::Arc;
-use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) mod api;
 pub mod config;
 pub mod metrics;
-pub mod oprf_key_registry;
 pub(crate) mod services;
 
 pub use services::oprf_key_material_store;
@@ -131,30 +124,24 @@ pub async fn init<
     oprf_req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<(axum::Router, tokio::task::JoinHandle<eyre::Result<()>>)> {
-    tracing::info!("loading private from secret manager..");
-    let private_key = secret_manager
-        .load_or_insert_wallet_private_key()
-        .await
-        .context("while loading ETH private key from secret-manager")?;
-    let address = private_key.address();
-    tracing::info!("my wallet address: {address}");
-    let wallet_address = private_key.address();
-    let wallet = EthereumWallet::from(private_key);
-
     tracing::info!("init rpc provider..");
     let ws = WsConnect::new(config.chain_ws_rpc_url.expose_secret());
     let provider = ProviderBuilder::new()
-        .wallet(wallet)
         .connect_ws(ws)
         .await
         .context("while connecting to RPC")?
         .erased();
 
     tracing::info!("loading party id..");
-    let party_id =
-        oprf_key_registry::load_party_id(config.oprf_key_registry_contract, provider.clone())
+    let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider.clone());
+    let party_id = PartyId(
+        contract
+            .getPartyIdForParticipant(config.wallet_address)
+            .call()
             .await
-            .context("while loading partyId")?;
+            .context("while loading party id")?
+            .try_into()?,
+    );
     tracing::info!("we are party id: {party_id}");
 
     tracing::info!("init OPRF material-store..");
@@ -162,14 +149,6 @@ pub async fn init<
         .load_secrets()
         .await
         .context("while loading secrets from secret-manager")?;
-
-    tracing::info!("init dlog secret gen service..");
-    let key_gen_material = CircomGroth16MaterialBuilder::new()
-        .bbf_inv()
-        .bbf_num_2_bits_helper()
-        .build_from_paths(config.key_gen_zkey_path, config.key_gen_witness_graph_path)?;
-    let dlog_secret_gen_service =
-        DLogSecretGenService::init(oprf_key_material_store.clone(), key_gen_material);
 
     tracing::info!("spawning key event watcher..");
     let key_event_watcher = tokio::spawn({
@@ -180,7 +159,8 @@ pub async fn init<
             provider,
             contract_address,
             secret_manager,
-            dlog_secret_gen_service,
+            oprf_key_material_store.clone(),
+            config.get_oprf_key_material_timeout,
             cancellation_token,
         )
     });
@@ -190,67 +170,10 @@ pub async fn init<
         party_id,
         oprf_key_material_store,
         oprf_req_auth_service,
-        wallet_address,
+        config.wallet_address,
         config.ws_max_message_size,
         config.session_lifetime,
     );
 
     Ok((axum_rest_api, key_event_watcher))
-}
-
-/// Returns cargo package name, cargo package version, and the git hash of the repository that was used to build the binary.
-pub fn version_info() -> String {
-    format!(
-        "{} {} ({})",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        option_env!("GIT_HASH").unwrap_or(git_version::git_version!(fallback = "UNKNOWN"))
-    )
-}
-
-/// Spawns a shutdown task and creates an associated [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html). This task will complete when either the provided `shutdown_signal` futures completes or if some other tasks cancels the shutdown token. The associated shutdown token will be cancelled either way.
-///
-/// Waiting for the shutdown token is the preferred way to wait for termination.
-pub fn spawn_shutdown_task(
-    shutdown_signal: impl Future<Output = ()> + Send + 'static,
-) -> CancellationToken {
-    let cancellation_token = CancellationToken::new();
-    let task_token = cancellation_token.clone();
-    tokio::spawn(async move {
-        tokio::select! {
-            _ = shutdown_signal => {
-                tracing::info!("Received EXTERNAL shutdown");
-                task_token.cancel();
-            }
-            _ = task_token.cancelled() => {
-                tracing::info!("Received INTERNAL shutdown");
-            }
-        }
-    });
-    cancellation_token
-}
-
-/// The default shutdown signal for the oprf-service. Triggered when pressing CTRL+C on most systems.
-pub async fn default_shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
 }

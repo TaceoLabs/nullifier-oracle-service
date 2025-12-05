@@ -367,6 +367,14 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return _internParticipantCheck();
     }
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns their party ID.
+    /// @return The party ID of the caller if they are a registered participant.
+    function getPartyIdForParticipant(address participant) external view virtual isReady onlyProxy returns (uint256) {
+        Types.OprfPeer memory peer = addressToPeer[participant];
+        if (!peer.isParticipant) revert NotAParticipant();
+        return peer.partyId;
+    }
+
     function _internParticipantCheck() internal view virtual returns (uint256) {
         Types.OprfPeer memory peer = addressToPeer[msg.sender];
         if (!peer.isParticipant) revert NotAParticipant();

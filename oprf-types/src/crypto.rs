@@ -11,11 +11,14 @@
 //! * [`SecretGenCommitment`]
 //! * [`SecretGenCiphertexts`] / [`SecretGenCiphertext`]
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use ark_serde_compat::babyjubjub;
 use circom_types::{ark_bn254::Bn254, groth16::Proof};
+use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use serde::{Deserialize, Serialize};
+
+use crate::ShareEpoch;
 
 /// The party id of the OPRF node.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -211,5 +214,48 @@ impl From<u16> for PartyId {
 impl From<PartyId> for u16 {
     fn from(value: PartyId) -> Self {
         value.0
+    }
+}
+
+/// The cryptographic material for one OPRF key.
+///
+/// Stores:
+/// * A mapping of [`ShareEpoch`] → [`DLogShareShamir`]
+/// * The [`OprfPublicKey`] associated with the share.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OprfKeyMaterial {
+    shares: HashMap<ShareEpoch, DLogShareShamir>,
+    oprf_public_key: OprfPublicKey,
+}
+
+impl OprfKeyMaterial {
+    /// Creates a new [`OprfKeyMaterial`] from the provided shares and ECDSA public key.
+    pub fn new(
+        shares: HashMap<ShareEpoch, DLogShareShamir>,
+        oprf_public_key: OprfPublicKey,
+    ) -> Self {
+        Self {
+            shares,
+            oprf_public_key,
+        }
+    }
+
+    /// Returns the [`DLogShareShamir`] for the given epoch, or `None` if not found.
+    pub fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShareShamir> {
+        self.shares.get(&epoch).cloned()
+    }
+
+    /// Inserts a new [`DLogShareShamir`] for the given epoch.
+    pub fn insert_share(
+        &mut self,
+        epoch: ShareEpoch,
+        share: DLogShareShamir,
+    ) -> Option<DLogShareShamir> {
+        self.shares.insert(epoch, share)
+    }
+
+    /// Returns the [`OprfPublicKey`].
+    pub fn get_oprf_public_key(&self) -> OprfPublicKey {
+        self.oprf_public_key
     }
 }
