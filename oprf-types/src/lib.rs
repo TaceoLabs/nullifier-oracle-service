@@ -53,6 +53,15 @@ impl ShareEpoch {
         self.0 == 0
     }
 
+    /// Returns the previous epoch. If already initial epoch, returns `self`.
+    pub fn prev(self) -> ShareEpoch {
+        if self.is_initial_epoch() {
+            self
+        } else {
+            Self(self.0 - 1)
+        }
+    }
+
     /// Returns the next epoch.
     pub fn next(self) -> ShareEpoch {
         Self(self.0 + 1)

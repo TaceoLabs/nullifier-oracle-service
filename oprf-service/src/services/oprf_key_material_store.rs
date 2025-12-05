@@ -209,14 +209,18 @@ impl OprfKeyMaterialStore {
             if key_material.shares.insert(epoch, dlog_share).is_some() {
                 tracing::warn!("overwriting share for {oprf_key_id} and epoch {epoch}");
             }
-            tracing::debug!(
+            tracing::info!(
                 "stored share with epoch {epoch} - now have {} epochs stored",
                 key_material.shares.len()
             );
             if key_material.shares.len() > 3 {
                 // epochs are strictly increasing
-                tracing::debug!("removing oldest share epoch");
-                key_material.shares.pop_first();
+                let dropped_epoch = key_material
+                    .shares
+                    .pop_first()
+                    .expect("Is there we just checked")
+                    .0;
+                tracing::info!("removing share epoch {dropped_epoch}");
             }
         }
     }
