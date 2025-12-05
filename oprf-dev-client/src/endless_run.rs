@@ -1,12 +1,11 @@
-use std::time::Instant;
-
-use alloy::{network::EthereumWallet, primitives::Address};
+use alloy::network::EthereumWallet;
 use clap::Parser;
 use eyre::Context;
 use oprf_client::Connector;
 use oprf_test::oprf_key_registry_scripts;
 use oprf_types::{OprfKeyId, ShareEpoch, crypto::OprfPublicKey};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
+use std::time::Instant;
 use tokio::task::JoinSet;
 
 use crate::{OprfDevClientConfig, run_nullifier};

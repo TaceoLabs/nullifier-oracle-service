@@ -620,8 +620,7 @@ contract OprfKeyRegistryTest is Test {
         // do round 2 contributions
         // check that carol is not a producer
         vm.prank(carol);
-        Types.BabyJubJubElement[] memory ephKeys =
-            oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
+        Types.BabyJubJubElement[] memory ephKeys = oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
         assert(ephKeys.length == 0);
         vm.stopPrank();
 

@@ -401,7 +401,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             // for the reshare we need to use the lagrange coefficients as here the resulting shamir-share is shared with shamir sharing
             // TODO implement scalar-mul for babyjubjub
             // we don't allow this for now
-             
+
             // uint256 lagrange = st.lagrangeCoeffs[partyId];
             revert NotAProducer();
         }
@@ -554,7 +554,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return _loadProducerPeerPublicKeys(st);
     }
 
-    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen. 
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint160 oprfKeyId)
