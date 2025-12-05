@@ -94,6 +94,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     error ImplementationNotInitialized();
     error LastAdmin();
     error NotAParticipant();
+    error NotAProducer();
     error NotReady();
     error OnlyAdmin();
     error OutdatedNullifier();
@@ -196,7 +197,8 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         emit Types.SecretGenRound1(oprfKeyId, threshold);
     }
 
-    /// @notice Initializes the reshare process for a given oprfKeyId. This method might either be used to re-randomize the shares of the MPC-nodes, switch out parties or switch from a n-out-t sharing to some n'-out-t' sharing.
+    /// @notice Initializes the reshare process for a given oprfKeyId. This method might either be used to re-randomize the shares of the MPC-nodes, switch out parties or regenerate the shares if one loses access to their shares.
+    /// This method clears reuses the state from the last key-gen/re-share and deletes all old information.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     function initReshare(uint160 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
         // Check that this oprfKeyId already exists
@@ -204,13 +206,14 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         if (_isEmpty(oprfPublicKey.key)) revert UnknownId(oprfKeyId);
         // Get the key-gen state for this key and reset everything
         Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
+        // we need to leave the share commitments to check the peers are using the correct input
+        delete st.lagrangeCoeffs;
         delete st.numProducers;
         delete st.round2Done;
         delete st.round3Done;
         delete st.round2EventEmitted;
         delete st.round3EventEmitted;
         delete st.finalizeEventEmitted;
-        delete st.lagrangeCoeffs;
         st.lagrangeCoeffs = new uint256[](threshold);
         st.round1 = new Types.Round1Contribution[](numPeers);
         st.round2 = new Types.SecretGenCiphertext[][](numPeers);
@@ -238,11 +241,11 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
                 delete st.nodeRoles[peerAddresses[i]];
             }
             delete st.lagrangeCoeffs;
-            delete st.numProducers;
             delete st.round1;
             delete st.round2;
             delete st.shareCommitments;
             delete st.keyAggregate;
+            delete st.numProducers;
             delete st.round2Done;
             delete st.round3Done;
             delete st.round2EventEmitted;
@@ -293,10 +296,13 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         st.numProducers += 1;
         // Add BabyJubJub Elements together and keep running total
         _addToAggregate(st.keyAggregate, data.commShare.x, data.commShare.y);
+        // everyone is a producer therefore we wait for numPeers amount producers
         _tryEmitRound2Event(oprfKeyId, numPeers, st);
     }
 
-    /// @notice Adds a Round 1 contribution to the key generation process. Only callable by registered OPRF peers.
+    /// @notice Adds a Round 1 contribution to the re-sharing process. Only callable by registered OPRF peers. This method does some more work than the basic key-gen.
+    /// We need threshold many PRODUCERS, meaning those will do the re-sharing. Nevertheless, all other parties need to participate as CONSUMERS and provide an ephemeral public-key so that the producers can create the new shares for them, so at least round 1 needs contributions by all nodes.
+    ///
     /// @param oprfKeyId The unique identifier for the key-gen.
     /// @param data The Round 1 contribution data. See `Types.Round1Contribution` for details.
     function addRound1ReshareContribution(uint160 oprfKeyId, Types.Round1Contribution calldata data)
@@ -309,18 +315,16 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         uint256 partyId = _internParticipantCheck();
         // in reshare we can have producers and consumers, therefore we don't need to enforce that commitments are non-zero
         Types.OprfKeyGenState storage st = _addRound1Contribution(oprfKeyId, partyId, data);
-        // in contrast to key-gen we don't compute the running total, but we can check whether the commitments are correct from the previous reshare/key-gen.
-        // Types.BabyJubJubElement memory shouldCommitment = st.shareCommitments[partyId];
-        // if (!_isEqual(shouldCommitment, data.commShare)) {
-        //     revert BadContribution();
-        // }
-        // check if the peer wants to be a producer or is a consumer
-        // we check
-
-        // check that this is a reshare
+        // check that this is in fact a reshare
         if (st.generatedEpoch == 0) {
             revert BadContribution();
         }
+        // in contrast to key-gen we don't compute the running total, but we can check whether the commitments are correct from the previous reshare/key-gen.
+        Types.BabyJubJubElement memory shouldCommitment = st.shareCommitments[partyId];
+        if (!_isEqual(shouldCommitment, data.commShare)) {
+            revert BadContribution();
+        }
+        // check if someone wants to be a consumer
         bool isEmptyCommShare = _isEmpty(data.commShare);
         bool isEmptyCommCoeffs = data.commCoeffs == 0;
         if ((isEmptyCommShare && isEmptyCommCoeffs) || st.numProducers >= threshold) {
@@ -333,12 +337,11 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             // sanity check that someone doesn't try to only commit to one value
             revert BadContribution();
         } else {
-            // both are set and we still need more producers -> produces
+            // both commitments are set and we still need more producers
             st.nodeRoles[msg.sender] = Types.KeyGenRole.PRODUCER;
             st.numProducers += 1;
             // check if we are the last producer, then we can compute the lagrange coefficients
             if (st.numProducers == threshold) {
-                // lets do it!
                 // first get all producer ids
                 // iterating over the peers in that order always returns the ids in ascending order. This is important because the contributions in round 2 will also be in this order.
                 uint256[] memory ids = new uint256[](threshold);
@@ -353,10 +356,12 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
                 st.lagrangeCoeffs = accumulator.computeLagrangeCoefficiants(ids, threshold);
             }
         }
+        // we need a contribution from everyone but only threshold many producers. If we don't manage to find enough producers, this will hang forever.
+        // TODO emit an event that we don't have enough producers
         _tryEmitRound2Event(oprfKeyId, threshold, st);
     }
 
-    /// @notice Adds a Round 2 contribution to the key generation process. Only callable by registered OPRF peers.
+    /// @notice Adds a Round 2 contribution to the key generation process. Only callable by registered OPRF peers. Is the same for key-gen and reshare, with the small difference with how the commitments for next reshare are computed and that we need less producers for reshare.
     /// @param oprfKeyId The unique identifier for the key-gen.
     /// @param data The Round 2 contribution data. See `Types.Round2Contribution` for details.
     /// @dev This internally verifies the Groth16 proof provided in the contribution data to ensure it is constructed correctly.
@@ -384,9 +389,21 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
         // everything looks good - push the ciphertexts
         // additionally accumulate all commitments for the parties to have the correct commitment during the reshare process.
-        for (uint256 i = 0; i < numPeers; ++i) {
-            _addToAggregate(st.shareCommitments[i], data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
-            st.round2[i][partyId] = data.ciphers[i];
+        //
+        // this differs if this is the initial key-gen or one of the reshares
+        if (st.generatedEpoch == 0) {
+            // for the key-gen we simply accumulate all commitments as the resulting shamir-share is linearly shared -> just add all together
+            for (uint256 i = 0; i < numPeers; ++i) {
+                _addToAggregate(st.shareCommitments[i], data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
+                st.round2[i][partyId] = data.ciphers[i];
+            }
+        } else {
+            // for the reshare we need to use the lagrange coefficients as here the resulting shamir-share is shared with shamir sharing
+            // TODO implement scalar-mul for babyjubjub
+            // we don't allow this for now
+             
+            // uint256 lagrange = st.lagrangeCoeffs[partyId];
+            revert NotAProducer();
         }
         // set the contribution to done
         st.round2Done[partyId] = true;
@@ -421,13 +438,14 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             publicInputs[15 + (i * 2) + 1] = pubKeyList[i].y;
             publicInputs[21 + i] = data.ciphers[i].nonce;
         }
+        // depending on key-gen or reshare a different amount of producers
         uint256 necessaryContributions = st.generatedEpoch == 0 ? numPeers : threshold;
         _tryEmitRound3Event(oprfKeyId, necessaryContributions, st);
         // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
         keyGenVerifier.verifyCompressedProof(data.compressedProof, publicInputs);
     }
 
-    /// @notice Adds a Round 3 contribution to the key generation process. Only callable by registered OPRF peers.
+    /// @notice Adds a Round 3 contribution to the key generation process. Only callable by registered OPRF peers. This is exactly the same process for key-gen and reshare because nodes just acknowledge that they received their ciphertexts.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @dev This does not require any calldata, as it is simply an acknowledgment from the peer that is is done.
     function addRound3Contribution(uint160 oprfKeyId) external virtual onlyProxy isReady {
@@ -449,19 +467,16 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             if (st.generatedEpoch == 0) {
                 oprfKeyRegistry[oprfKeyId] = Types.RegisteredOprfPublicKey({key: st.keyAggregate, epoch: 0});
             } else {
-                if (
-                    oprfKeyRegistry[oprfKeyId].key.x != st.keyAggregate.x
-                        || oprfKeyRegistry[oprfKeyId].key.y != st.keyAggregate.y
-                ) {
-                    // TODO
-                    // revert AlreadySubmitted();
-                }
+                // we simply increase the current epoch
                 oprfKeyRegistry[oprfKeyId].epoch = st.generatedEpoch;
             }
-            // cleanup all old data
+            // cleanup all old data - we need to keep shareCommitments though otherwise we can't do reshares
+            delete st.lagrangeCoeffs;
             delete st.round1;
             delete st.round2;
             delete st.keyAggregate;
+            delete st.numProducers;
+            delete st.generatedEpoch;
             delete st.round2Done;
             delete st.round3Done;
             // we keep the eventsEmitted and exists to prevent participants to double submit
@@ -486,9 +501,9 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return peer.partyId;
     }
 
-    /// @notice Checks if the caller is a registered OPRF participant and returns the ephemeral public keys created in round 1 of the key gen identified by the provided oprfKeyId.
+    /// @notice Checks if the caller is a registered OPRF participant and returns ALL the ephemeral public keys created in round 1 of the key gen identified by the provided oprfKeyId. This method will be called by the nodes during round 2. The producers will receive all ephemeral public keys in order to encrypt the recreated shares (of the shares). The consumers will receive an empty array - this signals them that they don't need to participate in this round and just wait until the producers are done with this round.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
-    /// @return The ephemeral public keys generated in round 1
+    /// @return The ephemeral public keys generated in round 1 iff a producer. An empty array iff a consumer.
     function loadPeerPublicKeysForProducers(uint160 oprfKeyId)
         external
         view
@@ -508,12 +523,16 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         if (st.deleted) revert DeletedId(oprfKeyId);
         // check if we are a producer
         if (Types.KeyGenRole.PRODUCER != st.nodeRoles[msg.sender]) {
-            // we are not -> return empty array
+            // we are not a producer -> return empty array
+            // we don't revert because the peers call this method in round2 of the protocol. This will let them know that they are consumers.
             return new Types.BabyJubJubElement[](0);
         }
         return _loadPeerPublicKeys(st);
     }
 
+    /// @notice Checks if the caller is a registered OPRF participant and returns only the ephemeral public OF THE PRODUCERS. The producers encrypted all shares in the previous round with DHE, therefore the recipients need the producer's public-key. For simplicity, the producers also call this method to receive the public-keys (including their own).
+    /// @param oprfKeyId The unique identifier for the OPRF public-key.
+    /// @return The ephemeral public keys OF THE PRODUCERS generated in round 1
     function loadPeerPublicKeysForConsumers(uint160 oprfKeyId)
         external
         view
@@ -535,7 +554,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return _loadProducerPeerPublicKeys(st);
     }
 
-    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen.
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen. 
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint160 oprfKeyId)
@@ -570,11 +589,6 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             }
             return ciphers;
         }
-    }
-
-    function isProducerForKeyGen(uint160 oprfKeyId) public view virtual onlyProxy isReady returns (bool) {
-        Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
-        return st.nodeRoles[msg.sender] == Types.KeyGenRole.PRODUCER;
     }
 
     /// @notice Retrieves the specified OPRF public-key.
