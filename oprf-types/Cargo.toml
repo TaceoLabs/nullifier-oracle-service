@@ -24,6 +24,7 @@ circom-types = { workspace = true, features = [
   "zkey"
 ] }
 eyre = { workspace = true }
+groth16-sol = { workspace = true }
 oprf-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

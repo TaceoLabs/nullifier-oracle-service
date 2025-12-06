@@ -16,11 +16,11 @@ use clap::{Parser, Subcommand};
 use eyre::Context as _;
 use oprf_client::{BlindingFactor, Connector};
 use oprf_core::oprf::BlindedOprfRequest;
-use oprf_service::oprf_key_registry::OprfKeyRegistry;
 use oprf_test::{health_checks, oprf_key_registry_scripts};
 use oprf_types::{
     OprfKeyId, ShareEpoch,
     api::v1::{OprfRequest, ShareIdentifier},
+    chain::OprfKeyRegistry,
     crypto::OprfPublicKey,
 };
 use rand::SeedableRng;
@@ -323,7 +323,7 @@ async fn stress_test(
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    nodes_telemetry::install_tracing("oprf_dev_client=trace,warn");
+    nodes_observability::install_tracing("oprf_dev_client=trace,warn");
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .expect("can install");

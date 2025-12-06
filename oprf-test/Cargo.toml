@@ -25,6 +25,7 @@ futures.workspace = true
 itertools.workspace = true
 oprf-client-example = { workspace = true }
 oprf-core = { workspace = true }
+oprf-key-gen = { workspace = true }
 oprf-service = { workspace = true }
 oprf-service-example = { workspace = true }
 oprf-types = { workspace = true }
@@ -45,6 +46,5 @@ tokio = { workspace = true, features = [
 tracing.workspace = true
 
 [dev-dependencies]
-nodes-telemetry = { workspace = true }
 serial_test = { version = "3.2", features = ["file_locks"] }
 tokio-tungstenite = { workspace = true }

@@ -74,20 +74,40 @@ lint:
     cd contracts && forge fmt
 
 [group('local-setup')]
+run-key-gen-instances:
+    #!/usr/bin/env bash
+    mkdir -p logs
+    cargo build --workspace --release
+    # anvil wallet 7
+    RUST_LOG="oprf_key_gen=trace,warn" ./target/release/oprf-key-gen --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin  > logs/key-gen0.log 2>&1 &
+    pid0=$!
+    echo "started key-gen0 with PID $pid0"
+    # anvil wallet 8
+    RUST_LOG="oprf_key_gen=trace,warn" ./target/release/oprf-key-gen --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin  > logs/key-gen1.log 2>&1 &
+    pid1=$!
+    echo "started key-gen1 with PID $pid1"
+    # anvil wallet 9
+    RUST_LOG="oprf_key_gen=trace,warn" ./target/release/oprf-key-gen --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin  > logs/key-gen2.log 2>&1  &
+    pid2=$!
+    echo "started key-gen2 with PID $pid2"
+    trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
+    wait $pid0 $pid1 $pid2
+
+[group('local-setup')]
 run-nodes:
     #!/usr/bin/env bash
     mkdir -p logs
     cargo build --workspace --release
     # anvil wallet 7
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-private-key-secret-id oprf/eth/n0 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service0.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10000 --rp-secret-id-prefix oprf/rp/n0 --environment dev --wallet-address 0x14dC79964da2C08b23698B3D3cc7Ca32193d9955 > logs/service0.log 2>&1 &
     pid0=$!
     echo "started service0 with PID $pid0"
     # anvil wallet 8
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-private-key-secret-id oprf/eth/n1 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service1.log 2>&1 &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10001 --rp-secret-id-prefix oprf/rp/n1 --environment dev --wallet-address 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f > logs/service1.log 2>&1 &
     pid1=$!
     echo "started service1 with PID $pid1"
     # anvil wallet 9
-    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-private-key-secret-id oprf/eth/n2 --key-gen-zkey-path ./circom/main/key-gen/OPRFKeyGen.13.arks.zkey --key-gen-witness-graph-path ./circom/main/key-gen/OPRFKeyGenGraph.13.bin > logs/service2.log 2>&1  &
+    RUST_LOG="oprf_service=trace,warn" ./target/release/oprf-service-example --bind-addr 127.0.0.1:10002 --rp-secret-id-prefix oprf/rp/n2 --environment dev --wallet-address 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 > logs/service2.log 2>&1  &
     pid2=$!
     echo "started service2 with PID $pid2"
     trap "kill $pid0 $pid1 $pid2" SIGINT SIGTERM
@@ -107,8 +127,10 @@ run-setup:
     oprf_key_registry=$(grep -oP 'OprfKeyRegistry deployed to: \K0x[a-fA-F0-9]+' logs/deploy_oprf_key_registry.log)
     echo "register oprf-nodes..."
     OPRF_KEY_REGISTRY_PROXY=$oprf_key_registry just register-participants-anvil
-    echo "starting OPRF services..."
-    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-nodes
+    echo "starting OPRF nodes..."
+    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-nodes &
+    echo "starting OPRF key-gen instances..."
+    OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT=$oprf_key_registry just run-key-gen-instances
     echo "stopping containers..."
     docker compose -f ./oprf-service-example/deploy/docker-compose.yml down 
 

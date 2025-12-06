@@ -9,10 +9,13 @@ This is a monorepo containing:
 * `contracts`: An implementation of the required smart contracts.
 * `docs`: A typst document serving as a writeup of the overall scheme.
 * `noir`: A collection of Noir circuits.
-* `oprf-client`: A crate implementing a client for the REST API service.
+* `oprf-client`: A crate implementing a client lib for the OPRF service.
+* `oprf-client-example`: A crate implementing example a client.
 * `oprf-core`: A crate implementing a verifiable OPRF based on the TwoHashDH OPRF construction + a threshold variant of it.
 * `oprf-dev-client`: A crate implementing a dev client binary.
-* `oprf-service`: A crate implementing a REST API service that answers OPRF requests.
+* `oprf-key-gen`: A crate implementing a OPRF key generation instance.
+* `oprf-service`: A crate implementing a service lib for the OPRF service.
+* `oprf-service-example`: A crate implementing a example OPRF node.
 * `oprf-test`: A crate implementing integration tests and required mocks.
 * `oprf-types`: A crate implementing types that are shared between client, service, and the blockchain.
 
@@ -53,6 +56,7 @@ This command does multiple things in order:
 3. deploy the `OprfKeyRegistry` smart contract
 4. register the OPRF nodes at the `OprfKeyRegistry` contract
 5. start 3 OPRF nodes
+6. start 3 OPRF key-gen instances
 
 Log files for all processes can be found in the created `logs` directory.
 You can kill the setup with `Ctrl+C`, which kills all processes and stops all docker containers.

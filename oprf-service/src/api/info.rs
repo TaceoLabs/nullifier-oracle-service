@@ -18,7 +18,7 @@ use axum::{
 use oprf_types::OprfKeyId;
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::oprf_key_material_store::OprfKeyMaterialStore;
+use crate::services::oprf_key_material_store::OprfKeyMaterialStore;
 
 /// Create a router containing the info endpoints.
 ///
@@ -41,7 +41,7 @@ pub(crate) fn routes(oprf_material_store: OprfKeyMaterialStore, wallet_address: 
 ///
 /// Returns `200 OK` with a string response.
 async fn version() -> impl IntoResponse {
-    (StatusCode::OK, crate::version_info())
+    (StatusCode::OK, nodes_common::version_info())
 }
 
 /// Responds with the wallet address of the oprf node

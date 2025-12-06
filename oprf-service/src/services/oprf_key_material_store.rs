@@ -6,7 +6,7 @@
 
 use oprf_core::{
     ddlog_equality::shamir::{
-        DLogCommitmentsShamir, DLogProofShareShamir, DLogSessionShamir, DLogShareShamir,
+        DLogCommitmentsShamir, DLogProofShareShamir, DLogSessionShamir,
         PartialDLogCommitmentsShamir,
     },
     shamir,
@@ -14,7 +14,7 @@ use oprf_core::{
 use oprf_types::{
     OprfKeyId, ShareEpoch,
     api::v1::ShareIdentifier,
-    crypto::{OprfPublicKey, PartyId},
+    crypto::{OprfKeyMaterial, OprfPublicKey, PartyId},
 };
 use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc};
@@ -39,46 +39,9 @@ pub enum OprfKeyMaterialStoreError {
     UnknownShareEpoch(ShareEpoch),
 }
 
-/// Storage of the OPRF cryptographic material.
-///
-/// Includes the [`DLogShareShamir`] secret-share and the [`OprfPublicKey`].
+/// Storage for [`OprfKeyMaterial`]s.
 #[derive(Default, Clone)]
 pub struct OprfKeyMaterialStore(Arc<RwLock<HashMap<OprfKeyId, OprfKeyMaterial>>>);
-
-/// The cryptographic material for one OPRF key.
-///
-/// Stores:
-/// * A mapping of [`ShareEpoch`] → [`DLogShareShamir`]
-/// * The [`OprfPublicKey`] associated with the share.
-#[derive(Clone)]
-pub struct OprfKeyMaterial {
-    pub(crate) shares: HashMap<ShareEpoch, DLogShareShamir>,
-    nullifier_key: OprfPublicKey,
-}
-
-impl OprfKeyMaterial {
-    /// Creates a new [`OprfKeyMaterial`] from the provided shares and ECDSA public key.
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        shares: HashMap<ShareEpoch, DLogShareShamir>,
-        nullifier_key: OprfPublicKey,
-    ) -> Self {
-        Self {
-            shares,
-            nullifier_key,
-        }
-    }
-
-    /// Returns the [`DLogShareShamir`] for the given epoch, or `None` if not found.
-    fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShareShamir> {
-        self.shares.get(&epoch).cloned()
-    }
-
-    /// Returns the [`OprfPublicKey`].
-    fn get_oprf_public_key(&self) -> OprfPublicKey {
-        self.nullifier_key
-    }
-}
 
 impl OprfKeyMaterialStore {
     /// Creates a new storage instance with the provided initial shares.
@@ -173,26 +136,8 @@ impl OprfKeyMaterialStore {
     ///
     /// Overwrites any existing entry.  
     /// Intended for creating new shares, not rotation.
-    pub(super) fn add(
-        &self,
-        oprf_key_id: OprfKeyId,
-        oprf_public_key: OprfPublicKey,
-        dlog_share: DLogShareShamir,
-    ) {
-        let mut shares = HashMap::new();
-        shares.insert(ShareEpoch::default(), dlog_share);
-        if self
-            .0
-            .write()
-            .insert(
-                oprf_key_id,
-                OprfKeyMaterial {
-                    shares,
-                    nullifier_key: oprf_public_key,
-                },
-            )
-            .is_some()
-        {
+    pub(super) fn add(&self, oprf_key_id: OprfKeyId, key_material: OprfKeyMaterial) {
+        if self.0.write().insert(oprf_key_id, key_material).is_some() {
             tracing::warn!("overwriting share for {oprf_key_id}");
         }
     }
