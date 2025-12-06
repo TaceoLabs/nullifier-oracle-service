@@ -79,7 +79,6 @@ library Types {
     // events for reshare
     event ReshareRound1(uint160 indexed oprfKeyId, uint256 threshold);
     event ReshareRound3(uint160 indexed oprfKeyId, uint256[] lagrange);
-    event ReshareFinalize(uint160 indexed oprfKeyId);
     // event to delete created key
     event KeyDeletion(uint160 indexed oprfKeyId);
     // admin events

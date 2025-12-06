@@ -4,6 +4,16 @@
 //!
 //! The watcher subscribes to various events and reports contributions back to the contract.
 
+use crate::{
+    oprf_key_registry::{
+        self,
+        OprfKeyRegistry::{self, OprfKeyRegistryInstance},
+    },
+    services::{
+        secret_gen::{DLogSecretGenService, SharingType},
+        secret_manager::SecretManagerService,
+    },
+};
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, LogData},
@@ -20,18 +30,6 @@ use oprf_types::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-
-use crate::{
-    oprf_key_registry::{
-        self,
-        OprfKeyRegistry::{self, OprfKeyRegistryInstance},
-        Types::Round1Contribution,
-    },
-    services::{
-        secret_gen::{DLogSecretGenService, SharingType},
-        secret_manager::SecretManagerService,
-    },
-};
 
 /// Background task that subscribes to events and handles them.
 ///
@@ -147,44 +145,6 @@ async fn handle_events(
     Ok(())
 }
 
-async fn submit_round1_contribution(
-    contract: &OprfKeyRegistryInstance<DynProvider>,
-    oprf_key_id: OprfKeyId,
-    contribution: Round1Contribution,
-) -> eyre::Result<()> {
-    tracing::debug!("finished round1 - now reporting to chain..");
-    let receipt = contract
-        .addRound1ReshareContribution(oprf_key_id.into_inner(), contribution.clone())
-        .gas(10000000) // FIXME this is only for dummy smart contract
-        .send()
-        .await
-        .context("while broadcasting to network")?
-        .get_receipt()
-        .await
-        .context("while registering watcher for transaction")?;
-    if receipt.status() {
-        tracing::info!(
-            "round 1 done with transaction hash: {}",
-            receipt.transaction_hash
-        );
-    } else {
-        // do a call to get the potential revert reason
-        tracing::debug!(
-            "could not contribute - try doing a call and get the reason. Maybe others already continue"
-        );
-        // TODO this needs polish
-        if let Err(err) = contract
-            .addRound1KeyGenContribution(oprf_key_id.into_inner(), contribution)
-            .call()
-            .await
-        {
-            tracing::debug!("got revert data: {:?}", err.as_revert_data());
-        }
-        eyre::bail!("cannot finish transaction for unknown reason: {receipt:?}");
-    }
-    Ok(())
-}
-
 async fn handle_reshare_round1(
     log: Log<LogData>,
     contract: &OprfKeyRegistryInstance<DynProvider>,
@@ -211,7 +171,38 @@ async fn handle_reshare_round1(
     } = secret_gen
         .reshare_round1(oprf_key_id, threshold)
         .ok_or_else(|| eyre::eyre!("TODO unknown share"))?;
-    submit_round1_contribution(contract, oprf_key_id, contribution.into()).await
+    tracing::debug!("finished round1 - now reporting to chain..");
+    let receipt = contract
+        .addRound1ReshareContribution(oprf_key_id.into_inner(), contribution.clone().into())
+        .gas(10000000) // FIXME this is only for dummy smart contract
+        .send()
+        .await
+        .context("while broadcasting to network")?
+        .get_receipt()
+        .await
+        .context("while registering watcher for transaction")?;
+    if receipt.status() {
+        tracing::info!(
+            "round 1 done with transaction hash: {}",
+            receipt.transaction_hash
+        );
+    } else {
+        // do a call to get the potential revert reason
+        tracing::debug!(
+            "could not contribute - try doing a call and get the reason. Maybe others already continue"
+        );
+        // TODO this needs polish
+        if let Err(err) = contract
+            .addRound1KeyGenContribution(oprf_key_id.into_inner(), contribution.into())
+            .call()
+            .await
+        {
+            eyre::bail!("got revert data: {:?}", err.as_revert_data());
+        } else {
+            eyre::bail!("cannot finish transaction for unknown reason: {receipt:?}");
+        }
+    }
+    Ok(())
 }
 
 async fn handle_reshare_round3(
@@ -264,8 +255,39 @@ async fn handle_keygen_round1(
         oprf_key_id,
         contribution,
     } = secret_gen.key_gen_round1(oprf_key_id, threshold);
+
     tracing::debug!("finished round1 - now reporting to chain..");
-    submit_round1_contribution(contract, oprf_key_id, contribution.into()).await
+    let receipt = contract
+        .addRound1KeyGenContribution(oprf_key_id.into_inner(), contribution.clone().into())
+        .gas(10000000) // FIXME this is only for dummy smart contract
+        .send()
+        .await
+        .context("while broadcasting to network")?
+        .get_receipt()
+        .await
+        .context("while registering watcher for transaction")?;
+    if receipt.status() {
+        tracing::info!(
+            "round 1 done with transaction hash: {}",
+            receipt.transaction_hash
+        );
+    } else {
+        // do a call to get the potential revert reason
+        tracing::debug!(
+            "could not contribute - try doing a call and get the reason. Maybe others already continue"
+        );
+        // TODO this needs polish
+        if let Err(err) = contract
+            .addRound1KeyGenContribution(oprf_key_id.into_inner(), contribution.into())
+            .call()
+            .await
+        {
+            eyre::bail!("got revert data: {:?}", err.as_revert_data());
+        } else {
+            eyre::bail!("cannot finish transaction for unknown reason: {receipt:?}");
+        }
+    }
+    Ok(())
 }
 
 #[instrument(level="info", skip_all, fields(oprf_key_id=tracing::field::Empty))]
@@ -347,7 +369,6 @@ async fn handle_round3(
     .await
 }
 
-#[instrument(level="info", skip_all, fields(oprf_key_id=%oprf_key_id))]
 async fn handle_round3_inner(
     oprf_key_id: OprfKeyId,
     contract: &OprfKeyRegistryInstance<DynProvider>,
@@ -361,7 +382,7 @@ async fn handle_round3_inner(
         .call()
         .await
         .context("while loading ciphers")?;
-    tracing::debug!("got ciphers from chain - parsing..");
+    tracing::debug!("got ciphers from chain {} - parsing..", ciphers.len());
     let ciphers = ciphers
         .into_iter()
         .map(SecretGenCiphertext::try_from)
@@ -414,7 +435,7 @@ async fn handle_finalize(
     let OprfKeyRegistry::SecretGenFinalize { oprfKeyId, epoch } = finalize.inner.data;
     let handle_span = tracing::Span::current();
     handle_span.record("oprf_key_id", oprfKeyId.to_string());
-    tracing::info!("Event for {oprfKeyId}");
+    tracing::info!("Event for {oprfKeyId} with epoch {epoch}");
     let oprf_public_key = contract.getOprfPublicKey(oprfKeyId).call().await?;
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     let oprf_public_key = OprfPublicKey::new(oprf_public_key.try_into()?);

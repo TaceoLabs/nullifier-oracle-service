@@ -401,9 +401,12 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             // for the reshare we need to use the lagrange coefficients as here the resulting shamir-share is shared with shamir sharing
             // TODO implement scalar-mul for babyjubjub
             // we don't allow this for now
-
+             
             // uint256 lagrange = st.lagrangeCoeffs[partyId];
-            revert NotAProducer();
+            // revert NotAProducer();
+            for (uint256 i = 0; i < numPeers; ++i) {
+                st.round2[i][partyId] = data.ciphers[i];
+            }
         }
         // set the contribution to done
         st.round2Done[partyId] = true;
@@ -470,6 +473,8 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
                 // we simply increase the current epoch
                 oprfKeyRegistry[oprfKeyId].epoch = st.generatedEpoch;
             }
+
+            emit Types.SecretGenFinalize(oprfKeyId, st.generatedEpoch);
             // cleanup all old data - we need to keep shareCommitments though otherwise we can't do reshares
             delete st.lagrangeCoeffs;
             delete st.round1;
@@ -480,7 +485,6 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             delete st.round2Done;
             delete st.round3Done;
             // we keep the eventsEmitted and exists to prevent participants to double submit
-            emit Types.SecretGenFinalize(oprfKeyId, st.generatedEpoch);
             st.finalizeEventEmitted = true;
         }
     }
@@ -554,7 +558,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         return _loadProducerPeerPublicKeys(st);
     }
 
-    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen.
+    /// @notice Checks if the caller is a registered OPRF participant and returns their Round 2 ciphertexts for the specified key-gen. 
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     /// @return An array of Round 2 ciphertexts belonging to the caller.
     function checkIsParticipantAndReturnRound2Ciphers(uint160 oprfKeyId)

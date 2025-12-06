@@ -25,7 +25,7 @@ impl TestSecretManager {
         }
     }
 
-    pub fn load_rps(&self) -> Vec<OprfKeyId> {
+    pub fn load_key_ids(&self) -> Vec<OprfKeyId> {
         self.store.lock().iter().copied().collect_vec()
     }
 }

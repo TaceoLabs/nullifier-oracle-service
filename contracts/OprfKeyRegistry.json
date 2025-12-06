@@ -465,25 +465,6 @@
   },
   {
     "type": "function",
-    "name": "isProducerForKeyGen",
-    "inputs": [
-      {
-        "name": "oprfKeyId",
-        "type": "uint160",
-        "internalType": "uint160"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "keyGenVerifier",
     "inputs": [],
     "outputs": [
@@ -1000,6 +981,11 @@
   {
     "type": "error",
     "name": "NotAParticipant",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotAProducer",
     "inputs": []
   },
   {

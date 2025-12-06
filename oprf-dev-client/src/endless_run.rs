@@ -1,7 +1,8 @@
-use alloy::network::EthereumWallet;
+use alloy::providers::DynProvider;
 use clap::Parser;
 use eyre::Context;
 use oprf_client::Connector;
+use oprf_service::oprf_key_registry::OprfKeyRegistry::OprfKeyRegistryInstance;
 use oprf_test::oprf_key_registry_scripts;
 use oprf_types::{OprfKeyId, ShareEpoch, crypto::OprfPublicKey};
 use secrecy::ExposeSecret;
@@ -25,7 +26,7 @@ pub struct EndlessRunCommand {
 pub(super) async fn endless_run(
     config: OprfDevClientConfig,
     oprf_key_id: OprfKeyId,
-    wallet: EthereumWallet,
+    contract: OprfKeyRegistryInstance<DynProvider>,
     oprf_public_key: OprfPublicKey,
     endless_run_cmd: EndlessRunCommand,
     connector: Connector,
@@ -37,11 +38,6 @@ pub(super) async fn endless_run(
     } = endless_run_cmd;
     let iterations = iterations.unwrap_or(usize::MAX);
     for run in 0..endless_run_cmd.iterations.unwrap_or(usize::MAX) {
-        if iterations == usize::MAX {
-            tracing::info!("doing run {run}..");
-        } else {
-            tracing::info!("doing run {run}/{iterations}..");
-        }
         let instant = Instant::now();
         let mut runs = (0..oprf_per_epoch)
             .map(|_| {
@@ -71,17 +67,29 @@ pub(super) async fn endless_run(
             counter += 1;
         }
         let elapsed = instant.elapsed();
-        tracing::info!("took {elapsed:?} - init reshare..");
-        epoch = epoch.next();
-        oprf_key_registry_scripts::init_reshare(
-            oprf_key_id,
-            config.chain_rpc_url.expose_secret(),
-            config.oprf_key_registry_contract,
-            config.taceo_private_key.expose_secret(),
-        );
-        let new_key =
-            super::fetch_oprf_public_key_by_epoch(oprf_key_id, epoch, &wallet, &config).await?;
-        assert_eq!(new_key, oprf_public_key);
+        if iterations == usize::MAX {
+            tracing::info!("finished run {} in {elapsed:?}..", run + 1);
+        } else {
+            tracing::info!("finished run {}/{iterations} in {elapsed:?}..", run + 1);
+        }
+        // FIXME remove this check as soon as we have shamir reconstruction on-chain
+        if run != iterations - 1 {
+            epoch = epoch.next();
+            oprf_key_registry_scripts::init_reshare(
+                oprf_key_id,
+                config.chain_rpc_url.expose_secret(),
+                config.oprf_key_registry_contract,
+                config.taceo_private_key.expose_secret(),
+            );
+            let new_key = oprf_test::fetch_oprf_public_key_by_epoch(
+                oprf_key_id,
+                epoch,
+                &contract,
+                config.max_wait_time_key_gen,
+            )
+            .await?;
+            assert_eq!(new_key, oprf_public_key);
+        }
     }
     Ok(())
 }
