@@ -17,7 +17,10 @@ use oprf_types::{
     crypto::{OprfPublicKey, PartyId},
 };
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -52,20 +55,20 @@ pub struct OprfKeyMaterialStore(Arc<RwLock<HashMap<OprfKeyId, OprfKeyMaterial>>>
 /// * The [`OprfPublicKey`] associated with the share.
 #[derive(Clone)]
 pub struct OprfKeyMaterial {
-    pub(crate) shares: HashMap<ShareEpoch, DLogShareShamir>,
-    nullifier_key: OprfPublicKey,
+    pub(crate) shares: BTreeMap<ShareEpoch, DLogShareShamir>,
+    oprf_public_key: OprfPublicKey,
 }
 
 impl OprfKeyMaterial {
     /// Creates a new [`OprfKeyMaterial`] from the provided shares and ECDSA public key.
     #[allow(dead_code)]
     pub(crate) fn new(
-        shares: HashMap<ShareEpoch, DLogShareShamir>,
-        nullifier_key: OprfPublicKey,
+        shares: BTreeMap<ShareEpoch, DLogShareShamir>,
+        oprf_public_key: OprfPublicKey,
     ) -> Self {
         Self {
             shares,
-            nullifier_key,
+            oprf_public_key,
         }
     }
 
@@ -76,7 +79,7 @@ impl OprfKeyMaterial {
 
     /// Returns the [`OprfPublicKey`].
     fn get_oprf_public_key(&self) -> OprfPublicKey {
-        self.nullifier_key
+        self.oprf_public_key
     }
 }
 
@@ -169,31 +172,56 @@ impl OprfKeyMaterialStore {
         Some(self.0.read().get(&oprf_key_id)?.get_oprf_public_key())
     }
 
-    /// Adds OPRF key-material with epoch 0.
+    /// Adds OPRF key-material with provided epoch.
     ///
-    /// Overwrites any existing entry.  
-    /// Intended for creating new shares, not rotation.
+    /// Overwrites any existing entry if exists with this epoch.  
     pub(super) fn add(
         &self,
         oprf_key_id: OprfKeyId,
         oprf_public_key: OprfPublicKey,
         dlog_share: DLogShareShamir,
+        epoch: ShareEpoch,
     ) {
-        let mut shares = HashMap::new();
-        shares.insert(ShareEpoch::default(), dlog_share);
-        if self
-            .0
-            .write()
-            .insert(
-                oprf_key_id,
-                OprfKeyMaterial {
-                    shares,
-                    nullifier_key: oprf_public_key,
-                },
-            )
-            .is_some()
-        {
-            tracing::warn!("overwriting share for {oprf_key_id}");
+        if epoch.is_initial_epoch() {
+            tracing::debug!("setting share for the first time..");
+            let mut shares = BTreeMap::new();
+            shares.insert(ShareEpoch::default(), dlog_share);
+            if self
+                .0
+                .write()
+                .insert(
+                    oprf_key_id,
+                    OprfKeyMaterial {
+                        shares,
+                        oprf_public_key,
+                    },
+                )
+                .is_some()
+            {
+                tracing::warn!("overwriting share for {oprf_key_id}");
+            }
+        } else {
+            let mut store = self.0.write();
+            let key_material = store.entry(oprf_key_id).or_insert(OprfKeyMaterial {
+                shares: BTreeMap::new(),
+                oprf_public_key,
+            });
+            if key_material.shares.insert(epoch, dlog_share).is_some() {
+                tracing::warn!("overwriting share for {oprf_key_id} and epoch {epoch}");
+            }
+            tracing::info!(
+                "stored share with epoch {epoch} - now have {} epochs stored",
+                key_material.shares.len()
+            );
+            if key_material.shares.len() > 3 {
+                // epochs are strictly increasing
+                let dropped_epoch = key_material
+                    .shares
+                    .pop_first()
+                    .expect("Is there we just checked")
+                    .0;
+                tracing::info!("removing share epoch {dropped_epoch}");
+            }
         }
     }
 
@@ -204,5 +232,17 @@ impl OprfKeyMaterialStore {
         if self.0.write().remove(&oprf_key_id).is_some() {
             tracing::debug!("removed {oprf_key_id:?} material from OprfKeyMaterialStore");
         }
+    }
+
+    pub(super) fn get_latest_share(&self, oprf_key_id: OprfKeyId) -> Option<DLogShareShamir> {
+        Some(
+            self.0
+                .read()
+                .get(&oprf_key_id)?
+                .shares
+                .last_key_value()?
+                .1
+                .clone(),
+        )
     }
 }

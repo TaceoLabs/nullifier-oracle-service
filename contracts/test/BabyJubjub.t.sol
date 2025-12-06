@@ -28,6 +28,90 @@ contract BabyJubJubTest is Test {
         assertTrue(babyJubJub.isOnCurve(GEN_X, GEN_Y));
     }
 
+    function doSingleLagrangeCheckDeg1(uint8[2] memory ins, uint256[2] memory should)
+        private
+        view
+        returns (uint256[] memory)
+    {
+        uint256[] memory cast = new uint256[](2);
+        uint256[] memory shouldResult = new uint256[](2);
+        for (uint256 i = 0; i < ins.length; ++i) {
+            cast[i] = uint256(ins[i]);
+            shouldResult[i] = should[i];
+        }
+        uint256[] memory isResult = babyJubJub.computeLagrangeCoefficiants(cast, 2);
+        assertEq(isResult, shouldResult);
+    }
+
+    function doSingleLagrangeCheckDeg2(uint8[3] memory ins, uint256[3] memory should)
+        private
+        view
+        returns (uint256[] memory)
+    {
+        uint256[] memory cast = new uint256[](3);
+        uint256[] memory shouldResult = new uint256[](3);
+        for (uint256 i = 0; i < ins.length; ++i) {
+            cast[i] = uint256(ins[i]);
+            shouldResult[i] = should[i];
+        }
+        uint256[] memory isResult = babyJubJub.computeLagrangeCoefficiants(cast, 3);
+        assertEq(isResult, shouldResult);
+    }
+
+    function testLagrangeCoeffsDegree2() public view {
+        uint256[] memory kat0 = doSingleLagrangeCheckDeg1(
+            [0, 1], [2, 2736030358979909402780800718157159386076813972158567259200215660948447373040]
+        );
+        uint256[] memory kat1 = doSingleLagrangeCheckDeg1(
+            [0, 2],
+            [
+                1368015179489954701390400359078579693038406986079283629600107830474223686522,
+                1368015179489954701390400359078579693038406986079283629600107830474223686520
+            ]
+        );
+        uint256[] memory kat2 = doSingleLagrangeCheckDeg1(
+            [1, 0], [2736030358979909402780800718157159386076813972158567259200215660948447373040, uint256(2)]
+        );
+        uint256[] memory kat3 = doSingleLagrangeCheckDeg1(
+            [1, 2], [3, 2736030358979909402780800718157159386076813972158567259200215660948447373039]
+        );
+        uint256[] memory kat4 = doSingleLagrangeCheckDeg1(
+            [2, 0],
+            [
+                1368015179489954701390400359078579693038406986079283629600107830474223686520,
+                1368015179489954701390400359078579693038406986079283629600107830474223686522
+            ]
+        );
+        uint256[] memory kat5 = doSingleLagrangeCheckDeg1(
+            [2, 1], [2736030358979909402780800718157159386076813972158567259200215660948447373039, 3]
+        );
+    }
+
+    function testLagrangeCoeffsDegree3() public view {
+        uint256[] memory kat0 = doSingleLagrangeCheckDeg2(
+            [0, 1, 2], [3, 2736030358979909402780800718157159386076813972158567259200215660948447373038, 1]
+        );
+        uint256[] memory kat1 = doSingleLagrangeCheckDeg2(
+            [2, 1, 4], [2736030358979909402780800718157159386076813972158567259200215660948447373036, 5, 1]
+        );
+        uint256[] memory kat2 = doSingleLagrangeCheckDeg2(
+            [1, 3, 0],
+            [
+                2736030358979909402780800718157159386076813972158567259200215660948447373039,
+                1824020239319939601853867145438106257384542648105711506133477107298964915361,
+                912010119659969800926933572719053128692271324052855753066738553649482457683
+            ]
+        );
+        uint256[] memory kat3 = doSingleLagrangeCheckDeg2(
+            [0, 4, 2],
+            [
+                342003794872488675347600089769644923259601746519820907400026957618555921632,
+                1710018974362443376738000448848224616298008732599104537000134788092779608151,
+                684007589744977350695200179539289846519203493039641814800053915237111843259
+            ]
+        );
+    }
+
     function testAddIdentity() public view {
         (uint256 x, uint256 y) = babyJubJub.add(0, 1, GEN_X, GEN_Y);
         assertEq(x, GEN_X);

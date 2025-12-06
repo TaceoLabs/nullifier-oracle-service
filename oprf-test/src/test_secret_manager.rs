@@ -3,12 +3,11 @@ use std::{collections::HashSet, str::FromStr, sync::Arc};
 use alloy::signers::local::PrivateKeySigner;
 use async_trait::async_trait;
 use itertools::Itertools;
-use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_service::{
     oprf_key_material_store::OprfKeyMaterialStore,
     secret_manager::{SecretManager, StoreDLogShare},
 };
-use oprf_types::{OprfKeyId, ShareEpoch};
+use oprf_types::OprfKeyId;
 use parking_lot::Mutex;
 
 #[derive(Clone)]
@@ -26,7 +25,7 @@ impl TestSecretManager {
         }
     }
 
-    pub fn load_rps(&self) -> Vec<OprfKeyId> {
+    pub fn load_key_ids(&self) -> Vec<OprfKeyId> {
         self.store.lock().iter().copied().collect_vec()
     }
 }
@@ -46,6 +45,7 @@ impl SecretManager for TestSecretManager {
             oprf_key_id,
             oprf_public_key: _,
             share: _,
+            epoch: _,
         } = store;
         self.store.lock().insert(oprf_key_id);
         Ok(())
@@ -56,14 +56,5 @@ impl SecretManager for TestSecretManager {
             panic!("trying to remove rp id that does not exist");
         }
         Ok(())
-    }
-
-    async fn update_dlog_share(
-        &self,
-        _: OprfKeyId,
-        _: ShareEpoch,
-        _: DLogShareShamir,
-    ) -> eyre::Result<()> {
-        unreachable!()
     }
 }

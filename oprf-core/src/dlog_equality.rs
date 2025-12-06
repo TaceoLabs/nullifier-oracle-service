@@ -9,6 +9,8 @@
 //! - Proof verification, including group membership and field fit checks
 //! - Uses Poseidon2 for Fiat-Shamir challenge generation
 
+use std::fmt;
+
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use num_bigint::BigUint;
@@ -34,6 +36,14 @@ type Affine = ark_babyjubjub::EdwardsAffine;
 /// Error indicating that the DLog-Proof could not be verified.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct InvalidProof;
+
+impl std::error::Error for InvalidProof {}
+
+impl fmt::Display for InvalidProof {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Invalid DLogProof")
+    }
+}
 
 impl DLogEqualityProof {
     const DLOG_DS: &[u8] = b"DLOG Equality Proof";

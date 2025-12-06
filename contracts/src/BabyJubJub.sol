@@ -7,6 +7,9 @@ contract BabyJubJub {
     // BN254 scalar field = BabyJubJub base field
     uint256 public constant Q = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
+    // BabyJubJub scalar field
+    uint256 public constant R = 2736030358979909402780800718157159386076813972158567259200215660948447373041;
+
     // BabyJubJub curve parameters
     uint256 public constant A = 168700;
     uint256 public constant D = 168696;
@@ -35,8 +38,8 @@ contract BabyJubJub {
         uint256 y3Num = submod(y1y2, mulmod(A, x1x2, Q), Q);
         uint256 y3Den = submod(1, dx1x2y1y2, Q);
 
-        x3 = mulmod(x3Num, modInverse(x3Den), Q);
-        y3 = mulmod(y3Num, modInverse(y3Den), Q);
+        x3 = mulmod(x3Num, modInverse(x3Den, Q), Q);
+        y3 = mulmod(y3Num, modInverse(y3Den, Q), Q);
     }
 
     /// @notice Check if point is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2
@@ -56,12 +59,36 @@ contract BabyJubJub {
         return addmod(axx, yy, Q) == addmod(1, dxxyy, Q);
     }
 
+    function computeLagrangeCoefficiants(uint256[] memory ids, uint256 threshold)
+        public
+        pure
+        returns (uint256[] memory coeffs)
+    {
+        // should be checked at callsite
+        require(ids.length == threshold);
+        uint256[] memory result = new uint256[](threshold);
+        for (uint256 i = 0; i < threshold; ++i) {
+            uint256 num = 1;
+            uint256 den = 1;
+            uint256 currentId = ids[i] + 1;
+            for (uint256 j = 0; j < threshold; ++j) {
+                uint256 otherId = ids[j] + 1;
+                if (currentId != otherId) {
+                    num = mulmod(num, otherId, R);
+                    den = mulmod(den, submod(otherId, currentId, R), R);
+                }
+            }
+            result[i] = mulmod(num, modInverse(den, R), R);
+        }
+        return result;
+    }
+
     function submod(uint256 a, uint256 b, uint256 m) private pure returns (uint256) {
         return (a >= b) ? (a - b) : m - (b - a);
     }
 
-    function modInverse(uint256 a) private pure returns (uint256) {
-        return expmod(a, Q - 2, Q);
+    function modInverse(uint256 a, uint256 P) private pure returns (uint256) {
+        return expmod(a, P - 2, P);
     }
 
     function expmod(uint256 base, uint256 e, uint256 m) private pure returns (uint256 result) {

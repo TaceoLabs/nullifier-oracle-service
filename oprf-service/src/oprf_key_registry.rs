@@ -2,7 +2,12 @@
 //!
 //! It additionally provides `From`/`TryFrom` implementations to translate from the solidity types to rust land.
 
-use alloy::{primitives::Address, providers::DynProvider, sol};
+use alloy::{
+    primitives::{Address, U256},
+    providers::DynProvider,
+    sol,
+};
+use ark_ff::PrimeField;
 use oprf_types::crypto::{
     EphemeralEncryptionPublicKey, PartyId, SecretGenCiphertext, SecretGenCiphertexts,
     SecretGenCommitment,
@@ -94,6 +99,16 @@ impl From<SecretGenCiphertexts> for Types::Round2Contribution {
             ciphers: value.ciphers.into_iter().map(Into::into).collect(),
         }
     }
+}
+
+/// Tries to convert an u256 into a value on the scalar field of babyjubjub.
+/// We need this function because of orphan rule.
+pub(crate) fn try_u256_into_bjj_fr(value: U256) -> eyre::Result<ark_babyjubjub::Fr> {
+    let big_int = ark_ff::BigInt(value.into_limbs());
+    if ark_babyjubjub::Fr::MODULUS <= big_int {
+        eyre::bail!("{value} doesn't fit into requested primefield");
+    }
+    Ok(ark_babyjubjub::Fr::new(big_int))
 }
 
 /// Loads the party ID for this node from the OprfKeyRegistry contract.
