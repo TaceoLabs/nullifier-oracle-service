@@ -47,4 +47,4 @@ tracing.workspace = true
 zeroize = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-testcontainers-modules = { version = "0.13", features = ["localstack"] }
+testcontainers-modules = { version = "0.14", features = ["localstack"] }
