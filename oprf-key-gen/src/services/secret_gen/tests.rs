@@ -17,8 +17,7 @@ use super::*;
 async fn dlog_secret_gen(
     key_gen_material: CircomGroth16Material,
 ) -> eyre::Result<DLogSecretGenService> {
-    let oprf_material = OprfKeyMaterialStore::new(HashMap::new());
-    let dlog_secret_gen = DLogSecretGenService::init(oprf_material, key_gen_material);
+    let dlog_secret_gen = DLogSecretGenService::init(key_gen_material);
     Ok(dlog_secret_gen)
 }
 
@@ -199,23 +198,13 @@ async fn test_secret_gen() -> eyre::Result<()> {
     assert_eq!(is_public_key, should_public_key);
 
     // finalize round
-    let finalize0 = dlog_secret_gen0.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
-    let finalize1 = dlog_secret_gen1.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
-    let finalize2 = dlog_secret_gen2.finalize(oprf_key_id, OprfPublicKey::from(is_public_key))?;
-    assert_eq!(finalize0.oprf_key_id, oprf_key_id);
-    assert_eq!(finalize1.oprf_key_id, oprf_key_id);
-    assert_eq!(finalize2.oprf_key_id, oprf_key_id);
-    assert_eq!(finalize0.oprf_public_key, is_public_key.into());
-    assert_eq!(finalize1.oprf_public_key, is_public_key.into());
-    assert_eq!(finalize2.oprf_public_key, is_public_key.into());
+    let finalize0 = dlog_secret_gen0.finalize(oprf_key_id)?;
+    let finalize1 = dlog_secret_gen1.finalize(oprf_key_id)?;
+    let finalize2 = dlog_secret_gen2.finalize(oprf_key_id)?;
 
     let lagrange = oprf_core::shamir::lagrange_from_coeff(&[1, 2, 3]);
     let secret_key = oprf_core::shamir::reconstruct::<ark_babyjubjub::Fr>(
-        &[
-            finalize0.share.into(),
-            finalize1.share.into(),
-            finalize2.share.into(),
-        ],
+        &[finalize0.into(), finalize1.into(), finalize2.into()],
         &lagrange,
     );
 

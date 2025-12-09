@@ -128,24 +128,24 @@ contract OprfKeyRegistryTest is Test {
 
         // check that parties can read their partyID
         vm.prank(alice);
-        uint256 aliceId = oprfKeyRegistryTest.checkIsParticipantAndReturnPartyId();
+        uint256 aliceId = oprfKeyRegistryTest.getPartyIdForParticipant(alice);
         assertEq(aliceId, 0);
         vm.stopPrank();
 
         vm.prank(bob);
-        uint256 bobId = oprfKeyRegistryTest.checkIsParticipantAndReturnPartyId();
+        uint256 bobId = oprfKeyRegistryTest.getPartyIdForParticipant(bob);
         assertEq(bobId, 1);
         vm.stopPrank();
 
         vm.prank(carol);
-        uint256 carolId = oprfKeyRegistryTest.checkIsParticipantAndReturnPartyId();
+        uint256 carolId = oprfKeyRegistryTest.getPartyIdForParticipant(carol);
         assertEq(carolId, 2);
         vm.stopPrank();
 
         // check that taceo is not a participant
         vm.prank(taceoAdmin);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.NotAParticipant.selector));
-        oprfKeyRegistryTest.checkIsParticipantAndReturnPartyId();
+        oprfKeyRegistryTest.getPartyIdForParticipant(taceoAdmin);
         vm.stopPrank();
     }
 
@@ -172,15 +172,15 @@ contract OprfKeyRegistryTest is Test {
     function testUpdateParticipants() public {
         // check the partyIDs
         vm.prank(alice);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 0);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(alice), 0);
         vm.stopPrank();
 
         vm.prank(bob);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 1);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(bob), 1);
         vm.stopPrank();
 
         vm.prank(carol);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 2);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(carol), 2);
         vm.stopPrank();
 
         address[] memory peerAddresses = new address[](3);
@@ -192,20 +192,20 @@ contract OprfKeyRegistryTest is Test {
         oprfKeyRegistry.registerOprfPeers(peerAddresses);
 
         vm.prank(bob);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 0);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(bob), 0);
         vm.stopPrank();
 
         vm.prank(carol);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 1);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(carol), 1);
         vm.stopPrank();
 
         vm.prank(taceoAdmin);
-        assertEq(oprfKeyRegistry.checkIsParticipantAndReturnPartyId(), 2);
+        assertEq(oprfKeyRegistry.getPartyIdForParticipant(taceoAdmin), 2);
         vm.stopPrank();
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.NotAParticipant.selector));
-        oprfKeyRegistry.checkIsParticipantAndReturnPartyId();
+        oprfKeyRegistry.getPartyIdForParticipant(alice);
         vm.stopPrank();
     }
 

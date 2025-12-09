@@ -16,7 +16,8 @@ axum = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 humantime = { workspace = true }
-nodes-telemetry = { workspace = true }
+nodes-common = { workspace = true }
+nodes-observability = { workspace = true }
 oprf-service = { workspace = true }
 oprf-types = { workspace = true }
 rustls = { workspace = true }
@@ -39,4 +40,4 @@ eddsa-babyjubjub = { workspace = true }
 oprf-client = { workspace = true }
 oprf-test = { workspace = true }
 poseidon2 = { workspace = true }
-testcontainers-modules = { version = "0.13", features = ["localstack"] }
+testcontainers-modules = { version = "0.14", features = ["localstack"] }

@@ -5,6 +5,7 @@ members = [
   "oprf-client-example",
   "oprf-core",
   "oprf-dev-client",
+  "oprf-key-gen",
   "oprf-service",
   "oprf-service-example",
   "oprf-test",
@@ -43,7 +44,6 @@ eddsa-babyjubjub = { package = "taceo-eddsa-babyjubjub", version = "0.5" }
 eyre = { version = "0.6" }
 futures = "0.3"
 git-version = "0.3"
-groth16 = { package = "taceo-groth16", version = "0.1" }
 groth16-material = { package = "taceo-groth16-material", version = "0.1", default-features = false }
 groth16-sol = { package = "taceo-groth16-sol", version = "0.1" }
 http = "1"
@@ -51,11 +51,13 @@ humantime = "2"
 itertools = "0.14"
 k256 = "0.13"
 metrics = "0.24"
-nodes-telemetry = { git = "https://github.com/TaceoLabs/nodes-telemetry.git", rev = "00824cd" }
+nodes-common = { package = "taceo-nodes-common", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "33fcbcc" }
+nodes-observability = { package = "taceo-nodes-observability", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "33fcbcc" }
 num-bigint = "0.4"
 oprf-client = { path = "oprf-client" }
 oprf-client-example = { path = "oprf-client-example" }
 oprf-core = { package = "taceo-oprf-core", path = "oprf-core", version = "0.1", default-features = false }
+oprf-key-gen = { path = "oprf-key-gen" }
 oprf-service = { path = "oprf-service" }
 oprf-service-example = { path = "oprf-service-example" }
 oprf-test = { path = "oprf-test" }
@@ -69,7 +71,6 @@ reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "rustls-tls",
 ] }
-ruint = "1.17"
 rustls = "0.23"
 secrecy = "0.10"
 serde = { version = "1" }

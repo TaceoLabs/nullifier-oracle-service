@@ -1,10 +1,8 @@
-//! Configuration types and CLI/environment parsing for a TACEO:Oprf node.
-//!
-//! Concrete implementations may have a more detailed config and can use the exposed [`OprfNodeConfig`] and flatten it with `#[clap(flatten)]`.
+//! Configuration types and CLI/environment parsing for a TACEO:Oprf key-gen instance.
 //!
 //! Additionally this module defines the [`Environment`] to assert dev-only code.
 
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 use alloy::primitives::Address;
 use clap::{Parser, ValueEnum};
@@ -35,27 +33,10 @@ impl Environment {
 ///
 /// It can be configured via environment variables or command line arguments using `clap`.
 #[derive(Parser, Debug)]
-pub struct OprfNodeConfig {
+pub struct OprfKeyGenConfig {
     /// The environment of OPRF-service (either `prod` or `dev`).
     #[clap(long, env = "OPRF_NODE_ENVIRONMENT", default_value = "prod")]
     pub environment: Environment,
-
-    /// Max message size the websocket connection accepts.
-    ///
-    /// Default value: 8 kilobytes
-    #[clap(long, env = "OPRF_NODE_MAX_MESSAGE_SIZE", default_value = "8192")]
-    pub ws_max_message_size: usize,
-
-    /// Max time a created session is valid.
-    ///
-    /// This interval specifies how long a websocket connection is kept alive after a user initiates a session.
-    #[clap(
-        long,
-        env = "OPRF_NODE_SESSION_LIFETIME",
-        default_value="5min",
-        value_parser = humantime::parse_duration
-    )]
-    pub session_lifetime: Duration,
 
     /// The Address of the OprfKeyRegistry contract.
     #[clap(long, env = "OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT")]
@@ -74,16 +55,25 @@ pub struct OprfNodeConfig {
     #[clap(long, env = "OPRF_NODE_RP_SECRET_ID_PREFIX", default_value = "oprf/rp")]
     pub rp_secret_id_prefix: String,
 
-    /// The wallet address
-    #[clap(long, env = "OPRF_NODE_WALLET_ADDRESS")]
-    pub wallet_address: Address,
+    /// Secret Id of the wallet private key.
+    #[clap(long, env = "OPRF_NODE_WALLET_PRIVATE_KEY_SECRET_ID")]
+    pub wallet_private_key_secret_id: String,
 
-    /// Max time to wait for oprf key material secret retrieval from secret manager during key-event processing.
+    /// The location of the zkey for the key-gen proof in round 2 of KeyGen
+    #[clap(long, env = "OPRF_NODE_KEY_GEN_ZKEY")]
+    pub key_gen_zkey_path: PathBuf,
+
+    /// The location of the graph binary for the key-gen witness extension
+    #[clap(long, env = "OPRF_NODE_KEY_GEN_GRAPH")]
+    pub key_gen_witness_graph_path: PathBuf,
+
+    /// Max wait time the service waits for its workers during shutdown.
     #[clap(
         long,
-        env = "OPRF_NODE_GET_OPRF_KEY_MATERIAL_TIMEOUT",
-        default_value="5min",
+        env = "OPRF_NODE_MAX_WAIT_TIME_SHUTDOWN",
+        default_value = "10s",
         value_parser = humantime::parse_duration
+
     )]
-    pub get_oprf_key_material_timeout: Duration,
+    pub max_wait_time_shutdown: Duration,
 }

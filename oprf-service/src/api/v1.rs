@@ -1,6 +1,6 @@
 use crate::api::errors::Error;
 use crate::services::open_sessions::OpenSessions;
-use crate::{OprfRequestAuthService, oprf_key_material_store::OprfKeyMaterialStore};
+use crate::{OprfRequestAuthService, services::oprf_key_material_store::OprfKeyMaterialStore};
 use axum::{
     Router,
     extract::{
