@@ -81,9 +81,9 @@ async fn test_secret_gen() -> eyre::Result<()> {
     let mut dlog_secret_gen1 = dlog_secret_gen(key_gen_material.clone()).await?;
     let mut dlog_secret_gen2 = dlog_secret_gen(key_gen_material.clone()).await?;
 
-    let dlog_secret_gen0_round1 = dlog_secret_gen0.round1(oprf_key_id, threshold);
-    let dlog_secret_gen1_round1 = dlog_secret_gen1.round1(oprf_key_id, threshold);
-    let dlog_secret_gen2_round1 = dlog_secret_gen2.round1(oprf_key_id, threshold);
+    let dlog_secret_gen0_round1 = dlog_secret_gen0.key_gen_round1(oprf_key_id, threshold);
+    let dlog_secret_gen1_round1 = dlog_secret_gen1.key_gen_round1(oprf_key_id, threshold);
+    let dlog_secret_gen2_round1 = dlog_secret_gen2.key_gen_round1(oprf_key_id, threshold);
 
     let commitments0 = dlog_secret_gen0_round1.contribution.clone();
     let commitments1 = dlog_secret_gen1_round1.contribution.clone();
@@ -110,13 +110,13 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .collect_vec();
 
     let dlog_secret_gen0_round2 = dlog_secret_gen0
-        .round2(oprf_key_id, pks.to_vec())
+        .producer_round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen1_round2 = dlog_secret_gen1
-        .round2(oprf_key_id, pks.to_vec())
+        .producer_round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
     let dlog_secret_gen2_round2 = dlog_secret_gen2
-        .round2(oprf_key_id, pks.to_vec())
+        .producer_round2(oprf_key_id, pks.to_vec())
         .context("while doing round2")?;
 
     assert_eq!(dlog_secret_gen0_round2.oprf_key_id, oprf_key_id);
@@ -163,10 +163,12 @@ async fn test_secret_gen() -> eyre::Result<()> {
         })
         .collect_vec();
     let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
-
-    let dlog_secret_gen0_round3 = dlog_secret_gen0.round3(oprf_key_id, ciphers0)?;
-    let dlog_secret_gen1_round3 = dlog_secret_gen1.round3(oprf_key_id, ciphers1)?;
-    let dlog_secret_gen2_round3 = dlog_secret_gen2.round3(oprf_key_id, ciphers2)?;
+    let dlog_secret_gen0_round3 =
+        dlog_secret_gen0.round3(oprf_key_id, ciphers0, SharingType::Linear, pks.to_vec())?;
+    let dlog_secret_gen1_round3 =
+        dlog_secret_gen1.round3(oprf_key_id, ciphers1, SharingType::Linear, pks.to_vec())?;
+    let dlog_secret_gen2_round3 =
+        dlog_secret_gen2.round3(oprf_key_id, ciphers2, SharingType::Linear, pks.to_vec())?;
     assert_eq!(dlog_secret_gen0_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen1_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen2_round3.oprf_key_id, oprf_key_id);

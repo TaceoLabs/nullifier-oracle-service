@@ -107,6 +107,29 @@ impl SecretManager for AwsSecretManager {
         Ok(private_key)
     }
 
+    #[instrument(level = "info", skip(self))]
+    async fn get_latest_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
+        tracing::debug!("loading latest share for {oprf_key_id}");
+        let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
+        tracing::info!("loading old secret first at {secret_id}");
+        let secret_value = self
+            .client
+            .get_secret_value()
+            .secret_id(secret_id.clone())
+            .send()
+            .await
+            .context("while loading old secret")?
+            .secret_string()
+            .expect("is string and not binary")
+            .to_owned();
+
+        let oprf_key_material: OprfKeyMaterial =
+            serde_json::from_str(&secret_value).context("Cannot deserialize AWS Secret")?;
+        oprf_key_material
+            .get_latest_share()
+            .context("empty Oprf key-material")
+    }
+
     /// Stores a new DLog share for an OPRF secret-key in AWS Secrets Manager.
     ///
     /// Creates a new secret with the configured prefix and OPRF key id.
@@ -173,13 +196,7 @@ impl SecretManager for AwsSecretManager {
         let mut oprf_key_material: OprfKeyMaterial =
             serde_json::from_str(&secret_value).context("Cannot deserialize AWS Secret")?;
 
-        if oprf_key_material.insert_share(epoch, share).is_some() {
-            // TODO maybe hard error here instead of warning?
-            tracing::warn!(
-                "overwriting existing share for oprf_key_id {oprf_key_id} at epoch {epoch}"
-            );
-        }
-
+        oprf_key_material.insert_share(epoch, share);
         self.client
             .put_secret_value()
             .secret_id(secret_id)

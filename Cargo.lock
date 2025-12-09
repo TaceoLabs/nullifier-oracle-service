@@ -6312,6 +6312,7 @@ dependencies = [
  "taceo-circom-types",
  "taceo-groth16-sol",
  "taceo-oprf-core",
+ "tracing",
  "uuid",
 ]
 

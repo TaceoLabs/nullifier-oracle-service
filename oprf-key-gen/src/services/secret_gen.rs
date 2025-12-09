@@ -1,9 +1,10 @@
-//! This service handles the distributed secret generation protocol for RPs.
-//! It maintains toxic waste for ongoing key generation rounds. The service handles the destruction of this toxic waste during the lifecycle of key generation.
+//! This service handles the distributed key-gen/reshare protocol.
 //!
-//! Currently, there is no timeout for a single key generation. Therefore, the toxic waste will not be cleaned up and will remain in memory.
+//! It maintains toxic waste for ongoing rounds. The service handles the destruction of this toxic waste during the lifecycle of protocol.
 //!
-//! On the other hand, the toxic waste is not persisted anywhere other than RAM. This means that if an OPRF node shuts down during key generation, the key generation cannot be completed, as the data is lost.
+//! Currently, there is no timeout for a protocol run. Therefore, the toxic waste will not be cleaned up and will remain in memory.
+//!
+//! On the other hand, the toxic waste is not persisted anywhere other than RAM. This means that if an OPRF node shuts down during the protocol, the key-gen/reshare cannot be completed, as the data is lost.
 //!
 //! **Important:** This service is **not thread-safe**. It is intended to be used
 //! only in contexts where a single dedicated task owns the struct. No internal
@@ -42,10 +43,18 @@ use zeroize::ZeroizeOnDrop;
 #[cfg(test)]
 mod tests;
 
-/// Service for managing the distributed secret generation protocol.
+/// Defines the sharing type of the receiving [`DLogShareShamir`].
 ///
-/// Handles round 1 and round 2 of secret generation, and finalizes
-/// by producing the party's share of the secret.
+/// During key-gen the resulting dlog-share is linearly shared, during reshare, it is shared using shamir.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SharingType {
+    /// Linear sharing
+    Linear,
+    /// Shamir sharing - wraps the lagrange shares.
+    Shamir(Vec<ark_babyjubjub::Fr>),
+}
+
+/// Service for managing the distributed key-gen/reshare protocol.
 ///
 /// **Note:** Must only be used in a single-owner context. Do not share across tasks.
 pub(crate) struct DLogSecretGenService {
@@ -60,24 +69,22 @@ pub(crate) struct DLogSecretGenService {
 /// Used internally to compute Diffie-Hellman for key-generation operations.
 /// Not `Debug`/`Display` to avoid accidental leaks.
 ///
-/// **Note**: Don't reuse a key. One key per keygen.
+/// **Note**: Don't reuse a key. One key per keygen/reshare.
 #[derive(ZeroizeOnDrop)]
 struct EphemeralEncryptionPrivateKey(ark_babyjubjub::Fr);
 
-/// The toxic waste generated in round 1 of the key generation protocol.
+/// The toxic waste generated in round 1 of the key-gen/reshare protocol.
 ///
-/// Contains the full polynomial and the ephemeral private key for a single key generation.
+/// Contains the full polynomial and the ephemeral private key for a single protocol run.
 struct ToxicWasteRound1 {
     poly: KeyGenPoly,
     sk: EphemeralEncryptionPrivateKey,
 }
 
-/// The toxic waste generated in round 2 of the key generation protocol.
+/// The toxic waste generated in round 2 of the key-gen/reshare protocol.
 ///
-/// Contains the ephemeral private key for a single key generation and the associated public keys of all nodes.
-/// The public key list is not toxic waste per se, but for simplicity we store it together with the private key.
+/// Contains the ephemeral private key for a single key generation.
 struct ToxicWasteRound2 {
-    pks: Vec<EphemeralEncryptionPublicKey>,
     sk: EphemeralEncryptionPrivateKey,
 }
 
@@ -101,9 +108,9 @@ impl EphemeralEncryptionPrivateKey {
 }
 
 impl ToxicWasteRound1 {
-    /// Creates a new instance of `ToxicWasteRound1`.
+    /// Creates a new instance of `ToxicWasteRound1` intended to be used for key-gen (not reshare).
     ///
-    /// Generates a secret-sharing polynomial and an ephemeral private key for the first round of the key generation protocol.
+    /// Generates a secret-sharing polynomial with some randomly sampled secret and an ephemeral private key for the first round of the key generation protocol. For toxic-waste for resharing, see [`Self::reshare`].
     ///
     /// **Note:** do not reuse the toxic waste.
     ///
@@ -117,21 +124,33 @@ impl ToxicWasteRound1 {
         Self { poly, sk }
     }
 
-    /// Advances to the second round of key generation.
+    /// Creates a new instance of `ToxicWasteRound1` intended to be used for reshare (not key-gen).
     ///
-    /// Consumes `self` and combines the secret material from round one with the public keys of all nodes.
+    /// Generates a secret-sharing polynomial using the old share as the secret and an ephemeral private key for the first round of the reshare protocol. For toxic-waste for key-gen, see [`Self::new`].
     ///
     /// **Note:** do not reuse the toxic waste.
     ///
     /// # Arguments
     ///
-    /// * `pks` - A list of public keys for all nodes involved in the key generation session.
+    /// * `old_share` - The share of the previous epoch.
+    /// * `rng` - A mutable reference to a cryptographically secure random number generator.
+    fn reshare<R: Rng + CryptoRng>(old_share: DLogShareShamir, degree: usize, rng: &mut R) -> Self {
+        let poly = KeyGenPoly::reshare(rng, old_share.into(), degree);
+        let sk = EphemeralEncryptionPrivateKey::generate(rng);
+        Self { poly, sk }
+    }
+
+    /// Advances to the second round of key-gen/reshare protocol.
+    ///
+    /// Consumes `self` and combines the secret material from round one with the public keys of all nodes.
+    ///
+    /// **Note:** do not reuse the toxic waste.
     ///
     /// # Returns
     ///
-    /// A `ToxicWasteRound2` instance containing the ephemeral private key and the node public key list.
-    fn next(self, pks: Vec<EphemeralEncryptionPublicKey>) -> ToxicWasteRound2 {
-        ToxicWasteRound2 { pks, sk: self.sk }
+    /// A `ToxicWasteRound2` instance containing the ephemeral private key.
+    fn next(self) -> ToxicWasteRound2 {
+        ToxicWasteRound2 { sk: self.sk }
     }
 }
 
@@ -153,26 +172,26 @@ impl DLogSecretGenService {
     /// * Any finished shares that wait for finalize from all nodes
     pub(crate) fn delete_oprf_key_material(&mut self, oprf_key_id: OprfKeyId) {
         if self.toxic_waste_round1.remove(&oprf_key_id).is_some() {
-            tracing::debug!("removed {oprf_key_id:?} toxic waste round 1 from secret-gen");
+            tracing::debug!("removed {oprf_key_id:?} toxic waste round 1");
         };
         if self.toxic_waste_round2.remove(&oprf_key_id).is_some() {
-            tracing::debug!("removed {oprf_key_id:?} toxic waste round 2 from secret-gen");
+            tracing::debug!("removed {oprf_key_id:?} toxic waste round 2");
         };
         if self.finished_shares.remove(&oprf_key_id).is_some() {
-            tracing::debug!("removed {oprf_key_id:?} finished share from secret-gen");
+            tracing::debug!("removed {oprf_key_id:?} finished share");
         };
     }
 
-    /// Executes round 1 of the secret generation protocol.
+    /// Executes round 1 of the key-gen protocol.
     ///
-    /// Generates a polynomial of the specified degree and stores it internally.
+    /// Generates a random polynomial of the specified degree and stores it internally.
     /// Returns a [`SecretGenRound1Contribution`] containing the commitment to share with other parties.
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `threshold` - The threshold of the MPC-protocol.
     #[instrument(level = "info", skip(self))]
-    pub(crate) fn round1(
+    pub(crate) fn key_gen_round1(
         &mut self,
         oprf_key_id: OprfKeyId,
         threshold: u16,
@@ -181,33 +200,19 @@ impl DLogSecretGenService {
         let mut rng = rand::thread_rng();
         let degree = usize::from(threshold - 1);
         let toxic_waste = ToxicWasteRound1::new(degree, &mut rng);
-        let contribution = SecretGenCommitment {
-            comm_share: toxic_waste.poly.get_pk_share(),
-            comm_coeffs: toxic_waste.poly.get_coeff_commitment(),
-            eph_pub_key: toxic_waste.sk.get_public_key(),
-        };
-        let old_value = self.toxic_waste_round1.insert(oprf_key_id, toxic_waste);
-        // TODO handle this more gracefully
-        assert!(
-            old_value.is_none(),
-            "already had this round1 - this is a bug"
-        );
-        SecretGenRound1Contribution {
-            oprf_key_id,
-            contribution,
-        }
+        self.round1_inner(oprf_key_id, toxic_waste)
     }
 
-    /// Executes round 2 of the secret generation protocol.
+    /// Executes the producer round 2 of the key-gen/reshare protocol.
     ///
-    /// Generates secret shares for all nodes based on the polynomial generated in round 1 and a proof of the encryptions.
+    /// Producers generate secret shares for all nodes based on the polynomial generated in round 1 and a proof of the encryptions. Consumers (receiving parties should call [`Self::consumer_round2`]).
     ///
     /// Returns a [`SecretGenRound2Contribution`] containing ciphertexts for all parties + the proof.
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `pks` - List of public keys for nodes participating in the protocol.
-    pub(crate) fn round2(
+    pub(crate) fn producer_round2(
         &mut self,
         oprf_key_id: OprfKeyId,
         pks: Vec<EphemeralEncryptionPublicKey>,
@@ -230,24 +235,27 @@ impl DLogSecretGenService {
         })
     }
 
-    /// Finalizes secret generation by decrypting received ciphertexts and
-    /// computing the final secret share for this party.
+    /// Finalizes the key-gen/reshare protocol by decrypting received ciphertexts and computing the final secret share for this party.
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
     /// * `ciphers` - Ciphertexts received from other parties in round 2.
+    /// * `sharing_type` - Defines how the resulting share is secret-shared. `Linear` for key-gen, `Shamir` for reshare.
+    /// * `pks` - The ephemeral public-keys of the producers needed for DHE.
     #[instrument(level = "info", skip(self, ciphers))]
     pub(crate) fn round3(
         &mut self,
         oprf_key_id: OprfKeyId,
         ciphers: Vec<SecretGenCiphertext>,
+        sharing_type: SharingType,
+        pks: Vec<EphemeralEncryptionPublicKey>,
     ) -> eyre::Result<SecretGenRound3Contribution> {
         tracing::info!("calling round3 with {}", ciphers.len());
         let toxic_waste_r2 = self
             .toxic_waste_round2
             .remove(&oprf_key_id)
             .expect("todo what if not here?");
-        let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2)
+        let share = decrypt_key_gen_ciphertexts(ciphers, toxic_waste_r2, sharing_type, pks)
             .context("while computing DLogShare")?;
         // We need to store the computed share - as soon as we get ready
         // event, we will store the share inside the crypto-device.
@@ -259,14 +267,69 @@ impl DLogSecretGenService {
     ///
     /// # Arguments
     /// * `oprf_key_id` - Identifier of the RP for which the secret is being finalized.
-    #[instrument(level = "info", skip(self))]
     pub(crate) fn finalize(&mut self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
-        tracing::info!("calling finalize");
-        let dlog_share = self
-            .finished_shares
+        tracing::info!("finalize..");
+        self.finished_shares
             .remove(&oprf_key_id)
-            .context("cannot find computed DLogShare")?;
-        Ok(dlog_share)
+            .context("cannot find computed DLogShare")
+    }
+
+    /// Executes round 1 of the reshare protocol.
+    ///
+    /// Generates a secret-sharing polynomial where the secret-value is the old dlog-share of the specified degree and stores it internally.
+    /// Returns a [`SecretGenRound1Contribution`] containing the commitment to share with other parties.
+    ///
+    /// # Arguments
+    /// * `oprf_key_id` - Identifier of the OPRF key that we generate.
+    /// * `threshold` - The threshold of the MPC-protocol.
+    /// * `old_share` - The old share used as input for the resharing
+    pub(crate) fn reshare_round1(
+        &mut self,
+        oprf_key_id: OprfKeyId,
+        threshold: u16,
+        old_share: DLogShareShamir,
+    ) -> SecretGenRound1Contribution {
+        tracing::info!("reshare round1..");
+        let mut rng = rand::thread_rng();
+        let degree = usize::from(threshold - 1);
+        let toxic_waste = ToxicWasteRound1::reshare(old_share, degree, &mut rng);
+        self.round1_inner(oprf_key_id, toxic_waste)
+    }
+
+    /// internal helper function for round1. Called by key-gen and reshare.
+    fn round1_inner(
+        &mut self,
+        oprf_key_id: OprfKeyId,
+        toxic_waste: ToxicWasteRound1,
+    ) -> SecretGenRound1Contribution {
+        let contribution = SecretGenCommitment {
+            comm_share: toxic_waste.poly.get_pk_share(),
+            comm_coeffs: toxic_waste.poly.get_coeff_commitment(),
+            eph_pub_key: toxic_waste.sk.get_public_key(),
+        };
+        let old_value = self.toxic_waste_round1.insert(oprf_key_id, toxic_waste);
+        // TODO handle this more gracefully
+        assert!(
+            old_value.is_none(),
+            "already had this round1 - this is a bug"
+        );
+        SecretGenRound1Contribution {
+            oprf_key_id,
+            contribution,
+        }
+    }
+
+    /// Executes the consumer round 2 of the reshare protocol.
+    ///
+    /// Only relevant for reshare as everyone is a producer in key-gen. A consuming node simply drops the polynomial it created in round1.
+    pub(crate) fn consumer_round2(&mut self, oprf_key_id: OprfKeyId) {
+        tracing::debug!("reverting reshare...");
+        let toxic_waste_round1 = self
+            .toxic_waste_round1
+            .remove(&oprf_key_id)
+            .expect("how to handle this");
+        self.toxic_waste_round2
+            .insert(oprf_key_id, toxic_waste_round1.next());
     }
 }
 
@@ -276,8 +339,10 @@ impl DLogSecretGenService {
 fn decrypt_key_gen_ciphertexts(
     ciphers: Vec<SecretGenCiphertext>,
     toxic_waste: ToxicWasteRound2,
+    sharing_type: SharingType,
+    pks: Vec<EphemeralEncryptionPublicKey>,
 ) -> eyre::Result<DLogShareShamir> {
-    let ToxicWasteRound2 { pks, sk } = toxic_waste;
+    let ToxicWasteRound2 { sk } = toxic_waste;
     // In some later version, we maybe need some meaningful way
     // to tell which party produced a wrong ciphertext. Currently,
     // we trust the smart-contract to verify the proof, therefore
@@ -309,7 +374,12 @@ fn decrypt_key_gen_ciphertexts(
             }
         })
         .collect::<eyre::Result<Vec<_>>>()?;
-    Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares)))
+    match sharing_type {
+        SharingType::Linear => Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares))),
+        SharingType::Shamir(lagrange) => Ok(DLogShareShamir::from(
+            keygen::accumulate_lagrange_shares(&shares, &lagrange),
+        )),
+    }
 }
 
 /// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
@@ -405,5 +475,5 @@ fn compute_keygen_proof_max_degree1_parties3(
     }
 
     let ciphers = SecretGenCiphertexts::new(proof.into(), rp_ciphertexts);
-    Ok((ciphers, toxic_waste.next(pks)))
+    Ok((ciphers, toxic_waste.next()))
 }

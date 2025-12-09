@@ -2,6 +2,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::signers::local::PrivateKeySigner;
 use async_trait::async_trait;
+use eyre::ContextCompat;
 use itertools::Itertools;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_service::oprf_key_material_store::OprfKeyMaterialStore;
@@ -41,6 +42,15 @@ impl oprf_key_gen::secret_manager::SecretManager for TestSecretManager {
     ) -> eyre::Result<()> {
         self.store.lock().insert(oprf_key_id, oprf_key_material);
         Ok(())
+    }
+
+    async fn get_latest_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
+        self.store
+            .lock()
+            .get(&oprf_key_id)
+            .expect("is there")
+            .get_latest_share()
+            .context("key-material is empty")
     }
 
     async fn remove_oprf_key_material(&self, rp_id: OprfKeyId) -> eyre::Result<()> {

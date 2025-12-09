@@ -63,8 +63,6 @@ pub fn accumulate_shares(shares: &[ScalarField]) -> ScalarField {
 
 /// Combines the provided shares using Lagrange coefficients to reconstruct the secret (or key share).
 ///
-/// Only the first `lagrange.len()` shares are used.
-///
 /// # Arguments
 /// * `shares` - The shares to be combined.
 /// * `lagrange` - Lagrange interpolation coefficients.
@@ -73,9 +71,9 @@ pub fn accumulate_shares(shares: &[ScalarField]) -> ScalarField {
 /// Accumulated (reconstructed) secret or key share.
 ///
 /// # Panics
-/// This method panics if the len of `shares` is lower than the len of `lagrange`. This method expects this check at callsite.
+/// This method panics if the len of `shares` and `lagrange` do not match. This method expects this check at callsite.
 pub fn accumulate_lagrange_shares(shares: &[ScalarField], lagrange: &[ScalarField]) -> ScalarField {
-    assert!(shares.len() >= lagrange.len());
+    assert!(shares.len() == lagrange.len());
     let shares = &shares[0..lagrange.len()];
     let mut result = ScalarField::zero();
     for (share, l) in izip!(shares.iter(), lagrange.iter()) {
@@ -259,6 +257,8 @@ impl KeyGenPoly {
 
 #[cfg(test)]
 mod tests {
+
+    use itertools::Itertools;
 
     use super::*;
 
@@ -481,6 +481,8 @@ mod tests {
             encryption_nonces.push(nonces);
             party_ciphers.push(cipher);
         }
+
+        let lagrange = lagrange.into_iter().take(degree + 1).collect_vec();
 
         // 3. Each party decrypts their shares
         let mut result_shares = Vec::with_capacity(num_parties);

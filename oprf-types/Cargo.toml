@@ -27,4 +27,5 @@ eyre = { workspace = true }
 groth16-sol = { workspace = true }
 oprf-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }

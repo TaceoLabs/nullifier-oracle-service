@@ -84,6 +84,7 @@ pub async fn start(
             secret_manager,
             dlog_secret_gen_service,
             cancellation_token,
+            config.max_epoch_cache_size,
         )
     });
 

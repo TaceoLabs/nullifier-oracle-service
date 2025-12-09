@@ -132,13 +132,10 @@ impl OprfKeyMaterialStore {
         Some(self.0.read().get(&oprf_key_id)?.get_oprf_public_key())
     }
 
-    /// Adds OPRF key-material with epoch 0.
-    ///
-    /// Overwrites any existing entry.  
-    /// Intended for creating new shares, not rotation.
-    pub(super) fn add(&self, oprf_key_id: OprfKeyId, key_material: OprfKeyMaterial) {
+    /// Adds OPRF key-material and overwrites any existing entry.  
+    pub(super) fn insert(&self, oprf_key_id: OprfKeyId, key_material: OprfKeyMaterial) {
         if self.0.write().insert(oprf_key_id, key_material).is_some() {
-            tracing::warn!("overwriting share for {oprf_key_id}");
+            tracing::debug!("overwriting material for {oprf_key_id}");
         }
     }
 
