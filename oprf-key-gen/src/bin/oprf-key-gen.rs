@@ -1,4 +1,4 @@
-//! OPRF Service Binary
+//! OPRF Key Gen Binary
 //!
 //! This is the main entry point for the OPRF node service.
 //! It initializes tracing, metrics, and starts the service with configuration

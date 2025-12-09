@@ -229,7 +229,7 @@ pub struct OprfKeyMaterial {
 }
 
 impl OprfKeyMaterial {
-    /// Creates a new [`OprfKeyMaterial`] from the provided shares and ECDSA public key.
+    /// Creates a new [`OprfKeyMaterial`] from the provided shares and [`OprfPublicKey`].
     pub fn new(
         shares: HashMap<ShareEpoch, DLogShareShamir>,
         oprf_public_key: OprfPublicKey,

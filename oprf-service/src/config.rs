@@ -43,7 +43,7 @@ pub struct OprfNodeConfig {
     /// Max message size the websocket connection accepts.
     ///
     /// Default value: 8 kilobytes
-    #[clap(long, env = "OPRF_SERVICE_MAX_MESSAGE_SIZE", default_value = "8192")]
+    #[clap(long, env = "OPRF_NODE_MAX_MESSAGE_SIZE", default_value = "8192")]
     pub ws_max_message_size: usize,
 
     /// Max time a created session is valid.
@@ -51,7 +51,7 @@ pub struct OprfNodeConfig {
     /// This interval specifies how long a websocket connection is kept alive after a user initiates a session.
     #[clap(
         long,
-        env = "OPRF_SERVICE_SESSION_LIFETIME",
+        env = "OPRF_NODE_SESSION_LIFETIME",
         default_value="5min",
         value_parser = humantime::parse_duration
     )]
@@ -74,7 +74,7 @@ pub struct OprfNodeConfig {
     #[clap(long, env = "OPRF_NODE_RP_SECRET_ID_PREFIX", default_value = "oprf/rp")]
     pub rp_secret_id_prefix: String,
 
-    /// The wallet address of the oprf key-gen.
+    /// The wallet address
     #[clap(long, env = "OPRF_NODE_WALLET_ADDRESS")]
     pub wallet_address: Address,
 

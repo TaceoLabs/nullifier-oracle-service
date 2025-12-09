@@ -52,7 +52,7 @@ async fn nullifier_e2e_test() -> eyre::Result<()> {
     let oprf_public_key = health_checks::oprf_public_key_from_services(
         oprf_key_id,
         &oprf_services,
-        Duration::from_secs(60), // graceful timeout for CI
+        Duration::from_secs(120), // graceful timeout for CI
     )
     .await
     .context("while loading OPRF key-material from services")?;
@@ -114,7 +114,7 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     let is_oprf_public_key = health_checks::oprf_public_key_from_services(
         oprf_key_id,
         &oprf_services,
-        Duration::from_secs(60), // graceful timeout for CI
+        Duration::from_secs(120), // graceful timeout for CI
     )
     .await
     .context("while loading OPRF key-material from services")?;
@@ -125,22 +125,11 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
         .await
         .context("while connecting to RPC")?;
     let contract = OprfKeyRegistry::new(oprf_key_registry_contract, provider.clone());
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let should_oprf_public_key = tokio::time::timeout(Duration::from_secs(60), async {
-        loop {
-            interval.tick().await;
-            let maybe_oprf_public_key = contract
-                .getOprfPublicKey(oprf_key_id.into_inner())
-                .call()
-                .await;
-            if let Ok(oprf_public_key) = maybe_oprf_public_key {
-                return eyre::Ok(OprfPublicKey::new(oprf_public_key.try_into()?));
-            }
-        }
-    })
-    .await
-    .context("could not finish key-gen in 60 seconds")?
-    .context("while polling RP key")?;
+    let should_oprf_public_key = contract
+        .getOprfPublicKey(oprf_key_id.into_inner())
+        .call()
+        .await?;
+    let should_oprf_public_key = OprfPublicKey::new(should_oprf_public_key.try_into()?);
     assert_eq!(is_oprf_public_key, should_oprf_public_key);
 
     let secret_before_delete0 = secret_managers[0].load_rps();
