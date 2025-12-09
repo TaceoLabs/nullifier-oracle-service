@@ -1,5 +1,7 @@
+use ark_ec::AffineRepr as _;
 use ark_ff::PrimeField as _;
-use oprf_client::{BlindingFactor, Connector};
+use eyre::Context;
+use oprf_client::{BlindingFactor, Connector, VerifiableOprfOutput};
 use oprf_types::crypto::OprfPublicKey;
 use oprf_types::{OprfKeyId, ShareEpoch};
 use rand::{CryptoRng, Rng};
@@ -16,13 +18,19 @@ pub async fn distributed_oprf<R: Rng + CryptoRng>(
     action: ark_babyjubjub::Fq,
     connector: Connector,
     rng: &mut R,
-) -> Result<ark_babyjubjub::Fq, oprf_client::Error> {
+) -> eyre::Result<ark_babyjubjub::Fq> {
     let query = action;
     let blinding_factor = BlindingFactor::rand(rng);
     let domain_separator = ark_babyjubjub::Fq::from_be_bytes_mod_order(b"OPRF");
     let auth = ();
 
-    let verifiable_oprf_output = oprf_client::distributed_oprf(
+    let VerifiableOprfOutput {
+        output,
+        dlog_proof,
+        blinded_response,
+        unblinded_response: _,
+        blinded_request,
+    } = oprf_client::distributed_oprf(
         services,
         threshold,
         oprf_public_key,
@@ -35,6 +43,14 @@ pub async fn distributed_oprf<R: Rng + CryptoRng>(
         connector,
     )
     .await?;
+    dlog_proof
+        .verify(
+            oprf_public_key.inner(),
+            blinded_request,
+            blinded_response,
+            ark_babyjubjub::EdwardsAffine::generator(),
+        )
+        .context("cannot verify dlog proof")?;
 
-    Ok(verifiable_oprf_output.output)
+    Ok(output)
 }

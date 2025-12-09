@@ -80,7 +80,7 @@ async fn oprf_public_key_not_known_check(health_url: String) {
     }
 }
 
-pub async fn assert_rp_unknown(
+pub async fn assert_key_id_unknown(
     oprf_key_id: OprfKeyId,
     services: &[String],
     max_wait_time: Duration,

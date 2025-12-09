@@ -8,7 +8,7 @@ use std::{
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, U160},
-    providers::ProviderBuilder,
+    providers::{DynProvider, Provider, ProviderBuilder},
     signers::local::PrivateKeySigner,
 };
 use ark_ff::UniformRand as _;
@@ -29,7 +29,11 @@ use secrecy::{ExposeSecret, SecretString};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
-#[derive(Parser, Debug)]
+use crate::endless_run::EndlessRunCommand;
+
+mod endless_run;
+
+#[derive(Clone, Parser, Debug)]
 pub struct StressTestCommand {
     /// The amount of nullifiers to generate
     #[clap(long, env = "OPRF_DEV_CLIENT_NULLIFIER_NUM", default_value = "10")]
@@ -40,14 +44,15 @@ pub struct StressTestCommand {
     pub sequential: bool,
 
     /// Send requests sequentially instead of concurrently
-    #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
+    #[clap(long, env = "OPRF_DEV_CLIENT_SKIP_CHECKS")]
     pub skip_checks: bool,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 pub enum Command {
     Test,
     StressTest(StressTestCommand),
+    EndlessRun(EndlessRunCommand),
 }
 
 /// The configuration for the OPRF client.
@@ -67,6 +72,10 @@ pub struct OprfDevClientConfig {
     /// The threshold of services that need to respond
     #[clap(long, env = "OPRF_DEV_CLIENT_THRESHOLD", default_value = "2")]
     pub threshold: usize,
+
+    /// The start epoch. Will be ignored if we need to create a key.
+    #[clap(long, env = "OPRF_DEV_CLIENT_START_EPOCH", default_value = "0")]
+    pub start_epoch: u128,
 
     /// The Address of the OprfKeyRegistry contract.
     #[clap(
@@ -102,44 +111,69 @@ pub struct OprfDevClientConfig {
     #[clap(long, env = "OPRF_DEV_CLIENT_KEY_GEN_WAIT_TIME", default_value="2min", value_parser=humantime::parse_duration)]
     pub max_wait_time_key_gen: Duration,
 
+    /// Whether we want to do a reshare as well.
+    #[clap(long, env = "OPRF_DEV_CLIENT_WITH_RESHARE")]
+    pub reshare: bool,
+
     /// Command
     #[command(subcommand)]
     pub command: Command,
 }
 
-async fn fetch_oprf_public_key(
-    oprf_key_id: OprfKeyId,
-    wallet: &EthereumWallet,
+async fn test_run(
     config: &OprfDevClientConfig,
-) -> eyre::Result<OprfPublicKey> {
-    tracing::info!("fetching OPRF public-key..");
-    let provider = ProviderBuilder::new()
-        .wallet(wallet)
-        .connect(config.chain_rpc_url.expose_secret())
-        .await
-        .context("while connecting to RPC")?;
-    let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider.clone());
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
-    let oprf_public_key = tokio::time::timeout(config.max_wait_time_key_gen, async move {
-        loop {
-            interval.tick().await;
-            let maybe_oprf_public_key = contract
-                .getOprfPublicKey(oprf_key_id.into_inner())
-                .call()
-                .await;
-            if let Ok(oprf_public_key) = maybe_oprf_public_key {
-                return eyre::Ok(OprfPublicKey::new(oprf_public_key.try_into()?));
-            }
-        }
-    })
-    .await
-    .context("could not fetch rp nullifier key in time")?
-    .context("while polling RP key")?;
-    Ok(oprf_public_key)
+    start_epoch: ShareEpoch,
+    oprf_key_id: OprfKeyId,
+    oprf_public_key: OprfPublicKey,
+    contract: OprfKeyRegistryInstance<DynProvider>,
+    connector: Connector,
+) -> eyre::Result<()> {
+    tracing::info!("running single nullifier");
+    run_nullifier(
+        config.services.clone(),
+        start_epoch,
+        config.threshold,
+        oprf_key_id,
+        oprf_public_key,
+        connector.clone(),
+    )
+    .await?;
+    tracing::info!("nullifier successful");
+    if config.reshare {
+        tracing::info!("running reshare test");
+        oprf_key_registry_scripts::init_reshare(
+            oprf_key_id,
+            config.chain_rpc_url.expose_secret(),
+            config.oprf_key_registry_contract,
+            config.taceo_private_key.expose_secret(),
+        );
+        tracing::info!("started reshare for OPRF key with: {oprf_key_id}");
+        let next_epoch = start_epoch.next();
+        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+            oprf_key_id,
+            next_epoch,
+            &contract,
+            config.max_wait_time_key_gen,
+        )
+        .await?;
+        tracing::info!("running nullifier after reshare");
+        run_nullifier(
+            config.services.clone(),
+            next_epoch,
+            config.threshold,
+            oprf_key_id,
+            oprf_public_key,
+            connector,
+        )
+        .await?;
+        tracing::info!("nullifier successful");
+    }
+    Ok(())
 }
 
 async fn run_nullifier(
-    nodes: &[String],
+    nodes: Vec<String>,
+    epoch: ShareEpoch,
     threshold: usize,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
@@ -149,12 +183,13 @@ async fn run_nullifier(
 
     let action = ark_babyjubjub::Fq::rand(&mut rng);
 
-    let _verifiable_oprf_output = oprf_client_example::distributed_oprf(
-        nodes,
+    // the client example internally checks the DLog equality
+    oprf_client_example::distributed_oprf(
+        &nodes,
         threshold,
         oprf_public_key,
         oprf_key_id,
-        ShareEpoch::default(),
+        epoch,
         action,
         connector,
         &mut rng,
@@ -339,11 +374,34 @@ async fn main() -> eyre::Result<()> {
     let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
     let wallet = EthereumWallet::from(private_key);
 
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .connect(config.chain_rpc_url.expose_secret())
+        .await
+        .context("while connecting to RPC")?
+        .erased();
+    let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider);
+
+    let mut start_epoch = ShareEpoch::from(config.start_epoch);
+
     let (oprf_key_id, oprf_public_key) = if let Some(oprf_key_id) = config.oprf_key_id {
         let oprf_key_id = OprfKeyId::new(oprf_key_id);
-        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+
+        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+            oprf_key_id,
+            start_epoch,
+            &contract,
+            config.max_wait_time_key_gen,
+        )
+        .await?;
         (oprf_key_id, oprf_public_key)
     } else {
+        if !start_epoch.is_initial_epoch() {
+            tracing::warn!(
+                "requesting epoch: {start_epoch} but key not provided - ignoring epoch.."
+            );
+            start_epoch = ShareEpoch::default();
+        }
         let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
             config.chain_rpc_url.expose_secret(),
             config.oprf_key_registry_contract,
@@ -351,7 +409,14 @@ async fn main() -> eyre::Result<()> {
         );
         tracing::info!("registered OPRF key with: {oprf_key_id}");
 
-        let oprf_public_key = fetch_oprf_public_key(oprf_key_id, &wallet, &config).await?;
+        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+            oprf_key_id,
+            start_epoch,
+            &contract,
+            config.max_wait_time_key_gen,
+        )
+        .await?;
+
         (oprf_key_id, oprf_public_key)
     };
 
@@ -363,18 +428,17 @@ async fn main() -> eyre::Result<()> {
         .with_no_client_auth();
     let connector = Connector::Rustls(Arc::new(rustls_config));
 
-    match config.command {
+    match config.command.clone() {
         Command::Test => {
-            tracing::info!("running single nullifier");
-            run_nullifier(
-                &config.services,
-                config.threshold,
+            test_run(
+                &config,
+                start_epoch,
                 oprf_key_id,
                 oprf_public_key,
+                contract,
                 connector,
             )
             .await?;
-            tracing::info!("nullifier successful");
         }
         Command::StressTest(cmd) => {
             tracing::info!("running stress-test");
@@ -388,6 +452,17 @@ async fn main() -> eyre::Result<()> {
             )
             .await?;
             tracing::info!("stress-test successful");
+        }
+        Command::EndlessRun(endless_run) => {
+            endless_run::endless_run(
+                config,
+                oprf_key_id,
+                contract,
+                oprf_public_key,
+                endless_run,
+                connector,
+            )
+            .await?
         }
     }
 
