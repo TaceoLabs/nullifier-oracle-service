@@ -7,6 +7,9 @@ contract BabyJubJub {
     // BN254 scalar field = BabyJubJub base field
     uint256 public constant Q = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
+    // BabyJubJub scalar field
+    uint256 public constant R = 2736030358979909402780800718157159386076813972158567259200215660948447373041;
+
     // BabyJubJub curve parameters
     uint256 public constant A = 168700;
     uint256 public constant D = 168696;
@@ -35,8 +38,8 @@ contract BabyJubJub {
         uint256 y3Num = submod(y1y2, mulmod(A, x1x2, Q), Q);
         uint256 y3Den = submod(1, dx1x2y1y2, Q);
 
-        x3 = mulmod(x3Num, modInverse(x3Den), Q);
-        y3 = mulmod(y3Num, modInverse(y3Den), Q);
+        x3 = mulmod(x3Num, modInverse(x3Den, Q), Q);
+        y3 = mulmod(y3Num, modInverse(y3Den, Q), Q);
     }
 
     /// @notice Check if point is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2
@@ -56,12 +59,210 @@ contract BabyJubJub {
         return addmod(axx, yy, Q) == addmod(1, dxxyy, Q);
     }
 
+    /// @notice Computes the lagrange coefficients for the provided party IDs (starting at zero) and the threshold of the secret-sharing. This method will revert if the length of IDs and threshold does not match. We expect callsite to check that. Importantly, this method will always return an array with length numPeers, where lagrange coefficient of party ID is on index in the array (with zero for not participating nodes). We need this because the nodes will access this array with their partyID.
+    ///
+    /// @param ids The party IDs (coefficients of the polynomial) of the participating parties (starting with ID 0)
+    /// @param threshold The degree of the polynomial + 1
+    /// @return lagrange The requested lagrange coefficients
+    function computeLagrangeCoefficiants(uint256[] memory ids, uint256 threshold, uint256 numPeers)
+        public
+        pure
+        returns (uint256[] memory lagrange)
+    {
+        // should be checked at callsite
+        require(ids.length == threshold);
+        lagrange = new uint256[](numPeers);
+        for (uint256 i = 0; i < threshold; ++i) {
+            uint256 num = 1;
+            uint256 den = 1;
+            uint256 currentId = ids[i] + 1;
+            for (uint256 j = 0; j < threshold; ++j) {
+                uint256 otherId = ids[j] + 1;
+                if (currentId != otherId) {
+                    num = mulmod(num, otherId, R);
+                    den = mulmod(den, submod(otherId, currentId, R), R);
+                }
+            }
+            lagrange[ids[i]] = mulmod(num, modInverse(den, R), R);
+        }
+        return lagrange;
+    }
+
+    /// @notice Computes xP, where x is an element of the scalarfield of BabyJubJub and P is an affine point on the BabyJubJub curve represented as x and y. This method reverts if scalar doesn't fit into BabyJubJub's scalarfield. We expect that check to be enforced on callsite.
+    /// This method will not check whether the point in on the curve nor if it is in the correct subgroup.
+    ///
+    /// @param scalar The scalar for the multiplication.
+    /// @param x The x-coordinate of the affine point.
+    /// @param y The y-coordinate of the affine point.
+    /// @return x_res The x-coordinate of xP
+    /// @return y_res The y-coordinate of xP
+    function scalarMul(uint256 scalar, uint256 x, uint256 y) public pure returns (uint256 x_res, uint256 y_res) {
+        require(scalar < R);
+        x_res = 0;
+        y_res = 1;
+        uint256 t_res = 0;
+        uint256 z_res = 1;
+        (uint8[254] memory bits, uint256 highBit) = getBits(scalar);
+        // skip leading zeros
+        for (uint256 i = highBit; i < 254; ++i) {
+            (x_res, y_res, t_res, z_res) = doubleTwistedEdwards(x_res, y_res, z_res);
+            if (bits[i] == 1) {
+                (x_res, y_res, t_res, z_res) = addProjective(x_res, y_res, t_res, z_res, x, y);
+            }
+        }
+        return toAffine(x_res, y_res, t_res, z_res);
+    }
+
+    /// @notice A+B, where A and B are points on the BabyJubJub curve with the difference that A represented with projective coordinates and B with affine coordinates. Returns A+B in projective form.
+    /// This method will not check whether the points are on the curve nor if they are in the correct subgroup.
+    ///
+    /// @param x1 The x-coordinate of the projective point.
+    /// @param y1 The y-coordinate of the projective point.
+    /// @param t1 The t-coordinate of the projective point.
+    /// @param z1 The z-coordinate of the projective point.
+    /// @param x2 The x-coordinate of the affine point.
+    /// @param y2 The y-coordinate of the affine point.
+    ///
+    /// @return x_res The x-coordinate of A+B.
+    /// @return y_res The y-coordinate of A+B.
+    /// @return t_res The t-coordinate of A+B.
+    /// @return z_res The z-coordinate of A+B.
+    function addProjective(uint256 x1, uint256 y1, uint256 t1, uint256 z1, uint256 x2, uint256 y2)
+        public
+        pure
+        returns (uint256 x_res, uint256 y_res, uint256 t_res, uint256 z_res)
+    {
+        // See "Twisted Edwards Curves Revisited"
+        // Huseyin Hisil, Kenneth Koon-Ho Wong, Gary Carter, and Ed Dawson
+        // 3.1 Unified Addition in E^e
+        // Source: https://www.hyperelliptic.org/EFD/g1p/data/twisted/extended/addition/madd-2008-hwcd
+
+        // A = X1*X2
+        uint256 a = mulmod(x1, x2, Q);
+        // B = Y1*Y2
+        uint256 b = mulmod(y1, y2, Q);
+        // C = T1*d*T2
+        uint256 c = mulmod(mulmod(mulmod(D, t1, Q), x2, Q), y2, Q);
+        // D = Z1
+        uint256 d = z1;
+        // E = (X1+Y1)*(X2+Y2)-A-B
+        uint256 x1y1 = addmod(x1, y1, Q);
+        uint256 x2y2 = addmod(x2, y2, Q);
+        uint256 e = submod(submod(mulmod(x1y1, x2y2, Q), a, Q), b, Q);
+        // F = D-C
+        uint256 f = submod(d, c, Q);
+        // G = D+C
+        uint256 g = addmod(d, c, Q);
+        // H = B-a*A
+        uint256 h = submod(b, mulmod(A, a, Q), Q);
+        // X3 = E*F
+        x_res = mulmod(e, f, Q);
+        // Y3 = G*H
+        y_res = mulmod(g, h, Q);
+        // T3 = E*H
+        t_res = mulmod(e, h, Q);
+        // Z3 = F*G
+        z_res = mulmod(f, g, Q);
+    }
+
+    /// @notice Converts a point P on the BabyJubJub curve in projective form to its affine form.
+    /// This method will not check whether the points are on the curve nor if they are in the correct subgroup.
+    ///
+    /// @param x1 The x-coordinate of the projective point.
+    /// @param y1 The y-coordinate of the projective point.
+    /// @param t1 The t-coordinate of the projective point.
+    /// @param z1 The z-coordinate of the projective point.
+    ///
+    /// @return x_res The x-coordinate of the affine point.
+    /// @return y_res The y-coordinate of the affine point.
+    function toAffine(uint256 x1, uint256 y1, uint256 t1, uint256 z1)
+        public
+        pure
+        returns (uint256 x_res, uint256 y_res)
+    {
+        // The projective point X, Y, T, Z is represented in the affine coordinates as X/Z, Y/Z.
+        if (x1 == 0 && y1 == 1 && t1 == 0 && z1 == 1) {
+            x_res = 0;
+            y_res = 1;
+        } else if (z1 == 1) {
+            // If Z is one, the point is already normalized.
+            x_res = x1;
+            y_res = y1;
+        } else {
+            // Z is nonzero, so it must have an inverse in a field.
+            uint256 z_inv = modInverse(z1, Q);
+            x_res = mulmod(x1, z_inv, Q);
+            y_res = mulmod(y1, z_inv, Q);
+        }
+    }
+
+    ///Helper function for scalarMul(scalar, x, y). Bit-decomposes the provided value in big-endian form and returns the highest bit (to skip leading zeros). Ignores highest two bits as this should only be used for scalar mul and the scalarfield only has 254 bits.
+    function getBits(uint256 value) private pure returns (uint8[254] memory bits, uint256 highBit) {
+        highBit = 0;
+        value <<= 2;
+        for (uint256 i = 0; i < 254; i++) {
+            uint256 shift = 255 - i;
+            bits[i] = uint8((value >> shift) & 1);
+            if (bits[i] == 1 && highBit == 0) {
+                highBit = i;
+            }
+        }
+    }
+
+    /// @notice Performs point-doubling of a BabyJubJub projective point in twisted-edwards form.
+    ///
+    /// @param x The x-coordinate of the projective point.
+    /// @param y The y-coordinate of the projective point.
+    /// @param z The z-coordinate of the projective point.
+    ///
+    /// @param x3 The x-coordinate of the doubled point.
+    /// @param y3 The y-coordinate of the doubled point.
+    /// @param t3 The t-coordinate of the doubled point.
+    /// @param z3 The z-coordinate of the doubled point.
+    function doubleTwistedEdwards(uint256 x, uint256 y, uint256 z)
+        public
+        pure
+        returns (uint256 x3, uint256 y3, uint256 t3, uint256 z3)
+    {
+        // See "Twisted Edwards Curves Revisited"
+        // Huseyin Hisil, Kenneth Koon-Ho Wong, Gary Carter, and Ed Dawson
+        // 3.3 Doubling in E^e
+        // Source: https://www.hyperelliptic.org/EFD/g1p/data/twisted/extended/doubling/dbl-2008-hwcd
+
+        // A = X1^2
+        uint256 a = mulmod(x, x, Q);
+        // B = Y1^2
+        uint256 b = mulmod(y, y, Q);
+        // C = 2 * Z1^2
+        uint256 c = mulmod(2, mulmod(z, z, Q), Q);
+        // D = a * A
+        uint256 d = mulmod(a, A, Q);
+        // E = (X1 + Y1)^2 - A - B
+        uint256 x1y1 = addmod(x, y, Q);
+        uint256 x1y12 = mulmod(x1y1, x1y1, Q);
+        uint256 e = submod(submod(x1y12, a, Q), b, Q);
+        // G = D + B
+        uint256 g = addmod(d, b, Q);
+        // F = G - C
+        uint256 f = submod(g, c, Q);
+        // H = D - B
+        uint256 h = submod(d, b, Q);
+        // X3 = E * F
+        x3 = mulmod(e, f, Q);
+        // Y3 = G * H
+        y3 = mulmod(g, h, Q);
+        // T3 = E * H
+        t3 = mulmod(e, h, Q);
+        // Z3 = F * G
+        z3 = mulmod(f, g, Q);
+    }
+
     function submod(uint256 a, uint256 b, uint256 m) private pure returns (uint256) {
         return (a >= b) ? (a - b) : m - (b - a);
     }
 
-    function modInverse(uint256 a) private pure returns (uint256) {
-        return expmod(a, Q - 2, Q);
+    function modInverse(uint256 a, uint256 P) private pure returns (uint256) {
+        return expmod(a, P - 2, P);
     }
 
     function expmod(uint256 base, uint256 e, uint256 m) private pure returns (uint256 result) {
