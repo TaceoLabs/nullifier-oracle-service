@@ -266,6 +266,10 @@ contract BabyJubJubTest is Test {
         uint256 y_not_curve = 42;
         assertFalse(babyJubJub.isOnCurve(x_not_curve, y_not_curve));
 
+        uint256 x_0 = 0;
+        uint256 y_0 = 0;
+        assertFalse(babyJubJub.isOnCurve(x_0, y_0));
+
         uint256 two_torsion_x = 0;
         uint256 two_torsion_y = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
         assertTrue(babyJubJub.isOnCurve(two_torsion_x, two_torsion_y));

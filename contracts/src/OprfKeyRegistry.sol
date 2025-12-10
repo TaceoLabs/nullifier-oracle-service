@@ -16,7 +16,8 @@ interface IVerifierKeyGen13 {
 
 interface IBabyJubJub {
     function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external view returns (uint256 x3, uint256 y3);
-    function isOnCurve(uint256 x, uint256 y) external view returns (bool);
+    function isOnCurve(uint256 x, uint256 y) external pure returns (bool);
+    function isInCorrectSubgroup(uint256 x, uint256 y) external pure returns (bool);
     function computeLagrangeCoefficiants(uint256[] memory ids, uint256 threshold, uint256 numPeers)
         external
         pure
@@ -285,8 +286,8 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     {
         // return the partyId if sender is really a participant
         uint256 partyId = _internParticipantCheck();
-        // for key-gen everyone is a producer, therefore we check that all values are set
-        if (_isEmpty(data.commShare)) revert BadContribution();
+        // for key-gen everyone is a producer, therefore we check that all values are set and valid points
+        _curveChecks(data.commShare);
         if (data.commCoeffs == 0) revert BadContribution();
         Types.OprfKeyGenState storage st = _addRound1Contribution(oprfKeyId, partyId, data);
         // check that this is a key-gen
@@ -312,6 +313,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         onlyProxy
         isReady
     {
+        // as we need contributions from everyone we check the
         // return the partyId if sender is really a participant
         uint256 partyId = _internParticipantCheck();
         // in reshare we can have producers and consumers, therefore we don't need to enforce that commitments are non-zero
@@ -339,6 +341,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             revert BadContribution();
         } else {
             // both commitments are set and we still need more producers
+            _curveChecks(data.commShare);
             st.nodeRoles[msg.sender] = Types.KeyGenRole.PRODUCER;
             st.numProducers += 1;
             // check if we are the last producer, then we can compute the lagrange coefficients
@@ -394,6 +397,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         if (st.generatedEpoch == 0) {
             // for the key-gen we simply accumulate all commitments as the resulting shamir-share should have contributions from all parties -> just add all together
             for (uint256 i = 0; i < numPeers; ++i) {
+                _curveChecks(data.ciphers[i].commitment);
                 _addToAggregate(st.shareCommitments[i], data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
                 st.round2[i][partyId] = data.ciphers[i];
             }
@@ -402,6 +406,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
             uint256 lagrange = st.lagrangeCoeffs[partyId];
             require(lagrange > 0, "SAFETY CHECK: this should never happen. This means there is a bug");
             for (uint256 i = 0; i < numPeers; ++i) {
+                _curveChecks(data.ciphers[i].commitment);
                 (uint256 x, uint256 y) =
                     accumulator.scalarMul(lagrange, data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
                 _addToAggregate(st.shareCommitments[i], x, y);
@@ -661,7 +666,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         private
         returns (Types.OprfKeyGenState storage)
     {
-        if (_isEmpty(data.ephPubKey)) revert BadContribution();
+        _curveChecks(data.ephPubKey);
         // check that we started the key-gen for this OPRF public-key
         Types.OprfKeyGenState storage st = runningKeyGens[oprfKeyId];
         if (!st.exists) revert UnknownId(oprfKeyId);
@@ -737,14 +742,11 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         }
     }
 
+    // Expects that callsite enforces that point is on the curve and in the correct sub-group (i.e. call _curveCheck).
     function _addToAggregate(Types.BabyJubJubElement storage keyAggregate, uint256 newPointX, uint256 newPointY)
         internal
         virtual
     {
-        if (!accumulator.isOnCurve(newPointX, newPointY)) {
-            revert BadContribution();
-        }
-
         if (_isEmpty(keyAggregate)) {
             // We checked above that the point is on curve, so we can just set it
             keyAggregate.x = newPointX;
@@ -776,6 +778,20 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
     function _isEmpty(Types.BabyJubJubElement memory element) internal pure virtual returns (bool) {
         return element.x == 0 && element.y == 0;
+    }
+
+    /// Performs sanity checks on BabyJubJub elements. If either the point
+    ///     * is the identity
+    ///     * is not on the curve
+    ///     * is not in the large sub-group
+    ///
+    /// this method will revert the call.
+    function _curveChecks(Types.BabyJubJubElement memory element) internal view virtual {
+        uint256 x = element.x;
+        uint256 y = element.y;
+        if (_isInfinity(element) || !accumulator.isOnCurve(x, y) || !accumulator.isInCorrectSubgroup(x, y)) {
+            revert BadContribution();
+        }
     }
     ////////////////////////////////////////////////////////////
     //                    Upgrade Authorization               //
