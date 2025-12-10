@@ -1,15 +1,13 @@
-use alloy::providers::DynProvider;
 use clap::Parser;
 use eyre::Context;
 use oprf_client::Connector;
-use oprf_service::oprf_key_registry::OprfKeyRegistry::OprfKeyRegistryInstance;
-use oprf_test::oprf_key_registry_scripts;
+use oprf_test::{health_checks, oprf_key_registry_scripts};
 use oprf_types::{OprfKeyId, ShareEpoch, crypto::OprfPublicKey};
 use secrecy::ExposeSecret;
 use std::time::Instant;
 use tokio::task::JoinSet;
 
-use crate::{OprfDevClientConfig, run_nullifier};
+use crate::{OprfDevClientConfig, run_oprf};
 
 #[derive(Clone, Parser, Debug)]
 pub struct EndlessRunCommand {
@@ -26,7 +24,6 @@ pub struct EndlessRunCommand {
 pub(super) async fn endless_run(
     config: OprfDevClientConfig,
     oprf_key_id: OprfKeyId,
-    contract: OprfKeyRegistryInstance<DynProvider>,
     oprf_public_key: OprfPublicKey,
     endless_run_cmd: EndlessRunCommand,
     connector: Connector,
@@ -37,7 +34,7 @@ pub(super) async fn endless_run(
         iterations,
     } = endless_run_cmd;
     let iterations = iterations.unwrap_or(usize::MAX);
-    for run in 0..endless_run_cmd.iterations.unwrap_or(usize::MAX) {
+    for run in 0..iterations {
         let instant = Instant::now();
         let mut runs = (0..oprf_per_epoch)
             .map(|_| {
@@ -46,7 +43,7 @@ pub(super) async fn endless_run(
                 let use_last_epoch = rand::random::<bool>();
                 let tested_epoch = if use_last_epoch { epoch.prev() } else { epoch };
                 async move {
-                    run_nullifier(
+                    run_oprf(
                         nodes,
                         tested_epoch,
                         config.threshold,
@@ -72,19 +69,18 @@ pub(super) async fn endless_run(
         } else {
             tracing::info!("finished run {}/{iterations} in {elapsed:?}..", run + 1);
         }
-        // FIXME remove this check as soon as we have shamir reconstruction on-chain
+        epoch = epoch.next();
         if run != iterations - 1 {
-            epoch = epoch.next();
             oprf_key_registry_scripts::init_reshare(
                 oprf_key_id,
                 config.chain_rpc_url.expose_secret(),
                 config.oprf_key_registry_contract,
                 config.taceo_private_key.expose_secret(),
             );
-            let new_key = oprf_test::fetch_oprf_public_key_by_epoch(
+            let new_key = health_checks::oprf_public_key_from_services(
                 oprf_key_id,
                 epoch,
-                &contract,
+                &config.services,
                 config.max_wait_time_key_gen,
             )
             .await?;

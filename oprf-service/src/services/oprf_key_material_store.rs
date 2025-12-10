@@ -13,7 +13,7 @@ use oprf_core::{
 };
 use oprf_types::{
     OprfKeyId, ShareEpoch,
-    api::v1::ShareIdentifier,
+    api::{OprfPublicKeyWithEpoch, v1::ShareIdentifier},
     crypto::{OprfKeyMaterial, OprfPublicKey, PartyId},
 };
 use parking_lot::RwLock;
@@ -130,6 +130,17 @@ impl OprfKeyMaterialStore {
     /// Returns the [`OprfPublicKey`], if registered.
     pub(crate) fn get_oprf_public_key(&self, oprf_key_id: OprfKeyId) -> Option<OprfPublicKey> {
         Some(self.0.read().get(&oprf_key_id)?.get_oprf_public_key())
+    }
+
+    /// Returns the [`OprfPublicKey`], if registered.
+    pub(crate) fn get_oprf_public_key_with_epoch(
+        &self,
+        oprf_key_id: OprfKeyId,
+    ) -> Option<OprfPublicKeyWithEpoch> {
+        self.0
+            .read()
+            .get(&oprf_key_id)?
+            .get_oprf_public_key_with_epoch()
     }
 
     /// Adds OPRF key-material and overwrites any existing entry.  

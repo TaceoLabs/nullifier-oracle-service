@@ -62,11 +62,16 @@ impl oprf_key_gen::secret_manager::SecretManager for TestSecretManager {
 
     async fn update_dlog_share(
         &self,
-        _: OprfKeyId,
-        _: ShareEpoch,
-        _: DLogShareShamir,
+        key_id: OprfKeyId,
+        epoch: ShareEpoch,
+        share: DLogShareShamir,
     ) -> eyre::Result<()> {
-        unreachable!()
+        self.store
+            .lock()
+            .get_mut(&key_id)
+            .expect("is there")
+            .insert_share(epoch, share);
+        Ok(())
     }
 }
 

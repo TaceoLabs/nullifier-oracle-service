@@ -1,16 +1,4 @@
-use std::{
-    collections::HashMap,
-    str::FromStr as _,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
-use alloy::{
-    network::EthereumWallet,
-    primitives::{Address, U160},
-    providers::{DynProvider, Provider, ProviderBuilder},
-    signers::local::PrivateKeySigner,
-};
+use alloy::primitives::{Address, U160};
 use ark_ff::UniformRand as _;
 use clap::{Parser, Subcommand};
 use eyre::Context as _;
@@ -20,12 +8,16 @@ use oprf_test::{health_checks, oprf_key_registry_scripts};
 use oprf_types::{
     OprfKeyId, ShareEpoch,
     api::v1::{OprfRequest, ShareIdentifier},
-    chain::OprfKeyRegistry,
     crypto::OprfPublicKey,
 };
 use rand::SeedableRng;
 use rustls::{ClientConfig, RootCertStore};
 use secrecy::{ExposeSecret, SecretString};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
@@ -35,9 +27,9 @@ mod endless_run;
 
 #[derive(Clone, Parser, Debug)]
 pub struct StressTestCommand {
-    /// The amount of nullifiers to generate
-    #[clap(long, env = "OPRF_DEV_CLIENT_NULLIFIER_NUM", default_value = "10")]
-    pub nullifier_num: usize,
+    /// The amount of OPRF runs
+    #[clap(long, env = "OPRF_DEV_CLIENT_RUNS", default_value = "10")]
+    pub runs: usize,
 
     /// Send requests sequentially instead of concurrently
     #[clap(long, env = "OPRF_DEV_CLIENT_SEQUENTIAL")]
@@ -125,11 +117,10 @@ async fn test_run(
     start_epoch: ShareEpoch,
     oprf_key_id: OprfKeyId,
     oprf_public_key: OprfPublicKey,
-    contract: OprfKeyRegistryInstance<DynProvider>,
     connector: Connector,
 ) -> eyre::Result<()> {
-    tracing::info!("running single nullifier");
-    run_nullifier(
+    tracing::info!("running single OPRF");
+    run_oprf(
         config.services.clone(),
         start_epoch,
         config.threshold,
@@ -138,7 +129,7 @@ async fn test_run(
         connector.clone(),
     )
     .await?;
-    tracing::info!("nullifier successful");
+    tracing::info!("OPRF successful");
     if config.reshare {
         tracing::info!("running reshare test");
         oprf_key_registry_scripts::init_reshare(
@@ -149,15 +140,17 @@ async fn test_run(
         );
         tracing::info!("started reshare for OPRF key with: {oprf_key_id}");
         let next_epoch = start_epoch.next();
-        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+        tracing::info!("waiting for services to finish reshare..");
+        let oprf_public_key_reshare = health_checks::oprf_public_key_from_services(
             oprf_key_id,
             next_epoch,
-            &contract,
+            &config.services,
             config.max_wait_time_key_gen,
         )
         .await?;
-        tracing::info!("running nullifier after reshare");
-        run_nullifier(
+        assert_eq!(oprf_public_key, oprf_public_key_reshare);
+        tracing::info!("running OPRF after reshare");
+        run_oprf(
             config.services.clone(),
             next_epoch,
             config.threshold,
@@ -166,12 +159,12 @@ async fn test_run(
             connector,
         )
         .await?;
-        tracing::info!("nullifier successful");
+        tracing::info!("OPRF successful");
     }
     Ok(())
 }
 
-async fn run_nullifier(
+async fn run_oprf(
     nodes: Vec<String>,
     epoch: ShareEpoch,
     threshold: usize,
@@ -199,7 +192,7 @@ async fn run_nullifier(
     Ok(())
 }
 
-fn prepare_nullifier_stress_test_oprf_request(
+fn prepare_oprf_stress_test_oprf_request(
     oprf_key_id: OprfKeyId,
 ) -> eyre::Result<(Uuid, BlindedOprfRequest, OprfRequest<()>)> {
     let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
@@ -241,13 +234,12 @@ async fn stress_test(
     connector: Connector,
 ) -> eyre::Result<()> {
     tracing::info!("preparing requests..");
-    let mut request_ids = HashMap::with_capacity(cmd.nullifier_num);
-    let mut blinded_requests = HashMap::with_capacity(cmd.nullifier_num);
-    let mut init_requests = Vec::with_capacity(cmd.nullifier_num);
+    let mut request_ids = HashMap::with_capacity(cmd.runs);
+    let mut blinded_requests = HashMap::with_capacity(cmd.runs);
+    let mut init_requests = Vec::with_capacity(cmd.runs);
 
-    for idx in 0..cmd.nullifier_num {
-        let (request_id, blinded_req, req) =
-            prepare_nullifier_stress_test_oprf_request(oprf_key_id)?;
+    for idx in 0..cmd.runs {
+        let (request_id, blinded_req, req) = prepare_oprf_stress_test_oprf_request(oprf_key_id)?;
         request_ids.insert(idx, request_id);
         blinded_requests.insert(idx, blinded_req);
         init_requests.push(req);
@@ -271,8 +263,8 @@ async fn stress_test(
     }
     let init_results = init_results.join_all().await;
     let init_full_duration = start.elapsed();
-    let mut sessions = Vec::with_capacity(cmd.nullifier_num);
-    let mut durations = Vec::with_capacity(cmd.nullifier_num);
+    let mut sessions = Vec::with_capacity(cmd.runs);
+    let mut durations = Vec::with_capacity(cmd.runs);
     for result in init_results {
         match result {
             Ok((idx, session, duration)) => {
@@ -282,10 +274,10 @@ async fn stress_test(
             Err(err) => tracing::error!("Got an error during init: {err:?}"),
         }
     }
-    if durations.len() != cmd.nullifier_num {
+    if durations.len() != cmd.runs {
         eyre::bail!("init did encounter errors - see logs");
     }
-    let init_throughput = cmd.nullifier_num as f64 / init_full_duration.as_secs_f64();
+    let init_throughput = cmd.runs as f64 / init_full_duration.as_secs_f64();
     let init_avg = avg(&durations);
 
     let mut finish_challenges = sessions
@@ -330,11 +322,11 @@ async fn stress_test(
     if cmd.skip_checks {
         tracing::info!("got all results - skipping checks");
     } else {
-        tracing::info!("got all results - checking nullifiers + proofs");
+        tracing::info!("got all results - checking OPRF + proofs");
     }
     let finish_full_duration = start.elapsed();
 
-    let mut durations = Vec::with_capacity(cmd.nullifier_num);
+    let mut durations = Vec::with_capacity(cmd.runs);
 
     for result in finish_results {
         match result {
@@ -348,7 +340,7 @@ async fn stress_test(
     tracing::info!(
         "init req - total time: {init_full_duration:?} avg: {init_avg:?} throughput: {init_throughput} req/s"
     );
-    let final_throughput = cmd.nullifier_num as f64 / finish_full_duration.as_secs_f64();
+    let final_throughput = cmd.runs as f64 / finish_full_duration.as_secs_f64();
     let finish_avg = avg(&durations);
     tracing::info!(
         "finish req - total time: {finish_full_duration:?} avg: {finish_avg:?} throughput: {final_throughput} req/s"
@@ -371,26 +363,15 @@ async fn main() -> eyre::Result<()> {
         .context("while doing health checks")?;
     tracing::info!("everyone online..");
 
-    let private_key = PrivateKeySigner::from_str(config.taceo_private_key.expose_secret())?;
-    let wallet = EthereumWallet::from(private_key);
-
-    let provider = ProviderBuilder::new()
-        .wallet(wallet)
-        .connect(config.chain_rpc_url.expose_secret())
-        .await
-        .context("while connecting to RPC")?
-        .erased();
-    let contract = OprfKeyRegistry::new(config.oprf_key_registry_contract, provider);
-
     let mut start_epoch = ShareEpoch::from(config.start_epoch);
 
     let (oprf_key_id, oprf_public_key) = if let Some(oprf_key_id) = config.oprf_key_id {
         let oprf_key_id = OprfKeyId::new(oprf_key_id);
 
-        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+        let oprf_public_key = health_checks::oprf_public_key_from_services(
             oprf_key_id,
             start_epoch,
-            &contract,
+            &config.services,
             config.max_wait_time_key_gen,
         )
         .await?;
@@ -409,10 +390,10 @@ async fn main() -> eyre::Result<()> {
         );
         tracing::info!("registered OPRF key with: {oprf_key_id}");
 
-        let oprf_public_key = oprf_test::fetch_oprf_public_key_by_epoch(
+        let oprf_public_key = health_checks::oprf_public_key_from_services(
             oprf_key_id,
             start_epoch,
-            &contract,
+            &config.services,
             config.max_wait_time_key_gen,
         )
         .await?;
@@ -435,7 +416,6 @@ async fn main() -> eyre::Result<()> {
                 start_epoch,
                 oprf_key_id,
                 oprf_public_key,
-                contract,
                 connector,
             )
             .await?;
@@ -454,15 +434,8 @@ async fn main() -> eyre::Result<()> {
             tracing::info!("stress-test successful");
         }
         Command::EndlessRun(endless_run) => {
-            endless_run::endless_run(
-                config,
-                oprf_key_id,
-                contract,
-                oprf_public_key,
-                endless_run,
-                connector,
-            )
-            .await?
+            endless_run::endless_run(config, oprf_key_id, oprf_public_key, endless_run, connector)
+                .await?
         }
     }
 

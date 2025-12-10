@@ -1,17 +1,13 @@
-use std::time::Duration;
-
 use alloy::node_bindings::Anvil;
-use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::providers::{ProviderBuilder, WsConnect};
 use ark_ff::UniformRand as _;
-
 use eyre::Context as _;
 use oprf_test::oprf_key_registry_scripts::{self};
-use oprf_test::{
-    TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY, fetch_oprf_public_key_by_epoch, health_checks,
-};
+use oprf_test::{TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY, health_checks};
 use oprf_types::ShareEpoch;
 use oprf_types::chain::OprfKeyRegistry;
 use oprf_types::crypto::OprfPublicKey;
+use std::time::Duration;
 use tokio_tungstenite::Connector;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
@@ -51,8 +47,10 @@ async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
     println!("init key-gen with oprf key id: {oprf_key_id}");
 
     println!("Fetching OPRF public-key...");
+    let start_epoch = ShareEpoch::default();
     let oprf_public_key = health_checks::oprf_public_key_from_services(
         oprf_key_id,
+        start_epoch,
         &oprf_services,
         Duration::from_secs(120), // graceful timeout for CI
     )
@@ -61,8 +59,6 @@ async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
 
     println!("Running OPRF client flow...");
     let action = ark_babyjubjub::Fq::rand(&mut rng);
-
-    let start_epoch = ShareEpoch::default();
 
     // The client example verifies the DLogEquality
     let _verifiable_oprf_output = oprf_client_example::distributed_oprf(
@@ -85,9 +81,14 @@ async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
         TACEO_ADMIN_PRIVATE_KEY,
     );
     println!("init reshare with oprf key id: {oprf_key_id}");
-    // let oprf_public_key_reshare =
-    //     fetch_oprf_public_key_by_epoch(oprf_key_id, next_epoch, &contract, Duration::from_secs(60))
-    //         .await?;
+    let oprf_public_key_reshare = health_checks::oprf_public_key_from_services(
+        oprf_key_id,
+        next_epoch,
+        &oprf_services,
+        Duration::from_secs(120), // graceful timeout for CI
+    )
+    .await
+    .context("while loading OPRF key-material from services")?;
     assert_eq!(oprf_public_key, oprf_public_key_reshare);
     println!("finished reshare - computing one oprf with new and one with old share");
     let mut rng1 = &mut rand::thread_rng();
@@ -157,6 +158,7 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     println!("checking that key-material is registered at services..");
     let is_oprf_public_key = health_checks::oprf_public_key_from_services(
         oprf_key_id,
+        ShareEpoch::default(),
         &oprf_services,
         Duration::from_secs(120), // graceful timeout for CI
     )

@@ -51,15 +51,15 @@ async fn wallet(wallet_address: Address) -> impl IntoResponse {
     (StatusCode::OK, wallet_address.to_string())
 }
 
-/// Checks whether a OPRF public-key associated with the [`OprfKeyId`] is registered at the service.
+/// Checks whether a OPRF public-key associated with the [`OprfKeyId`] is registered at the service. If yes, returns the [`OprfPublicKeyWithEpoch`] containing the latest epoch currently stored at the service.
 ///
-/// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKey`].
+/// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKeyWithEpoch`].
 /// Returns `404 Not Found` if not registered.
 async fn oprf_key_available(
     oprf_material_store: OprfKeyMaterialStore,
     Path(id): Path<OprfKeyId>,
 ) -> impl IntoResponse {
-    if let Some(public_material) = oprf_material_store.get_oprf_public_key(id) {
+    if let Some(public_material) = oprf_material_store.get_oprf_public_key_with_epoch(id) {
         (StatusCode::OK, Json(public_material)).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()

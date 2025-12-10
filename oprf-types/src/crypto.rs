@@ -18,7 +18,7 @@ use circom_types::{ark_bn254::Bn254, groth16::Proof};
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use serde::{Deserialize, Serialize};
 
-use crate::ShareEpoch;
+use crate::{ShareEpoch, api::OprfPublicKeyWithEpoch};
 
 /// The party id of the OPRF node.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -248,6 +248,11 @@ impl OprfKeyMaterial {
         self.shares.values().last().cloned()
     }
 
+    /// Returns the latest [`ShareEpoch`] currently contained in the material. Returns `None` if empty.
+    pub fn get_latest_epoch(&self) -> Option<ShareEpoch> {
+        self.shares.keys().last().cloned()
+    }
+
     /// Returns the [`DLogShareShamir`] for the given epoch, or `None` if not found.
     pub fn get_share(&self, epoch: ShareEpoch) -> Option<DLogShareShamir> {
         self.shares.get(&epoch).cloned()
@@ -277,5 +282,13 @@ impl OprfKeyMaterial {
     /// Returns the [`OprfPublicKey`].
     pub fn get_oprf_public_key(&self) -> OprfPublicKey {
         self.oprf_public_key
+    }
+
+    /// Returns the [`OprfPublicKeyWithEpoch`].
+    pub fn get_oprf_public_key_with_epoch(&self) -> Option<OprfPublicKeyWithEpoch> {
+        Some(OprfPublicKeyWithEpoch {
+            key: self.oprf_public_key,
+            epoch: self.get_latest_epoch()?,
+        })
     }
 }
