@@ -86,4 +86,9 @@ pub struct OprfNodeConfig {
         value_parser = humantime::parse_duration
     )]
     pub get_oprf_key_material_timeout: Duration,
+
+    /// The block number to start listening for events from the OprfKeyRegistry contract.
+    /// If not set, will start from the latest block.
+    #[clap(long, env = "OPRF_NODE_START_BLOCK")]
+    pub start_block: Option<u64>,
 }

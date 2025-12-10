@@ -39,6 +39,7 @@ pub(crate) async fn key_event_watcher_task(
     contract_address: Address,
     secret_manager: SecretManagerService,
     dlog_secret_gen_service: DLogSecretGenService,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
     max_epoch_cache_size: usize,
 ) -> eyre::Result<()> {
@@ -57,6 +58,7 @@ pub(crate) async fn key_event_watcher_task(
         contract_address,
         dlog_secret_gen_service,
         secret_manager,
+        start_block,
         cancellation_token.clone(),
         max_epoch_cache_size,
     )
@@ -74,13 +76,18 @@ async fn handle_events(
     contract_address: Address,
     mut secret_gen: DLogSecretGenService,
     secret_manager: SecretManagerService,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
     max_epoch_cache_size: usize,
 ) -> eyre::Result<()> {
     let contract = OprfKeyRegistry::new(contract_address, provider.clone());
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(BlockNumberOrTag::Latest)
+        .from_block(
+            start_block
+                .map(BlockNumberOrTag::Number)
+                .unwrap_or(BlockNumberOrTag::Latest),
+        )
         .event_signature(vec![
             OprfKeyRegistry::SecretGenRound1::SIGNATURE_HASH,
             OprfKeyRegistry::SecretGenRound2::SIGNATURE_HASH,

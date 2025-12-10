@@ -33,6 +33,7 @@ pub(crate) async fn key_event_watcher_task(
     secret_manager: SecretManagerService,
     oprf_key_material_store: OprfKeyMaterialStore,
     get_oprf_key_material_timeout: Duration,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
     // shutdown service if event watcher encounters an error and drops this guard
@@ -51,6 +52,7 @@ pub(crate) async fn key_event_watcher_task(
         oprf_key_material_store,
         secret_manager,
         get_oprf_key_material_timeout,
+        start_block,
         cancellation_token.clone(),
     )
     .await
@@ -68,11 +70,16 @@ async fn handle_events(
     oprf_key_material_store: OprfKeyMaterialStore,
     secret_manager: SecretManagerService,
     get_oprf_key_material_timeout: Duration,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
     let filter = Filter::new()
         .address(contract_address)
-        .from_block(BlockNumberOrTag::Latest)
+        .from_block(
+            start_block
+                .map(BlockNumberOrTag::Number)
+                .unwrap_or(BlockNumberOrTag::Latest),
+        )
         .event_signature(vec![
             OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH,
             OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH,

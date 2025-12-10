@@ -80,4 +80,9 @@ pub struct OprfKeyGenConfig {
     /// Max cache size for epochs. Only the latest `max_epoch_cache_size` will be stored in the secret-manager!
     #[clap(long, env = "OPRF_NODE_MAX_EPOCH_CACHE_SIZE", default_value = "3")]
     pub max_epoch_cache_size: usize,
+
+    /// The block number to start listening for events from the OprfKeyRegistry contract.
+    /// If not set, will start from the latest block.
+    #[clap(long, env = "OPRF_NODE_START_BLOCK")]
+    pub start_block: Option<u64>,
 }

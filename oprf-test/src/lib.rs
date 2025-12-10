@@ -52,6 +52,7 @@ async fn start_node(
             session_lifetime: Duration::from_secs(60),
             wallet_address,
             get_oprf_key_material_timeout: Duration::from_secs(60),
+            start_block: Some(0),
         },
     };
     let never = async { futures::future::pending::<()>().await };
@@ -91,6 +92,7 @@ async fn start_key_gen(
         key_gen_witness_graph_path,
         max_wait_time_shutdown: Duration::from_secs(10),
         max_epoch_cache_size: 3,
+        start_block: Some(0),
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
