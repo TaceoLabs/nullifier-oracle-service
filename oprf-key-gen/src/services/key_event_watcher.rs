@@ -100,21 +100,16 @@ async fn handle_events(
 
     // if start_block is set, load past events from there to head
     if let Some(start_block) = start_block {
-        let head = provider
-            .get_block_number()
-            .await
-            .context("while getting current block number")?;
         tracing::info!("loading past events from block {start_block}..");
         let filter = Filter::new()
             .address(contract_address)
             .from_block(BlockNumberOrTag::Number(start_block))
-            .to_block(BlockNumberOrTag::Number(head))
+            .to_block(BlockNumberOrTag::Latest)
             .event_signature(event_signatures);
         let logs = provider
             .get_logs(&filter)
             .await
             .context("while loading past logs")?;
-        tracing::info!("loaded {} past events (head at {})", logs.len(), head);
         for log in logs {
             let block_number = log.block_number.unwrap_or_default();
             latest_block = block_number;
