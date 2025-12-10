@@ -14,6 +14,263 @@ contract BabyJubJub {
     uint256 public constant A = 168700;
     uint256 public constant D = 168696;
 
+    /// @notice Returns the bits of the characteristic of the scalarfield in big-endian order.
+    function characteristic_bits() private pure returns (uint8[251] memory) {
+        return [
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+        ];
+    }
+
     /// @notice Points are represented in Affine (x, y) coordinates. A prerequisite is that both points are on the curve. This can be checked with isOnCurve function.
     /// @param x1 The x-coordinate of the first point
     /// @param y1 The y-coordinate of the first point
@@ -31,9 +288,9 @@ contract BabyJubJub {
         uint256 dx1x2y1y2 = mulmod(D, mulmod(x1x2, y1y2, Q), Q);
 
         // x3 = (x1*y2 + y1*x2) / (1 + d*x1*x2*y1*y2)
-        // SAFETY: can add without mod because Q is 254 bits 
+        // SAFETY: can add without mod because Q is 254 bits
         uint256 x3Num = mulmod(x1, y2, Q) + mulmod(y1, x2, Q);
-        // SAFETY: can add without mod because Q is 254 bits 
+        // SAFETY: can add without mod because Q is 254 bits
         uint256 x3Den = 1 + dx1x2y1y2;
 
         // y3 = (y1*y2 - a*x1*x2) / (1 - d*x1*x2*y1*y2)
@@ -44,7 +301,7 @@ contract BabyJubJub {
         y3 = mulmod(y3Num, modInverse(y3Den, Q), Q);
     }
 
-    /// @notice Check if point is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2
+    /// @notice Checks if a point in affine form is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2
     ///
     /// @param x The x-coordinate of the point
     /// @param y The y-coordinate of the point
@@ -59,6 +316,16 @@ contract BabyJubJub {
         uint256 dxxyy = mulmod(D, mulmod(xx, yy, Q), Q);
 
         return addmod(axx, yy, Q) == addmod(1, dxxyy, Q);
+    }
+
+    /// @notice Checks if a point in affine form is in the sub-group with the same order as the scalarfield. This method assumes that the point is on the curve.
+    ///
+    /// @param x The x-coordinate of the point
+    /// @param y The y-coordinate of the point
+    /// @return True if the point is in the correct sub-subgroup, false otherwise.
+    function isInCorrectSubgroup(uint256 x, uint256 y) public pure returns (bool) {
+        (uint256 x1, uint256 y1, uint256 t1, uint256 z1) = _scalarMulInner(characteristic_bits(), 0, x, y);
+        return x1 == 0 && y1 == z1 && y != 0 && t1 == 0;
     }
 
     /// @notice Computes the lagrange coefficients for the provided party IDs (starting at zero) and the threshold of the secret-sharing. We expect callsite to check that. Importantly, this method will always return an array with length numPeers, where lagrange coefficient of party ID is on index in the array (with zero for not participating nodes). We need this because the nodes will access this array with their partyID.
@@ -102,24 +369,33 @@ contract BabyJubJub {
         return lagrange;
     }
 
-    /// @notice Computes xP, where x is an element of the scalarfield of BabyJubJub and P is an affine point on the BabyJubJub curve represented as x and y. This method reverts if scalar doesn't fit into BabyJubJub's scalarfield. We expect that check to be enforced on callsite.
+    /// @notice Computes xP, where x is an element of the scalarfield of BabyJubJub and P is an affine point on the BabyJubJub curve represented as x and y. This method reverts if scalar doesn't fit into BabyJubJub's scalarfield or if the point is not on the curve or in the correct sub-group. We expect that check to be enforced on callsite.
     /// This method will not check whether the point in on the curve nor if it is in the correct subgroup.
     ///
     /// @param scalar The scalar for the multiplication.
     /// @param x The x-coordinate of the affine point.
     /// @param y The y-coordinate of the affine point.
-    /// @return x_res The x-coordinate of xP
-    /// @return y_res The y-coordinate of xP
-    function scalarMul(uint256 scalar, uint256 x, uint256 y) public pure returns (uint256 x_res, uint256 y_res) {
+    /// @return The (x,y)-coordinates of xP
+    function scalarMul(uint256 scalar, uint256 x, uint256 y) public pure returns (uint256, uint256) {
         require(scalar < R);
-        x_res = 0;
-        y_res = 1;
-        uint256 t_res = 0;
-        uint256 z_res = 1;
+        require(isOnCurve(x, y));
         if (scalar == 0) {
-            return (x_res, y_res);
+            return (0, 1);
         }
         (uint8[251] memory bits, uint256 highBit) = getBits(scalar);
+        (uint256 x1, uint256 y1, uint256 t1, uint256 z1) = _scalarMulInner(bits, highBit, x, y);
+        return toAffine(x1, y1, t1, z1);
+    }
+
+    function _scalarMulInner(uint8[251] memory bits, uint256 highBit, uint256 x, uint256 y)
+        private
+        pure
+        returns (uint256 x_res, uint256 y_res, uint256 t_res, uint256 z_res)
+    {
+        x_res = 0;
+        y_res = 1;
+        t_res = 0;
+        z_res = 1;
         // skip leading zeros
         for (uint256 i = highBit; i < 251; ++i) {
             (x_res, y_res, t_res, z_res) = doubleTwistedEdwards(x_res, y_res, z_res);
@@ -127,7 +403,7 @@ contract BabyJubJub {
                 (x_res, y_res, t_res, z_res) = addProjective(x_res, y_res, t_res, z_res, x, y);
             }
         }
-        return toAffine(x_res, y_res, t_res, z_res);
+        return (x_res, y_res, t_res, z_res);
     }
 
     /// @notice A+B, where A and B are points on the BabyJubJub curve with the difference that A represented with projective coordinates and B with affine coordinates. Returns A+B in projective form.
@@ -259,7 +535,7 @@ contract BabyJubJub {
         // D = a * A
         uint256 d = mulmod(a, A, Q);
         // E = (X1 + Y1)^2 - A - B
-        // SAFETY: can add without mod because Q is 254 bits 
+        // SAFETY: can add without mod because Q is 254 bits
         uint256 x1y1 = x + y;
         uint256 x1y12 = mulmod(x1y1, x1y1, Q);
         uint256 e = submod(submod(x1y12, a, Q), b, Q);

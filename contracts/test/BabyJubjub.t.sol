@@ -22,10 +22,12 @@ contract BabyJubJubTest is Test {
 
     function testIdentityPoint() public view {
         assertTrue(babyJubJub.isOnCurve(0, 1));
+        assertTrue(babyJubJub.isInCorrectSubgroup(0, 1));
     }
 
     function testGeneratorOnCurve() public view {
         assertTrue(babyJubJub.isOnCurve(GEN_X, GEN_Y));
+        assertTrue(babyJubJub.isInCorrectSubgroup(GEN_X, GEN_Y));
     }
 
     function doSingleLagrangeCheckDeg1(uint8[2] memory ins, uint256[3] memory should) private view {
@@ -257,6 +259,32 @@ contract BabyJubJubTest is Test {
         assertEq(y_kat7, 21395320191466327696365123237974277902424108876271626253976471516775696177004);
         assertEq(x_kat8, 16145939611737958285335973800531782695052667454953266035972487066479497209604);
         assertEq(y_kat8, 7586271879783443543166246816922473256134012536615268324850965019989201082300);
+    }
+
+    function testCurveChecks() public view {
+        uint256 x_not_curve = 42;
+        uint256 y_not_curve = 42;
+        assertFalse(babyJubJub.isOnCurve(x_not_curve, y_not_curve));
+
+        uint256 two_torsion_x = 0;
+        uint256 two_torsion_y = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
+        assertTrue(babyJubJub.isOnCurve(two_torsion_x, two_torsion_y));
+        assertFalse(babyJubJub.isInCorrectSubgroup(two_torsion_x, two_torsion_y));
+
+        uint256 x_kat1 = 8375249795494070168540398175218576938320513942163892031567097533429205888430;
+        uint256 y_kat1 = 18441278903475799996286506656206445898730701347337446493298174331394670509347;
+        uint256 x_kat2 = 1833532272404155580546508629437702206187237625211957633811621844821648822989;
+        uint256 y_kat2 = 21395320191466327696365123237974277902424108876271626253976471516775696177004;
+        uint256 x_kat3 = 16145939611737958285335973800531782695052667454953266035972487066479497209604;
+        uint256 y_kat3 = 7586271879783443543166246816922473256134012536615268324850965019989201082300;
+        assertTrue(babyJubJub.isOnCurve(x_kat1, y_kat1));
+        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat1, y_kat1));
+
+        assertTrue(babyJubJub.isOnCurve(x_kat2, y_kat2));
+        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat2, y_kat2));
+
+        assertTrue(babyJubJub.isOnCurve(x_kat3, y_kat3));
+        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat3, y_kat3));
     }
 }
 
