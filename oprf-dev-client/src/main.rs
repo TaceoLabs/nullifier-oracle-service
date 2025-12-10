@@ -1,3 +1,9 @@
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use alloy::primitives::{Address, U160};
 use ark_ff::UniformRand as _;
 use clap::{Parser, Subcommand};
@@ -13,11 +19,6 @@ use oprf_types::{
 use rand::SeedableRng;
 use rustls::{ClientConfig, RootCertStore};
 use secrecy::{ExposeSecret, SecretString};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
@@ -367,7 +368,6 @@ async fn main() -> eyre::Result<()> {
 
     let (oprf_key_id, oprf_public_key) = if let Some(oprf_key_id) = config.oprf_key_id {
         let oprf_key_id = OprfKeyId::new(oprf_key_id);
-
         let oprf_public_key = health_checks::oprf_public_key_from_services(
             oprf_key_id,
             start_epoch,
@@ -389,7 +389,6 @@ async fn main() -> eyre::Result<()> {
             config.taceo_private_key.expose_secret(),
         );
         tracing::info!("registered OPRF key with: {oprf_key_id}");
-
         let oprf_public_key = health_checks::oprf_public_key_from_services(
             oprf_key_id,
             start_epoch,
@@ -397,7 +396,6 @@ async fn main() -> eyre::Result<()> {
             config.max_wait_time_key_gen,
         )
         .await?;
-
         (oprf_key_id, oprf_public_key)
     };
 

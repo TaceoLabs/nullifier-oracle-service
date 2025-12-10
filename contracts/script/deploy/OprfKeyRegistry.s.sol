@@ -17,19 +17,27 @@ contract DeployOprfKeyRegistryScript is Script {
         vm.startBroadcast();
 
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
-
         address accumulatorAddress = vm.envAddress("ACCUMULATOR_ADDRESS");
         address keyGenVerifierAddress = vm.envAddress("KEY_GEN_VERIFIER_ADDRESS");
+        uint256 threshold = vm.envOr("THRESHOLD", uint256(2));
+        uint256 numPeers = vm.envOr("NUM_PEERS", uint256(3));
 
         console.log("using TACEO address:", taceoAdminAddress);
         console.log("using accumulator address:", accumulatorAddress);
         console.log("using key-gen verifier address:", keyGenVerifierAddress);
+        console.log("using threshold:", threshold);
+        console.log("using numPeers:", numPeers);
 
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
         bytes memory initData = abi.encodeWithSelector(
-            OprfKeyRegistry.initialize.selector, taceoAdminAddress, keyGenVerifierAddress, accumulatorAddress
+            OprfKeyRegistry.initialize.selector,
+            taceoAdminAddress,
+            keyGenVerifierAddress,
+            accumulatorAddress,
+            threshold,
+            numPeers
         );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);

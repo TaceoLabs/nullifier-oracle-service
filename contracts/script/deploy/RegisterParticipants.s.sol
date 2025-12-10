@@ -20,20 +20,12 @@ contract RegisterParticipantScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        address aliceAddress = vm.envAddress("ALICE_ADDRESS");
-        address bobAddress = vm.envAddress("BOB_ADDRESS");
-        address carolAddress = vm.envAddress("CAROL_ADDRESS");
+        address[] memory participants = vm.envAddress("PARTICIPANT_ADDRESSES", ",");
+        for (uint256 i = 0; i < participants.length; i++) {
+            console.log("Registering participant address:", participants[i]);
+        }
 
-        address[] memory peerAddresses = new address[](3);
-        peerAddresses[0] = aliceAddress;
-        peerAddresses[1] = bobAddress;
-        peerAddresses[2] = carolAddress;
-
-        console.log("alice address:", aliceAddress);
-        console.log("bob address:", bobAddress);
-        console.log("carol address:", carolAddress);
-
-        oprfKeyRegistry.registerOprfPeers(peerAddresses);
+        oprfKeyRegistry.registerOprfPeers(participants);
 
         // check that contract is ready
         assert(oprfKeyRegistry.isContractReady());

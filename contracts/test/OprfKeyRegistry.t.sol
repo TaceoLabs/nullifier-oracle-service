@@ -71,8 +71,9 @@ contract OprfKeyRegistryTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
         oprfKeyRegistry = OprfKeyRegistry(address(proxy));
@@ -89,8 +90,9 @@ contract OprfKeyRegistryTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         OprfKeyRegistry oprfKeyRegistryTest = OprfKeyRegistry(address(proxyTest));
@@ -108,8 +110,9 @@ contract OprfKeyRegistryTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         OprfKeyRegistry oprfKeyRegistryTest = OprfKeyRegistry(address(proxyTest));
@@ -153,8 +156,9 @@ contract OprfKeyRegistryTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         OprfKeyRegistry oprfKeyRegistryTest = OprfKeyRegistry(address(proxyTest));
@@ -213,8 +217,9 @@ contract OprfKeyRegistryTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         ERC1967Proxy proxyTest = new ERC1967Proxy(address(implementation), initData);
         OprfKeyRegistry oprfKeyRegistryTest = OprfKeyRegistry(address(proxyTest));

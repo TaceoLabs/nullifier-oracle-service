@@ -4,23 +4,22 @@ use alloy::primitives::{Address, U160};
 use oprf_types::OprfKeyId;
 use regex::Regex;
 
-use crate::{OPRF_PEER_ADDRESS_0, OPRF_PEER_ADDRESS_1, OPRF_PEER_ADDRESS_2};
-
 pub fn deploy_test_setup(
     rpc_url: &str,
     taceo_admin_address: &str,
     taceo_admin_private_key: &str,
+    participant_addresses: &str,
+    threshold: usize,
+    num_peers: usize,
 ) -> Address {
     let mut cmd = Command::new("forge");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let cmd = cmd
         .current_dir(dir.join("../contracts"))
         .env("TACEO_ADMIN_ADDRESS", taceo_admin_address)
-        .env("NUM_PEERS", "3")
-        .env("THRESHOLD", "2")
-        .env("ALICE_ADDRESS", OPRF_PEER_ADDRESS_0.to_string())
-        .env("BOB_ADDRESS", OPRF_PEER_ADDRESS_1.to_string())
-        .env("CAROL_ADDRESS", OPRF_PEER_ADDRESS_2.to_string())
+        .env("NUM_PEERS", num_peers.to_string())
+        .env("THRESHOLD", threshold.to_string())
+        .env("PARTICIPANT_ADDRESSES", participant_addresses)
         .arg("script")
         .arg("script/test/TestSetup.s.sol")
         .arg("--rpc-url")

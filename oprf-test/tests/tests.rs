@@ -3,7 +3,10 @@ use alloy::providers::{ProviderBuilder, WsConnect};
 use ark_ff::UniformRand as _;
 use eyre::Context as _;
 use oprf_test::oprf_key_registry_scripts::{self};
-use oprf_test::{TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY, health_checks};
+use oprf_test::{
+    OPRF_PEER_ADDRESS_0, OPRF_PEER_ADDRESS_1, OPRF_PEER_ADDRESS_2, OPRF_PEER_ADDRESS_3,
+    OPRF_PEER_ADDRESS_4, TACEO_ADMIN_ADDRESS, TACEO_ADMIN_PRIVATE_KEY, health_checks,
+};
 use oprf_types::ShareEpoch;
 use oprf_types::chain::OprfKeyRegistry;
 use oprf_types::crypto::OprfPublicKey;
@@ -12,7 +15,7 @@ use tokio_tungstenite::Connector;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
-async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
+async fn oprf_example_with_reshare_e2e_test_13() -> eyre::Result<()> {
     let anvil = Anvil::new().spawn();
     let mut rng = rand::thread_rng();
 
@@ -21,18 +24,21 @@ async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
         &anvil.endpoint(),
         &TACEO_ADMIN_ADDRESS.to_string(),
         TACEO_ADMIN_PRIVATE_KEY,
+        &format!("{OPRF_PEER_ADDRESS_0},{OPRF_PEER_ADDRESS_1},{OPRF_PEER_ADDRESS_2}"),
+        2,
+        3,
     );
 
-    let secret_managers = oprf_test::create_secret_managers();
+    let secret_managers = oprf_test::create_3_secret_managers();
     println!("Starting OPRF key-gens...");
-    oprf_test::start_key_gens(
+    oprf_test::start_3_key_gens(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
     )
     .await;
     println!("Starting OPRF nodes...");
-    let oprf_services = oprf_test::start_nodes(
+    let oprf_services = oprf_test::start_3_nodes(
         &anvil.ws_endpoint(),
         secret_managers,
         oprf_key_registry_contract,
@@ -122,6 +128,75 @@ async fn oprf_example_with_reshare_e2e_test() -> eyre::Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[serial_test::file_serial]
+async fn oprf_example_e2e_test_25() -> eyre::Result<()> {
+    let anvil = Anvil::new().spawn();
+    let mut rng = rand::thread_rng();
+
+    println!("Deploying OprfKeyRegistry contract...");
+    let oprf_key_registry_contract = oprf_key_registry_scripts::deploy_test_setup(
+        &anvil.endpoint(),
+        &TACEO_ADMIN_ADDRESS.to_string(),
+        TACEO_ADMIN_PRIVATE_KEY,
+        &format!(
+            "{OPRF_PEER_ADDRESS_0},{OPRF_PEER_ADDRESS_1},{OPRF_PEER_ADDRESS_2},{OPRF_PEER_ADDRESS_3},{OPRF_PEER_ADDRESS_4}"
+        ),
+        3,
+        5,
+    );
+
+    let secret_managers = oprf_test::create_5_secret_managers();
+    println!("Starting OPRF key-gens...");
+    oprf_test::start_5_key_gens(
+        &anvil.ws_endpoint(),
+        secret_managers.clone(),
+        oprf_key_registry_contract,
+    )
+    .await;
+    println!("Starting OPRF nodes...");
+    let oprf_services = oprf_test::start_5_nodes(
+        &anvil.ws_endpoint(),
+        secret_managers,
+        oprf_key_registry_contract,
+    )
+    .await;
+
+    let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
+        &anvil.endpoint(),
+        oprf_key_registry_contract,
+        TACEO_ADMIN_PRIVATE_KEY,
+    );
+    println!("init key-gen with rp id: {oprf_key_id}");
+
+    println!("Fetching OPRF public-key...");
+    let oprf_public_key = health_checks::oprf_public_key_from_services(
+        oprf_key_id,
+        ShareEpoch::default(),
+        &oprf_services,
+        Duration::from_secs(120), // graceful timeout for CI
+    )
+    .await
+    .context("while loading OPRF key-material from services")?;
+
+    println!("Running OPRF client flow...");
+    let action = ark_babyjubjub::Fq::rand(&mut rng);
+
+    let _verifiable_oprf_output = oprf_client_example::distributed_oprf(
+        oprf_services.as_slice(),
+        3,
+        oprf_public_key,
+        oprf_key_id,
+        ShareEpoch::default(),
+        action,
+        Connector::Plain,
+        &mut rng,
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[serial_test::file_serial]
 async fn test_delete_oprf_key() -> eyre::Result<()> {
     let anvil = Anvil::new().spawn();
 
@@ -130,18 +205,21 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
         &anvil.endpoint(),
         &TACEO_ADMIN_ADDRESS.to_string(),
         TACEO_ADMIN_PRIVATE_KEY,
+        &format!("{OPRF_PEER_ADDRESS_0},{OPRF_PEER_ADDRESS_1},{OPRF_PEER_ADDRESS_2}"),
+        2,
+        3,
     );
 
-    let secret_managers = oprf_test::create_secret_managers();
+    let secret_managers = oprf_test::create_3_secret_managers();
     println!("Starting OPRF key-gens...");
-    oprf_test::start_key_gens(
+    oprf_test::start_3_key_gens(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
     )
     .await;
     println!("Starting OPRF nodes...");
-    let oprf_services = oprf_test::start_nodes(
+    let oprf_services = oprf_test::start_3_nodes(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
