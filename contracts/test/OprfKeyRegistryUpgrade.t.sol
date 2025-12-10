@@ -95,8 +95,9 @@ contract OprfKeyRegistryUpgradeTest is Test {
         // Deploy implementation
         OprfKeyRegistry implementation = new OprfKeyRegistry();
         // Encode initializer call
-        bytes memory initData =
-            abi.encodeWithSelector(OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator);
+        bytes memory initData = abi.encodeWithSelector(
+            OprfKeyRegistry.initialize.selector, taceoAdmin, verifierKeyGen, accumulator, THRESHOLD, MAX_PEERS
+        );
         // Deploy proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
         oprfKeyRegistry = OprfKeyRegistry(address(proxy));

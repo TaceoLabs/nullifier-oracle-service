@@ -7,11 +7,22 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_13 = 24;
+uint256 constant PUBLIC_INPUT_LENGTH_KEYGEN_25 = 36;
 uint256 constant PUBLIC_INPUT_LENGTH_NULLIFIER = 13;
 uint256 constant AUTHENTICATOR_MERKLE_TREE_DEPTH = 30;
 
 interface IVerifierKeyGen13 {
-    function verifyCompressedProof(uint256[4] calldata compressedProof, uint256[24] calldata input) external view;
+    function verifyCompressedProof(
+        uint256[4] calldata compressedProof,
+        uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] calldata input
+    ) external view;
+}
+
+interface IVerifierKeyGen25 {
+    function verifyCompressedProof(
+        uint256[4] calldata compressedProof,
+        uint256[PUBLIC_INPUT_LENGTH_KEYGEN_25] calldata input
+    ) external view;
 }
 
 interface IBabyJubJub {
@@ -39,7 +50,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     mapping(address => bool) public keygenAdmins;
     uint256 public amountKeygenAdmins;
 
-    IVerifierKeyGen13 public keyGenVerifier;
+    address public keyGenVerifier;
     IBabyJubJub public accumulator;
     uint256 public threshold;
     uint256 public numPeers;
@@ -103,6 +114,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     error UnexpectedAmountPeers(uint256 expectedParties);
     error UnknownId(uint160 id);
     error WrongRound();
+    error UnsupportedNumPeersThreshold();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -111,22 +123,25 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
 
     /// @notice Initializer function to set up the OprfKeyRegistry contract, this is not a constructor due to the use of upgradeable proxies.
     /// @param _keygenAdmin The address of the key generation administrator, only party that is allowed to start key generation processes.
-    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation.
+    /// @param _keyGenVerifierAddress The address of the Groth16 verifier contract for key generation (needs to be compatible with threshold numPeers values).
     /// @param _accumulatorAddress The address of the BabyJubJub accumulator contract.
-    function initialize(address _keygenAdmin, address _keyGenVerifierAddress, address _accumulatorAddress)
-        public
-        virtual
-        initializer
-    {
+    /// @param _threshold The threshold number of peers required for key generation.
+    /// @param _numPeers The number of peers participating in the key generation.
+    function initialize(
+        address _keygenAdmin,
+        address _keyGenVerifierAddress,
+        address _accumulatorAddress,
+        uint256 _threshold,
+        uint256 _numPeers
+    ) public virtual initializer {
         __Ownable_init(msg.sender);
         __Ownable2Step_init();
         keygenAdmins[_keygenAdmin] = true;
         amountKeygenAdmins += 1;
-        keyGenVerifier = IVerifierKeyGen13(_keyGenVerifierAddress);
+        keyGenVerifier = _keyGenVerifierAddress;
         accumulator = IBabyJubJub(_accumulatorAddress);
-        // The current version of the contract has fixed parameters due to its reliance on specific zk-SNARK circuits.
-        threshold = 2;
-        numPeers = 3;
+        threshold = _threshold;
+        numPeers = _numPeers;
         isContractReady = false;
     }
 
@@ -416,6 +431,10 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         // set the contribution to done
         st.round2Done[partyId] = true;
 
+        // depending on key-gen or reshare a different amount of producers
+        uint256 necessaryContributions = st.generatedEpoch == 0 ? numPeers : threshold;
+        _tryEmitRound3Event(oprfKeyId, necessaryContributions, st);
+
         // last step verify the proof and potentially revert if proof fails
 
         // build the public input:
@@ -427,30 +446,57 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         // 6) Degree (Basefield BabyJubJub)
         // 7) Public Keys from peers (in this case 3 Affine Points BabyJubJub)
         // 8) Nonces (in this case 3 Basefield BabyJubJub)
-        // verifier.verifyProof();
-        uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] memory publicInputs;
 
-        Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
-        publicInputs[0] = pubKeyList[partyId].x;
-        publicInputs[1] = pubKeyList[partyId].y;
-        publicInputs[2] = st.round1[partyId].commShare.x;
-        publicInputs[3] = st.round1[partyId].commShare.y;
-        publicInputs[4] = st.round1[partyId].commCoeffs;
-        publicInputs[14] = threshold - 1;
-        // peer keys
-        for (uint256 i = 0; i < numPeers; ++i) {
-            publicInputs[5 + i] = data.ciphers[i].cipher;
-            publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
-            publicInputs[5 + numPeers + (i * 2) + 1] = data.ciphers[i].commitment.y;
-            publicInputs[15 + (i * 2) + 0] = pubKeyList[i].x;
-            publicInputs[15 + (i * 2) + 1] = pubKeyList[i].y;
-            publicInputs[21 + i] = data.ciphers[i].nonce;
+        // TODO this is currently hardcoded for 13 and 25 need to make this more generic later
+        if (numPeers == 3 && threshold == 2) {
+            IVerifierKeyGen13 keyGenVerifier13 = IVerifierKeyGen13(keyGenVerifier);
+
+            uint256[PUBLIC_INPUT_LENGTH_KEYGEN_13] memory publicInputs;
+
+            Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
+            publicInputs[0] = pubKeyList[partyId].x;
+            publicInputs[1] = pubKeyList[partyId].y;
+            publicInputs[2] = st.round1[partyId].commShare.x;
+            publicInputs[3] = st.round1[partyId].commShare.y;
+            publicInputs[4] = st.round1[partyId].commCoeffs;
+            publicInputs[5 + (numPeers * 3)] = threshold - 1;
+            // peer keys
+            for (uint256 i = 0; i < numPeers; ++i) {
+                publicInputs[5 + i] = data.ciphers[i].cipher;
+                publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
+                publicInputs[5 + numPeers + (i * 2) + 1] = data.ciphers[i].commitment.y;
+                publicInputs[5 + (numPeers * 3) + 1 + (i * 2) + 0] = pubKeyList[i].x;
+                publicInputs[5 + (numPeers * 3) + 1 + (i * 2) + 1] = pubKeyList[i].y;
+                publicInputs[5 + (numPeers * 5) + 1 + i] = data.ciphers[i].nonce;
+            }
+            // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
+            keyGenVerifier13.verifyCompressedProof(data.compressedProof, publicInputs);
+        } else if (numPeers == 5 && threshold == 3) {
+            IVerifierKeyGen25 keyGenVerifier25 = IVerifierKeyGen25(keyGenVerifier);
+
+            uint256[PUBLIC_INPUT_LENGTH_KEYGEN_25] memory publicInputs;
+
+            Types.BabyJubJubElement[] memory pubKeyList = _loadPeerPublicKeys(st);
+            publicInputs[0] = pubKeyList[partyId].x;
+            publicInputs[1] = pubKeyList[partyId].y;
+            publicInputs[2] = st.round1[partyId].commShare.x;
+            publicInputs[3] = st.round1[partyId].commShare.y;
+            publicInputs[4] = st.round1[partyId].commCoeffs;
+            publicInputs[5 + (numPeers * 3)] = threshold - 1;
+            // peer keys
+            for (uint256 i = 0; i < numPeers; ++i) {
+                publicInputs[5 + i] = data.ciphers[i].cipher;
+                publicInputs[5 + numPeers + (i * 2) + 0] = data.ciphers[i].commitment.x;
+                publicInputs[5 + numPeers + (i * 2) + 1] = data.ciphers[i].commitment.y;
+                publicInputs[5 + (numPeers * 3) + 1 + (i * 2) + 0] = pubKeyList[i].x;
+                publicInputs[5 + (numPeers * 3) + 1 + (i * 2) + 1] = pubKeyList[i].y;
+                publicInputs[5 + (numPeers * 5) + 1 + i] = data.ciphers[i].nonce;
+            }
+            // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
+            keyGenVerifier25.verifyCompressedProof(data.compressedProof, publicInputs);
+        } else {
+            revert UnsupportedNumPeersThreshold();
         }
-        // depending on key-gen or reshare a different amount of producers
-        uint256 necessaryContributions = st.generatedEpoch == 0 ? numPeers : threshold;
-        _tryEmitRound3Event(oprfKeyId, necessaryContributions, st);
-        // As last step we call the foreign contract and revert the whole transaction in case anything is wrong.
-        keyGenVerifier.verifyCompressedProof(data.compressedProof, publicInputs);
     }
 
     /// @notice Adds a Round 3 contribution to the key generation process. Only callable by registered OPRF peers. This is exactly the same process for key-gen and reshare because nodes just acknowledge that they received their ciphertexts.

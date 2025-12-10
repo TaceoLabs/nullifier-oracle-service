@@ -33,6 +33,7 @@ pub(crate) async fn key_event_watcher_task(
     secret_manager: SecretManagerService,
     oprf_key_material_store: OprfKeyMaterialStore,
     get_oprf_key_material_timeout: Duration,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
     // shutdown service if event watcher encounters an error and drops this guard
@@ -51,6 +52,7 @@ pub(crate) async fn key_event_watcher_task(
         oprf_key_material_store,
         secret_manager,
         get_oprf_key_material_timeout,
+        start_block,
         cancellation_token.clone(),
     )
     .await
@@ -68,17 +70,48 @@ async fn handle_events(
     oprf_key_material_store: OprfKeyMaterialStore,
     secret_manager: SecretManagerService,
     get_oprf_key_material_timeout: Duration,
+    start_block: Option<u64>,
     cancellation_token: CancellationToken,
 ) -> eyre::Result<()> {
+    let event_signatures = vec![
+        OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH,
+        OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH,
+    ];
     let filter = Filter::new()
         .address(contract_address)
         .from_block(BlockNumberOrTag::Latest)
-        .event_signature(vec![
-            OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH,
-            OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH,
-        ]);
-    // Subscribe to event logs
+        .event_signature(event_signatures.clone());
+    // subscribe now so we don't miss any events between now and when we start processing past events
     let sub = provider.subscribe_logs(&filter).await?;
+    let mut latest_block = 0;
+
+    // if start_block is set, load past events from there to head
+    if let Some(start_block) = start_block {
+        tracing::info!("loading past events from block {start_block}..");
+        let filter = Filter::new()
+            .address(contract_address)
+            .from_block(BlockNumberOrTag::Number(start_block))
+            .to_block(BlockNumberOrTag::Latest)
+            .event_signature(event_signatures);
+        let logs = provider
+            .get_logs(&filter)
+            .await
+            .context("while loading past logs")?;
+        for log in logs {
+            let block_number = log.block_number.unwrap_or_default();
+            latest_block = block_number;
+            tracing::info!("handling past event from block {block_number}..");
+            handle_log(
+                log,
+                &oprf_key_material_store,
+                &secret_manager,
+                get_oprf_key_material_timeout,
+            )
+            .await
+            .context("while handling past log")?;
+        }
+    };
+
     let mut stream = sub.into_stream();
     loop {
         let log = tokio::select! {
@@ -89,23 +122,49 @@ async fn handle_events(
                 break;
             }
         };
-
-        match log.topic0() {
-            Some(&OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH) => handle_finalize(
-                log,
-                &oprf_key_material_store,
-                &secret_manager,
-                get_oprf_key_material_timeout,
-            )
-            .await
-            .context("while handling finalize")?,
-
-            Some(&OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH) => {
-                handle_delete(log, &oprf_key_material_store).context("while handling deletion")?
+        // skip logs from blocks we've already handled with get_logs
+        if let Some(block_number) = log.block_number {
+            if block_number <= latest_block {
+                tracing::info!(
+                    "skipping event from block {block_number} - already handled up to {latest_block}"
+                );
+                continue;
             }
-            x => {
-                tracing::warn!("unknown event: {x:?}");
-            }
+        }
+        handle_log(
+            log,
+            &oprf_key_material_store,
+            &secret_manager,
+            get_oprf_key_material_timeout,
+        )
+        .await
+        .context("while handling log")?;
+    }
+    Ok(())
+}
+
+#[instrument(level = "info", skip_all)]
+async fn handle_log(
+    log: Log<LogData>,
+    oprf_key_material_store: &OprfKeyMaterialStore,
+    secret_manager: &SecretManagerService,
+    get_oprf_key_material_timeout: Duration,
+) -> eyre::Result<()> {
+    match log.topic0() {
+        Some(&OprfKeyRegistry::SecretGenFinalize::SIGNATURE_HASH) => handle_finalize(
+            log,
+            oprf_key_material_store,
+            secret_manager,
+            get_oprf_key_material_timeout,
+        )
+        .await
+        .context("while handling finalize")?,
+
+        Some(&OprfKeyRegistry::KeyDeletion::SIGNATURE_HASH) => {
+            handle_delete(log, oprf_key_material_store).context("while handling deletion")?
+        }
+        x => {
+            tracing::warn!("unknown event: {x:?}");
         }
     }
     Ok(())

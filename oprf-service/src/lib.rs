@@ -161,6 +161,7 @@ pub async fn init<
             secret_manager,
             oprf_key_material_store.clone(),
             config.get_oprf_key_material_timeout,
+            config.start_block,
             cancellation_token,
         )
     });

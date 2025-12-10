@@ -90,6 +90,7 @@ pub async fn start(
             contract_address,
             secret_manager,
             dlog_secret_gen_service,
+            config.start_block,
             cancellation_token,
             config.max_epoch_cache_size,
         )

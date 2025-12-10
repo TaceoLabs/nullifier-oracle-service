@@ -217,16 +217,12 @@ impl DLogSecretGenService {
         oprf_key_id: OprfKeyId,
         pks: Vec<EphemeralEncryptionPublicKey>,
     ) -> eyre::Result<SecretGenRound2Contribution> {
-        // check that degree is 1 and num_parties is 3
-        if pks.len() != 3 {
-            eyre::bail!("only can do num_parties 3");
-        }
         let toxic_waste_r1 = self
             .toxic_waste_round1
             .remove(&oprf_key_id)
             .expect("todo how to handle this");
         let (contribution, toxix_waste_r2) =
-            compute_keygen_proof_max_degree1_parties3(&self.key_gen_material, toxic_waste_r1, pks)
+            compute_keygen_proof(&self.key_gen_material, toxic_waste_r1, pks)
                 .context("while computing proof for round2")?;
         self.toxic_waste_round2.insert(oprf_key_id, toxix_waste_r2);
         Ok(SecretGenRound2Contribution {
@@ -382,26 +378,21 @@ fn decrypt_key_gen_ciphertexts(
     }
 }
 
-/// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
+/// Executes the `KeyGen` circom circuit
 ///
 /// ## Security Considerations
 /// This method expects that the parameter `pks` contains exactly three [`EphemeralEncryptionPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
 ///
-/// If `pks.len()` != 3, the method panics.
 /// If `pks` were constructed without [`EphemeralEncryptionPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
 ///
 /// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
-fn compute_keygen_proof_max_degree1_parties3(
+fn compute_keygen_proof(
     key_gen_material: &CircomGroth16Material,
     toxic_waste: ToxicWasteRound1,
     pks: Vec<EphemeralEncryptionPublicKey>,
 ) -> eyre::Result<(SecretGenCiphertexts, ToxicWasteRound2)> {
     // compute the nonces for every party
-    assert_eq!(
-        pks.len(),
-        3,
-        "amount pks must be checked before calling this function"
-    );
+    let num_parties = pks.len();
     let mut rng = rand::thread_rng();
     let nonces = (0..pks.len())
         .map(|_| ark_babyjubjub::Fq::rand(&mut rng))
@@ -452,9 +443,10 @@ fn compute_keygen_proof_max_degree1_parties3(
     // parse commitment to coefficients
     let comm_coeffs_computed = public_inputs[4];
 
-    let ciphertexts = public_inputs[5..=7].iter();
-
-    let comm_plains = public_inputs[8..=13]
+    // parse one ciphertext per party
+    let ciphertexts = public_inputs[5..5 + num_parties].iter();
+    // parse one affine point (2 elements in inputs) per party
+    let comm_plains = public_inputs[5 + num_parties..5 + num_parties * 3]
         .chunks_exact(2)
         .map(|coords| ark_babyjubjub::EdwardsAffine::new(coords[0], coords[1]));
 

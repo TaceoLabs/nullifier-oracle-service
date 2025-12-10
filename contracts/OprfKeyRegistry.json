@@ -451,6 +451,16 @@
         "name": "_accumulatorAddress",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "_threshold",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_numPeers",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -477,7 +487,7 @@
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IVerifierKeyGen13"
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1086,6 +1096,11 @@
         "internalType": "uint160"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "UnsupportedNumPeersThreshold",
+    "inputs": []
   },
   {
     "type": "error",
