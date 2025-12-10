@@ -28,11 +28,7 @@ contract BabyJubJubTest is Test {
         assertTrue(babyJubJub.isOnCurve(GEN_X, GEN_Y));
     }
 
-    function doSingleLagrangeCheckDeg1(uint8[2] memory ins, uint256[3] memory should)
-        private
-        view
-        returns (uint256[] memory)
-    {
+    function doSingleLagrangeCheckDeg1(uint8[2] memory ins, uint256[3] memory should) private view {
         uint256[] memory cast = new uint256[](2);
         uint256[] memory shouldResult = new uint256[](3);
         for (uint256 i = 0; i < 2; ++i) {
@@ -45,11 +41,7 @@ contract BabyJubJubTest is Test {
         assertEq(isResult, shouldResult);
     }
 
-    function doSingleLagrangeCheckDeg2(uint8[3] memory ins, uint256[5] memory should)
-        private
-        view
-        returns (uint256[] memory)
-    {
+    function doSingleLagrangeCheckDeg2(uint8[3] memory ins, uint256[5] memory should) private view {
         uint256[] memory cast = new uint256[](3);
         uint256[] memory shouldResult = new uint256[](5);
         for (uint256 i = 0; i < 3; ++i) {
@@ -63,10 +55,10 @@ contract BabyJubJubTest is Test {
     }
 
     function testLagrangeCoeffsDegree2() public view {
-        uint256[] memory kat0 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [0, 1], [2, 2736030358979909402780800718157159386076813972158567259200215660948447373040, 0]
         );
-        uint256[] memory kat1 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [0, 2],
             [
                 1368015179489954701390400359078579693038406986079283629600107830474223686522,
@@ -74,13 +66,13 @@ contract BabyJubJubTest is Test {
                 1368015179489954701390400359078579693038406986079283629600107830474223686520
             ]
         );
-        uint256[] memory kat2 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [1, 0], [2, 2736030358979909402780800718157159386076813972158567259200215660948447373040, 0]
         );
-        uint256[] memory kat3 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [1, 2], [0, 3, 2736030358979909402780800718157159386076813972158567259200215660948447373039]
         );
-        uint256[] memory kat4 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [2, 0],
             [
                 1368015179489954701390400359078579693038406986079283629600107830474223686522,
@@ -88,19 +80,19 @@ contract BabyJubJubTest is Test {
                 1368015179489954701390400359078579693038406986079283629600107830474223686520
             ]
         );
-        uint256[] memory kat5 = doSingleLagrangeCheckDeg1(
+        doSingleLagrangeCheckDeg1(
             [2, 1], [0, 3, 2736030358979909402780800718157159386076813972158567259200215660948447373039]
         );
     }
 
     function testLagrangeCoeffsDegree3() public view {
-        uint256[] memory kat0 = doSingleLagrangeCheckDeg2(
+        doSingleLagrangeCheckDeg2(
             [0, 1, 2], [3, 2736030358979909402780800718157159386076813972158567259200215660948447373038, 1, 0, 0]
         );
-        uint256[] memory kat1 = doSingleLagrangeCheckDeg2(
+        doSingleLagrangeCheckDeg2(
             [2, 1, 4], [0, 5, 2736030358979909402780800718157159386076813972158567259200215660948447373036, 0, 1]
         );
-        uint256[] memory kat2 = doSingleLagrangeCheckDeg2(
+        doSingleLagrangeCheckDeg2(
             [1, 3, 0],
             [
                 912010119659969800926933572719053128692271324052855753066738553649482457683,
@@ -110,7 +102,7 @@ contract BabyJubJubTest is Test {
                 0
             ]
         );
-        uint256[] memory kat3 = doSingleLagrangeCheckDeg2(
+        doSingleLagrangeCheckDeg2(
             [0, 4, 2],
             [
                 342003794872488675347600089769644923259601746519820907400026957618555921632,
@@ -212,18 +204,15 @@ contract BabyJubJubTest is Test {
     function testDoubleTwistedEdwards() public view {
         uint256 x_kat = 4637114908645349293314290093633489884625737925118392128630470256457586767218;
         uint256 y_kat = 7702897701668481564490177408361351787199791082682511447039848285746674581137;
-        uint256 t_kat = 2299264734662583782892590498562997658214127186021511666327124305705076632534;
         uint256 z_kat = 18908571007685925892997521016563680288958149020760971328391668907056652481525;
 
         (uint256 x_kat0, uint256 y_kat0, uint256 t_kat0, uint256 z_kat0) = babyJubJub.doubleTwistedEdwards(0, 1, 1);
         (uint256 x_kat0_res, uint256 y_kat0_res) = babyJubJub.toAffine(x_kat0, y_kat0, t_kat0, z_kat0);
         assertEq(x_kat0_res, 0);
         assertEq(y_kat0_res, 1);
-        (uint256 x_kat1, uint256 y_kat1, uint256 t_kat1, uint256 z_kat1) =
-            babyJubJub.doubleTwistedEdwards(x_kat, y_kat, z_kat);
+        (uint256 x_kat1, uint256 y_kat1,, uint256 z_kat1) = babyJubJub.doubleTwistedEdwards(x_kat, y_kat, z_kat);
 
-        (uint256 x_kat2, uint256 y_kat2, uint256 t_kat2, uint256 z_kat2) =
-            babyJubJub.doubleTwistedEdwards(x_kat1, y_kat1, z_kat1);
+        (uint256 x_kat2, uint256 y_kat2,, uint256 z_kat2) = babyJubJub.doubleTwistedEdwards(x_kat1, y_kat1, z_kat1);
         (uint256 x_kat3, uint256 y_kat3, uint256 t_kat3, uint256 z_kat3) =
             babyJubJub.doubleTwistedEdwards(x_kat2, y_kat2, z_kat2);
         (uint256 x_kat3_res, uint256 y_kat3_res) = babyJubJub.toAffine(x_kat3, y_kat3, t_kat3, z_kat3);
@@ -237,6 +226,7 @@ contract BabyJubJubTest is Test {
         uint256 point0_y = 1;
 
         uint256 scalar_kat = 1242440491034235814403315695115999933845748848737909651389506153219096971846;
+        uint256 neg_one = 2736030358979909402780800718157159386076813972158567259200215660948447373040;
         uint256 point_kat_x = 5742303260101316936910431944725492393495696945462768307725717120096311286013;
         uint256 point_kat_y = 7586271879783443543166246816922473256134012536615268324850965019989201082300;
 
@@ -248,6 +238,7 @@ contract BabyJubJubTest is Test {
         (uint256 x_kat5, uint256 y_kat5) = babyJubJub.scalarMul(2, point_kat_x, point_kat_y);
         (uint256 x_kat6, uint256 y_kat6) = babyJubJub.scalarMul(4, point_kat_x, point_kat_y);
         (uint256 x_kat7, uint256 y_kat7) = babyJubJub.scalarMul(42, point_kat_x, point_kat_y);
+        (uint256 x_kat8, uint256 y_kat8) = babyJubJub.scalarMul(neg_one, point_kat_x, point_kat_y);
         assertEq(x_kat0, 0);
         assertEq(y_kat0, 1);
         assertEq(x_kat1, 0);
@@ -264,6 +255,8 @@ contract BabyJubJubTest is Test {
         assertEq(y_kat6, 18441278903475799996286506656206445898730701347337446493298174331394670509347);
         assertEq(x_kat7, 1833532272404155580546508629437702206187237625211957633811621844821648822989);
         assertEq(y_kat7, 21395320191466327696365123237974277902424108876271626253976471516775696177004);
+        assertEq(x_kat8, 16145939611737958285335973800531782695052667454953266035972487066479497209604);
+        assertEq(y_kat8, 7586271879783443543166246816922473256134012536615268324850965019989201082300);
     }
 }
 
