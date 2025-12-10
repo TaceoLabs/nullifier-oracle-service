@@ -111,7 +111,6 @@ impl SecretManager for AwsSecretManager {
     async fn get_latest_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
         tracing::debug!("loading latest share for {oprf_key_id}");
         let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
-        tracing::info!("loading old secret first at {secret_id}");
         let secret_value = self
             .client
             .get_secret_value()

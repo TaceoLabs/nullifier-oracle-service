@@ -110,7 +110,7 @@ impl SecretManager for AwsSecretManager {
     #[instrument(level = "info", skip(self))]
     async fn get_oprf_key_material(&self, oprf_key_id: OprfKeyId) -> eyre::Result<OprfKeyMaterial> {
         let secret_id = to_key_secret_id(&self.oprf_secret_id_prefix, oprf_key_id);
-        tracing::info!("loading old secret first at {secret_id}");
+        tracing::debug!("loading secret at {secret_id}");
         let secret_value = self
             .client
             .get_secret_value()
