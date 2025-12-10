@@ -7,6 +7,7 @@
 //! - `/oprf_pub/{id}` – returns the [`oprf_types::crypto::OprfPublicKey`] associated with the [`OprfKeyId`] if the OPRF node has the information stored.
 //!
 //! The endpoints include a `Cache-Control: no-cache` header to prevent caching of responses.
+use crate::services::oprf_key_material_store::OprfKeyMaterialStore;
 use alloy::primitives::Address;
 use axum::{
     Json, Router,
@@ -17,8 +18,6 @@ use axum::{
 };
 use oprf_types::OprfKeyId;
 use tower_http::set_header::SetResponseHeaderLayer;
-
-use crate::services::oprf_key_material_store::OprfKeyMaterialStore;
 
 /// Create a router containing the info endpoints.
 ///
@@ -51,9 +50,9 @@ async fn wallet(wallet_address: Address) -> impl IntoResponse {
     (StatusCode::OK, wallet_address.to_string())
 }
 
-/// Checks whether a OPRF public-key associated with the [`OprfKeyId`] is registered at the service. If yes, returns the [`OprfPublicKeyWithEpoch`] containing the latest epoch currently stored at the service.
+/// Checks whether a OPRF public-key associated with the [`OprfKeyId`] is registered at the service. If yes, returns the [`oprf_types::api::OprfPublicKeyWithEpoch`] containing the latest epoch currently stored at the service.
 ///
-/// Returns `200 OK` with [`oprf_types::crypto::OprfPublicKeyWithEpoch`].
+/// Returns `200 OK` with [`oprf_types::api::OprfPublicKeyWithEpoch`].
 /// Returns `404 Not Found` if not registered.
 async fn oprf_key_available(
     oprf_material_store: OprfKeyMaterialStore,
