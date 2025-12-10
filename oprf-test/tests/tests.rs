@@ -45,6 +45,9 @@ async fn oprf_example_with_reshare_e2e_test_13() -> eyre::Result<()> {
     )
     .await;
 
+    // TODO we start listening at block 0 so we shouldn't need to wait here, but even then, events are sometimes missed in CI
+    tokio::time::sleep(Duration::from_secs(10)).await; // wait for event watcher to subscribe
+
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
         oprf_key_registry_contract,
@@ -160,6 +163,9 @@ async fn oprf_example_e2e_test_25() -> eyre::Result<()> {
     )
     .await;
 
+    // TODO we start listening at block 0 so we shouldn't need to wait here, but even then, events are sometimes missed in CI
+    tokio::time::sleep(Duration::from_secs(10)).await; // wait for chain to progress
+
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
         oprf_key_registry_contract,
@@ -225,6 +231,9 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
         oprf_key_registry_contract,
     )
     .await;
+
+    // TODO we start listening at block 0 so we shouldn't need to wait here, but even then, events are sometimes missed in CI
+    tokio::time::sleep(Duration::from_secs(10)).await; // wait for chain to progress
 
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
