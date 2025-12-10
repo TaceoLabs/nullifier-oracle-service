@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::services::{
-    secret_gen::{DLogSecretGenService, SharingType},
+    secret_gen::{Contributions, DLogSecretGenService},
     secret_manager::SecretManagerService,
 };
 use alloy::{
@@ -284,7 +284,7 @@ async fn handle_keygen_round3(
         OprfKeyId::from(oprfKeyId),
         contract,
         secret_gen,
-        SharingType::Linear,
+        Contributions::Full,
     )
     .await
 }
@@ -425,7 +425,7 @@ async fn handle_reshare_round3(
         OprfKeyId::from(oprfKeyId),
         contract,
         secret_gen,
-        SharingType::Shamir(lagrange),
+        Contributions::Shamir(lagrange),
     )
     .await
 }
@@ -454,7 +454,7 @@ async fn handle_round3_inner(
     oprf_key_id: OprfKeyId,
     contract: &OprfKeyRegistryInstance<DynProvider>,
     secret_gen: &mut DLogSecretGenService,
-    sharing_type: SharingType,
+    contributions: Contributions,
 ) -> eyre::Result<()> {
     tracing::info!("Event for {oprf_key_id}");
     tracing::info!("reading ciphers from chain..");
@@ -479,7 +479,7 @@ async fn handle_round3_inner(
         .map(EphemeralEncryptionPublicKey::try_from)
         .collect::<eyre::Result<Vec<_>>>()?;
     let res = secret_gen
-        .round3(oprf_key_id, ciphers, sharing_type, pks)
+        .round3(oprf_key_id, ciphers, contributions, pks)
         .context("while doing round3")?;
     tracing::debug!("finished round 3 - now reporting");
     let receipt = contract

@@ -31,8 +31,10 @@ contract BabyJubJub {
         uint256 dx1x2y1y2 = mulmod(D, mulmod(x1x2, y1y2, Q), Q);
 
         // x3 = (x1*y2 + y1*x2) / (1 + d*x1*x2*y1*y2)
-        uint256 x3Num = addmod(mulmod(x1, y2, Q), mulmod(y1, x2, Q), Q);
-        uint256 x3Den = addmod(1, dx1x2y1y2, Q);
+        // SAFETY: can add without mod because Q is 254 bits 
+        uint256 x3Num = mulmod(x1, y2, Q) + mulmod(y1, x2, Q);
+        // SAFETY: can add without mod because Q is 254 bits 
+        uint256 x3Den = 1 + dx1x2y1y2;
 
         // y3 = (y1*y2 - a*x1*x2) / (1 - d*x1*x2*y1*y2)
         uint256 y3Num = submod(y1y2, mulmod(A, x1x2, Q), Q);
@@ -156,18 +158,21 @@ contract BabyJubJub {
         uint256 a = mulmod(x1, x2, Q);
         // B = Y1*Y2
         uint256 b = mulmod(y1, y2, Q);
-        // C = T1*d*T2
+        // C = T1*d*X2*Y2
         uint256 c = mulmod(mulmod(mulmod(D, t1, Q), x2, Q), y2, Q);
         // D = Z1
         uint256 d = z1;
         // E = (X1+Y1)*(X2+Y2)-A-B
-        uint256 x1y1 = addmod(x1, y1, Q);
-        uint256 x2y2 = addmod(x2, y2, Q);
+        // SAFETY: can add without mod because Q is 254 bits and we expect point to be on the curve
+        uint256 x1y1 = x1 + y1;
+        // SAFETY: can add without mod because Q is 254 bits and we expect point to be on the curve
+        uint256 x2y2 = x2 + y2;
         uint256 e = submod(submod(mulmod(x1y1, x2y2, Q), a, Q), b, Q);
         // F = D-C
         uint256 f = submod(d, c, Q);
         // G = D+C
-        uint256 g = addmod(d, c, Q);
+        // SAFETY: can add without mod because Q is 254 bits and we expect point to be on the curve
+        uint256 g = d + c;
         // H = B-a*A
         uint256 h = submod(b, mulmod(A, a, Q), Q);
         // X3 = E*F
@@ -254,11 +259,13 @@ contract BabyJubJub {
         // D = a * A
         uint256 d = mulmod(a, A, Q);
         // E = (X1 + Y1)^2 - A - B
-        uint256 x1y1 = addmod(x, y, Q);
+        // SAFETY: can add without mod because Q is 254 bits 
+        uint256 x1y1 = x + y;
         uint256 x1y12 = mulmod(x1y1, x1y1, Q);
         uint256 e = submod(submod(x1y12, a, Q), b, Q);
         // G = D + B
-        uint256 g = addmod(d, b, Q);
+        // SAFETY: can add without mod because Q is 254 bits
+        uint256 g = d + b;
         // F = G - C
         uint256 f = submod(g, c, Q);
         // H = D - B

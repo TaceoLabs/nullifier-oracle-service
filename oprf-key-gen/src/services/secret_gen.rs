@@ -43,13 +43,13 @@ use zeroize::ZeroizeOnDrop;
 #[cfg(test)]
 mod tests;
 
-/// Defines the sharing type of the receiving [`DLogShareShamir`].
+/// Defines how many contributions we need to reconstruct the received [`DLogShareShamir`].
 ///
-/// During key-gen the resulting dlog-share is linearly shared, during reshare, it is shared using shamir.
+/// We need contributions from everyone during key-gen and only some (along with the lagrange coefficients) during reshare.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SharingType {
-    /// Linear sharing
-    Linear,
+pub(crate) enum Contributions {
+    /// Need contributions from everyone (key-gen).
+    Full,
     /// Shamir sharing - wraps the lagrange shares.
     Shamir(Vec<ark_babyjubjub::Fr>),
 }
@@ -247,7 +247,7 @@ impl DLogSecretGenService {
         &mut self,
         oprf_key_id: OprfKeyId,
         ciphers: Vec<SecretGenCiphertext>,
-        sharing_type: SharingType,
+        sharing_type: Contributions,
         pks: Vec<EphemeralEncryptionPublicKey>,
     ) -> eyre::Result<SecretGenRound3Contribution> {
         tracing::info!("calling round3 with {}", ciphers.len());
@@ -339,7 +339,7 @@ impl DLogSecretGenService {
 fn decrypt_key_gen_ciphertexts(
     ciphers: Vec<SecretGenCiphertext>,
     toxic_waste: ToxicWasteRound2,
-    sharing_type: SharingType,
+    sharing_type: Contributions,
     pks: Vec<EphemeralEncryptionPublicKey>,
 ) -> eyre::Result<DLogShareShamir> {
     let ToxicWasteRound2 { sk } = toxic_waste;
@@ -375,8 +375,8 @@ fn decrypt_key_gen_ciphertexts(
         })
         .collect::<eyre::Result<Vec<_>>>()?;
     match sharing_type {
-        SharingType::Linear => Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares))),
-        SharingType::Shamir(lagrange) => Ok(DLogShareShamir::from(
+        Contributions::Full => Ok(DLogShareShamir::from(keygen::accumulate_shares(&shares))),
+        Contributions::Shamir(lagrange) => Ok(DLogShareShamir::from(
             keygen::accumulate_lagrange_shares(&shares, &lagrange),
         )),
     }

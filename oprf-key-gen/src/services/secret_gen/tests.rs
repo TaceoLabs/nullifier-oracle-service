@@ -164,11 +164,11 @@ async fn test_secret_gen() -> eyre::Result<()> {
         .collect_vec();
     let [ciphers0, ciphers1, ciphers2] = ciphers.try_into().expect("len is 3");
     let dlog_secret_gen0_round3 =
-        dlog_secret_gen0.round3(oprf_key_id, ciphers0, SharingType::Linear, pks.to_vec())?;
+        dlog_secret_gen0.round3(oprf_key_id, ciphers0, Contributions::Full, pks.to_vec())?;
     let dlog_secret_gen1_round3 =
-        dlog_secret_gen1.round3(oprf_key_id, ciphers1, SharingType::Linear, pks.to_vec())?;
+        dlog_secret_gen1.round3(oprf_key_id, ciphers1, Contributions::Full, pks.to_vec())?;
     let dlog_secret_gen2_round3 =
-        dlog_secret_gen2.round3(oprf_key_id, ciphers2, SharingType::Linear, pks.to_vec())?;
+        dlog_secret_gen2.round3(oprf_key_id, ciphers2, Contributions::Full, pks.to_vec())?;
     assert_eq!(dlog_secret_gen0_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen1_round3.oprf_key_id, oprf_key_id);
     assert_eq!(dlog_secret_gen2_round3.oprf_key_id, oprf_key_id);

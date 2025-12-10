@@ -392,7 +392,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         //
         // this differs if this is the initial key-gen or one of the reshares
         if (st.generatedEpoch == 0) {
-            // for the key-gen we simply accumulate all commitments as the resulting shamir-share is linearly shared -> just add all together
+            // for the key-gen we simply accumulate all commitments as the resulting shamir-share should have contributions from all parties -> just add all together
             for (uint256 i = 0; i < numPeers; ++i) {
                 _addToAggregate(st.shareCommitments[i], data.ciphers[i].commitment.x, data.ciphers[i].commitment.y);
                 st.round2[i][partyId] = data.ciphers[i];
@@ -530,7 +530,6 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
         // check if we are a producer
         if (Types.KeyGenRole.PRODUCER != st.nodeRoles[msg.sender]) {
             // we are not a producer -> return empty array
-            // we don't revert because the peers call this method in round2 of the protocol. This will let them know that they are consumers.
             return new Types.BabyJubJubElement[](0);
         }
         return _loadPeerPublicKeys(st);
