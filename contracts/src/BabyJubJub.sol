@@ -114,9 +114,12 @@ contract BabyJubJub {
         y_res = 1;
         uint256 t_res = 0;
         uint256 z_res = 1;
-        (uint8[254] memory bits, uint256 highBit) = getBits(scalar);
+        if (scalar == 0) {
+            return (x_res, y_res);
+        }
+        (uint8[251] memory bits, uint256 highBit) = getBits(scalar);
         // skip leading zeros
-        for (uint256 i = highBit; i < 254; ++i) {
+        for (uint256 i = highBit; i < 251; ++i) {
             (x_res, y_res, t_res, z_res) = doubleTwistedEdwards(x_res, y_res, z_res);
             if (bits[i] == 1) {
                 (x_res, y_res, t_res, z_res) = addProjective(x_res, y_res, t_res, z_res, x, y);
@@ -208,14 +211,15 @@ contract BabyJubJub {
         }
     }
 
-    ///Helper function for scalarMul(scalar, x, y). Bit-decomposes the provided value in big-endian form and returns the index of the highest bit (to skip leading zeros). Ignores highest two bits as this should only be used for scalar mul and the scalarfield only has 254 bits.
-    function getBits(uint256 value) private pure returns (uint8[254] memory bits, uint256 highBit) {
-        highBit = 0;
-        value <<= 2;
-        for (uint256 i = 0; i < 254; i++) {
+    ///Helper function for scalarMul(scalar, x, y). Bit-decomposes the provided value in big-endian form and returns the index of the highest bit (to skip leading zeros). Ignores highest five bits as this should only be used for scalar mul and the scalarfield only has 251 bits.
+    function getBits(uint256 value) private pure returns (uint8[251] memory bits, uint256 highBit) {
+        // set high bit to 256 -> cannot happen as we only go up to 251 bits and if all zeroes, will return 256.
+        highBit = 256;
+        value <<= 5;
+        for (uint256 i = 0; i < 251; i++) {
             uint256 shift = 255 - i;
             bits[i] = uint8((value >> shift) & 1);
-            if (bits[i] == 1 && highBit == 0) {
+            if (bits[i] == 1 && highBit == 256) {
                 highBit = i;
             }
         }
