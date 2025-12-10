@@ -166,16 +166,14 @@ contract BabyJubJubTest is Test {
 
         (uint256 x_res_kat1, uint256 y_res_kat1, uint256 t_res_kat1, uint256 z_res_kat1) =
             babyJubJub.addProjective(x1, y1, t1, z1, 0, 1);
-        (uint256 x_affine_kat1, uint256 y_affine_kat1) =
-            babyJubJub.toAffine(x_res_kat1, y_res_kat1, z_res_kat1);
+        (uint256 x_affine_kat1, uint256 y_affine_kat1) = babyJubJub.toAffine(x_res_kat1, y_res_kat1, z_res_kat1);
         assertEq(x_affine_kat1, 0);
         assertEq(y_affine_kat1, 1);
 
         (uint256 x_res_kat2, uint256 y_res_kat2, uint256 t_res_kat2, uint256 z_res_kat2) =
             babyJubJub.addProjective(x_res_kat1, y_res_kat1, t_res_kat1, z_res_kat1, x_kat1, y_kat1);
 
-        (uint256 x_affine_kat2, uint256 y_affine_kat2) =
-            babyJubJub.toAffine(x_res_kat2, y_res_kat2, z_res_kat2);
+        (uint256 x_affine_kat2, uint256 y_affine_kat2) = babyJubJub.toAffine(x_res_kat2, y_res_kat2, z_res_kat2);
         assertEq(x_affine_kat2, 2585013507242167102053568165755983650036811197698092260427036393667384073640);
         assertEq(y_affine_kat2, 17439700738620329094074558196602008725531527645854103253457508274780729509178);
 

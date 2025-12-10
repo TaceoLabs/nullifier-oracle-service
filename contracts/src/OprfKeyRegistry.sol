@@ -789,7 +789,10 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     function _curveChecks(Types.BabyJubJubElement memory element) internal view virtual {
         uint256 x = element.x;
         uint256 y = element.y;
-        if (_isInfinity(element) || !accumulator.isOnCurve(x, y) || !accumulator.isInCorrectSubgroupAssumingOnCurve(x, y)) {
+        if (
+            _isInfinity(element) || !accumulator.isOnCurve(x, y)
+                || !accumulator.isInCorrectSubgroupAssumingOnCurve(x, y)
+        ) {
             revert BadContribution();
         }
     }
