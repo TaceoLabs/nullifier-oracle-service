@@ -59,8 +59,13 @@ contract BabyJubJub {
         return addmod(axx, yy, Q) == addmod(1, dxxyy, Q);
     }
 
-    /// @notice Computes the lagrange coefficients for the provided party IDs (starting at zero) and the threshold of the secret-sharing. This method will revert if the length of IDs and threshold does not match. We expect callsite to check that. Importantly, this method will always return an array with length numPeers, where lagrange coefficient of party ID is on index in the array (with zero for not participating nodes). We need this because the nodes will access this array with their partyID.
+    /// @notice Computes the lagrange coefficients for the provided party IDs (starting at zero) and the threshold of the secret-sharing. We expect callsite to check that. Importantly, this method will always return an array with length numPeers, where lagrange coefficient of party ID is on index in the array (with zero for not participating nodes). We need this because the nodes will access this array with their partyID.
+    /// This method will revert if either of those cases occurs:
+    ///    * the length of ids != numPeers
+    ///    * the ids are not distinct
+    ///    * the ids are not unique
     ///
+    ///  All of those checks must be enforced at callsite. It is considered a bug if this method revert for either of that reasons, therefore we also don't revert with a meaningful error.
     /// @param ids The party IDs (coefficients of the polynomial) of the participating parties (starting with ID 0)
     /// @param threshold The degree of the polynomial + 1
     /// @return lagrange The requested lagrange coefficients
@@ -71,6 +76,13 @@ contract BabyJubJub {
     {
         // should be checked at callsite
         require(ids.length == threshold);
+        // check that all ids are distinct and smaller than numPeers
+        for (uint256 i = 0; i < threshold; ++i) {
+            require(ids[i] < numPeers);
+            for (uint256 j = i + 1; j < threshold; ++j) {
+                require(ids[i] != ids[j]);
+            }
+        }
         lagrange = new uint256[](numPeers);
         for (uint256 i = 0; i < threshold; ++i) {
             uint256 num = 1;
@@ -196,7 +208,7 @@ contract BabyJubJub {
         }
     }
 
-    ///Helper function for scalarMul(scalar, x, y). Bit-decomposes the provided value in big-endian form and returns the highest bit (to skip leading zeros). Ignores highest two bits as this should only be used for scalar mul and the scalarfield only has 254 bits.
+    ///Helper function for scalarMul(scalar, x, y). Bit-decomposes the provided value in big-endian form and returns the index of the highest bit (to skip leading zeros). Ignores highest two bits as this should only be used for scalar mul and the scalarfield only has 254 bits.
     function getBits(uint256 value) private pure returns (uint8[254] memory bits, uint256 highBit) {
         highBit = 0;
         value <<= 2;

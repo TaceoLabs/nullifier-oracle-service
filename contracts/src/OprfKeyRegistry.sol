@@ -199,7 +199,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     }
 
     /// @notice Initializes the reshare process for a given oprfKeyId. This method might either be used to re-randomize the shares of the MPC-nodes, switch out parties or regenerate the shares if one loses access to their shares.
-    /// This method clears reuses the state from the last key-gen/re-share and deletes all old information.
+    /// This method reuses the state from the last key-gen/re-share and deletes all old information.
     /// @param oprfKeyId The unique identifier for the OPRF public-key.
     function initReshare(uint160 oprfKeyId) external virtual onlyProxy isReady onlyAdmin {
         // Check that this oprfKeyId already exists
@@ -357,8 +357,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
                 st.lagrangeCoeffs = accumulator.computeLagrangeCoefficiants(ids, threshold, numPeers);
             }
         }
-        // we need a contribution from everyone but only threshold many producers. If we don't manage to find enough producers, this will hang forever.
-        // TODO emit an event that we don't have enough producers
+        // we need a contribution from everyone but only threshold many producers. If we don't manage to find enough producers, we will emit an event so that the admin can intervene.
         _tryEmitRound2Event(oprfKeyId, threshold, st);
     }
 
@@ -712,10 +711,13 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     {
         if (st.round2EventEmitted) return;
         if (!allRound1Submitted(st)) return;
-        if (st.numProducers < necessaryContributions) return;
+        if (st.numProducers < necessaryContributions) {
+            emit Types.NotEnoughProducers(oprfKeyId);
+            st.round2EventEmitted = true;
+        }
 
         st.round2EventEmitted = true;
-        // delete the old comitments now
+        // delete the old commitments now
         delete st.shareCommitments;
         st.shareCommitments = new Types.BabyJubJubElement[](numPeers);
         emit Types.SecretGenRound2(oprfKeyId);

@@ -84,4 +84,5 @@ library Types {
     // admin events
     event KeyGenAdminRevoked(address indexed admin);
     event KeyGenAdminRegistered(address indexed admin);
+    event NotEnoughProducers(uint160 indexed oprfKeyId);
 }
