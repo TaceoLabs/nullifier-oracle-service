@@ -17,7 +17,7 @@ interface IVerifierKeyGen13 {
 interface IBabyJubJub {
     function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) external view returns (uint256 x3, uint256 y3);
     function isOnCurve(uint256 x, uint256 y) external pure returns (bool);
-    function isInCorrectSubgroup(uint256 x, uint256 y) external pure returns (bool);
+    function isInCorrectSubgroupAssumingOnCurve(uint256 x, uint256 y) external pure returns (bool);
     function computeLagrangeCoefficiants(uint256[] memory ids, uint256 threshold, uint256 numPeers)
         external
         pure
@@ -789,7 +789,7 @@ contract OprfKeyRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradea
     function _curveChecks(Types.BabyJubJubElement memory element) internal view virtual {
         uint256 x = element.x;
         uint256 y = element.y;
-        if (_isInfinity(element) || !accumulator.isOnCurve(x, y) || !accumulator.isInCorrectSubgroup(x, y)) {
+        if (_isInfinity(element) || !accumulator.isOnCurve(x, y) || !accumulator.isInCorrectSubgroupAssumingOnCurve(x, y)) {
             revert BadContribution();
         }
     }

@@ -22,12 +22,12 @@ contract BabyJubJubTest is Test {
 
     function testIdentityPoint() public view {
         assertTrue(babyJubJub.isOnCurve(0, 1));
-        assertTrue(babyJubJub.isInCorrectSubgroup(0, 1));
+        assertTrue(babyJubJub.isInCorrectSubgroupAssumingOnCurve(0, 1));
     }
 
     function testGeneratorOnCurve() public view {
         assertTrue(babyJubJub.isOnCurve(GEN_X, GEN_Y));
-        assertTrue(babyJubJub.isInCorrectSubgroup(GEN_X, GEN_Y));
+        assertTrue(babyJubJub.isInCorrectSubgroupAssumingOnCurve(GEN_X, GEN_Y));
     }
 
     function doSingleLagrangeCheckDeg1(uint8[2] memory ins, uint256[3] memory should) private view {
@@ -167,7 +167,7 @@ contract BabyJubJubTest is Test {
         (uint256 x_res_kat1, uint256 y_res_kat1, uint256 t_res_kat1, uint256 z_res_kat1) =
             babyJubJub.addProjective(x1, y1, t1, z1, 0, 1);
         (uint256 x_affine_kat1, uint256 y_affine_kat1) =
-            babyJubJub.toAffine(x_res_kat1, y_res_kat1, t_res_kat1, z_res_kat1);
+            babyJubJub.toAffine(x_res_kat1, y_res_kat1, z_res_kat1);
         assertEq(x_affine_kat1, 0);
         assertEq(y_affine_kat1, 1);
 
@@ -175,7 +175,7 @@ contract BabyJubJubTest is Test {
             babyJubJub.addProjective(x_res_kat1, y_res_kat1, t_res_kat1, z_res_kat1, x_kat1, y_kat1);
 
         (uint256 x_affine_kat2, uint256 y_affine_kat2) =
-            babyJubJub.toAffine(x_res_kat2, y_res_kat2, t_res_kat2, z_res_kat2);
+            babyJubJub.toAffine(x_res_kat2, y_res_kat2, z_res_kat2);
         assertEq(x_affine_kat2, 2585013507242167102053568165755983650036811197698092260427036393667384073640);
         assertEq(y_affine_kat2, 17439700738620329094074558196602008725531527645854103253457508274780729509178);
 
@@ -189,7 +189,7 @@ contract BabyJubJubTest is Test {
         (uint256 x_res_kat5, uint256 y_res_kat5, uint256 t_res_kat5, uint256 z_res_kat5) =
             babyJubJub.addProjective(x_res_kat4, y_res_kat4, t_res_kat4, z_res_kat4, x_kat4, y_kat4);
 
-        (uint256 x_final, uint256 y_final) = babyJubJub.toAffine(x_res_kat5, y_res_kat5, t_res_kat5, z_res_kat5);
+        (uint256 x_final, uint256 y_final) = babyJubJub.toAffine(x_res_kat5, y_res_kat5, z_res_kat5);
 
         assertEq(x_final, 3658205807373373403783720572087030159367827012475349690027485513646047319095);
         assertEq(y_final, 13805961561979959184760556802896935268170915149201310889981879759954972423256);
@@ -197,7 +197,7 @@ contract BabyJubJubTest is Test {
         // add infinity for good measure
         (uint256 x_res_kat6, uint256 y_res_kat6, uint256 t_res_kat6, uint256 z_res_kat6) =
             babyJubJub.addProjective(x_res_kat5, y_res_kat5, t_res_kat5, z_res_kat5, 0, 1);
-        (uint256 x_final_inf, uint256 y_final_inf) = babyJubJub.toAffine(x_res_kat6, y_res_kat6, t_res_kat6, z_res_kat6);
+        (uint256 x_final_inf, uint256 y_final_inf) = babyJubJub.toAffine(x_res_kat6, y_res_kat6, z_res_kat6);
 
         assertEq(x_final_inf, x_final);
         assertEq(y_final_inf, y_final);
@@ -209,7 +209,7 @@ contract BabyJubJubTest is Test {
         uint256 z_kat = 18908571007685925892997521016563680288958149020760971328391668907056652481525;
 
         (uint256 x_kat0, uint256 y_kat0, uint256 t_kat0, uint256 z_kat0) = babyJubJub.doubleTwistedEdwards(0, 1, 1);
-        (uint256 x_kat0_res, uint256 y_kat0_res) = babyJubJub.toAffine(x_kat0, y_kat0, t_kat0, z_kat0);
+        (uint256 x_kat0_res, uint256 y_kat0_res) = babyJubJub.toAffine(x_kat0, y_kat0, z_kat0);
         assertEq(x_kat0_res, 0);
         assertEq(y_kat0_res, 1);
         (uint256 x_kat1, uint256 y_kat1,, uint256 z_kat1) = babyJubJub.doubleTwistedEdwards(x_kat, y_kat, z_kat);
@@ -217,7 +217,7 @@ contract BabyJubJubTest is Test {
         (uint256 x_kat2, uint256 y_kat2,, uint256 z_kat2) = babyJubJub.doubleTwistedEdwards(x_kat1, y_kat1, z_kat1);
         (uint256 x_kat3, uint256 y_kat3, uint256 t_kat3, uint256 z_kat3) =
             babyJubJub.doubleTwistedEdwards(x_kat2, y_kat2, z_kat2);
-        (uint256 x_kat3_res, uint256 y_kat3_res) = babyJubJub.toAffine(x_kat3, y_kat3, t_kat3, z_kat3);
+        (uint256 x_kat3_res, uint256 y_kat3_res) = babyJubJub.toAffine(x_kat3, y_kat3, z_kat3);
         assertEq(x_kat3_res, 4304330865865803707709229766047793644695911410146585610031404541466966297585);
         assertEq(y_kat3_res, 13485835089156258613927479590259067246995570994808194133642502138584014679440);
     }
@@ -273,7 +273,7 @@ contract BabyJubJubTest is Test {
         uint256 two_torsion_x = 0;
         uint256 two_torsion_y = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
         assertTrue(babyJubJub.isOnCurve(two_torsion_x, two_torsion_y));
-        assertFalse(babyJubJub.isInCorrectSubgroup(two_torsion_x, two_torsion_y));
+        assertFalse(babyJubJub.isInCorrectSubgroupAssumingOnCurve(two_torsion_x, two_torsion_y));
 
         uint256 x_kat1 = 8375249795494070168540398175218576938320513942163892031567097533429205888430;
         uint256 y_kat1 = 18441278903475799996286506656206445898730701347337446493298174331394670509347;
@@ -282,13 +282,13 @@ contract BabyJubJubTest is Test {
         uint256 x_kat3 = 16145939611737958285335973800531782695052667454953266035972487066479497209604;
         uint256 y_kat3 = 7586271879783443543166246816922473256134012536615268324850965019989201082300;
         assertTrue(babyJubJub.isOnCurve(x_kat1, y_kat1));
-        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat1, y_kat1));
+        assertTrue(babyJubJub.isInCorrectSubgroupAssumingOnCurve(x_kat1, y_kat1));
 
         assertTrue(babyJubJub.isOnCurve(x_kat2, y_kat2));
-        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat2, y_kat2));
+        assertTrue(babyJubJub.isInCorrectSubgroupAssumingOnCurve(x_kat2, y_kat2));
 
         assertTrue(babyJubJub.isOnCurve(x_kat3, y_kat3));
-        assertTrue(babyJubJub.isInCorrectSubgroup(x_kat3, y_kat3));
+        assertTrue(babyJubJub.isInCorrectSubgroupAssumingOnCurve(x_kat3, y_kat3));
     }
 }
 

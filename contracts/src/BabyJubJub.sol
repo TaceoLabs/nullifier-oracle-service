@@ -271,13 +271,15 @@ contract BabyJubJub {
         ];
     }
 
-    /// @notice Points are represented in Affine (x, y) coordinates. A prerequisite is that both points are on the curve. This can be checked with isOnCurve function.
-    /// @param x1 The x-coordinate of the first point
-    /// @param y1 The y-coordinate of the first point
-    /// @param x2 the x-coordinate of the second point
-    /// @param y2 the y-coordinate of the second point
-    /// @return x3 the x-coordinate of the resulting point
-    /// @return y3 the y-coordinate of the resulting point
+    /// @notice Points are represented in Affine (x, y) coordinates.
+    /// This method expects that the point is on the curve and in the correct subgroup. Additionally, the method expects that the coordinates are reduced mod Q. The outputs are also reduced mod Q.
+    ///
+    /// @param x1 The x-coordinate of the first point reduced mod Q
+    /// @param y1 The y-coordinate of the first point reduced mod Q
+    /// @param x2 the x-coordinate of the second point reduced mod Q
+    /// @param y2 the y-coordinate of the second point reduced mod Q
+    /// @return x3 the x-coordinate of the resulting point reduced mod Q
+    /// @return y3 the y-coordinate of the resulting point reduced mod Q
     function add(uint256 x1, uint256 y1, uint256 x2, uint256 y2) public pure returns (uint256 x3, uint256 y3) {
         // Handle identity cases
         if (x1 == 0 && y1 == 1) return (x2, y2);
@@ -301,7 +303,7 @@ contract BabyJubJub {
         y3 = mulmod(y3Num, modInverse(y3Den, Q), Q);
     }
 
-    /// @notice Checks if a point in affine form is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2
+    /// @notice Checks if a point in affine form is on curve: a*x^2 + y^2 = 1 + d*x^2*y^2 and its coordinates are in the basefield (smaller than Q).
     ///
     /// @param x The x-coordinate of the point
     /// @param y The y-coordinate of the point
@@ -318,14 +320,14 @@ contract BabyJubJub {
         return addmod(axx, yy, Q) == addmod(1, dxxyy, Q);
     }
 
-    /// @notice Checks if a point in affine form is in the sub-group with the same order as the scalarfield. This method assumes that the point is on the curve.
+    /// @notice Checks if a point in affine form is in the sub-group with the same order as the scalarfield. This method assumes that the point is on the curve and the coordinates are reduced mod Q.
     ///
     /// @param x The x-coordinate of the point
     /// @param y The y-coordinate of the point
     /// @return True if the point is in the correct sub-subgroup, false otherwise.
-    function isInCorrectSubgroup(uint256 x, uint256 y) public pure returns (bool) {
-        (uint256 x1, uint256 y1, uint256 t1, uint256 z1) = _scalarMulInner(characteristic_bits(), 0, x, y);
-        return x1 == 0 && y1 == z1 && y != 0 && t1 == 0;
+    function isInCorrectSubgroupAssumingOnCurve(uint256 x, uint256 y) public pure returns (bool) {
+        (uint256 x1, uint256 y1, uint256 z1) = _scalarMulInner(characteristic_bits(), 0, x, y);
+        return x1 == 0 && y1 == z1 && y != 0;
     }
 
     /// @notice Computes the lagrange coefficients for the provided party IDs (starting at zero) and the threshold of the secret-sharing. We expect callsite to check that. Importantly, this method will always return an array with length numPeers, where lagrange coefficient of party ID is on index in the array (with zero for not participating nodes). We need this because the nodes will access this array with their partyID.
@@ -369,32 +371,40 @@ contract BabyJubJub {
         return lagrange;
     }
 
-    /// @notice Computes xP, where x is an element of the scalarfield of BabyJubJub and P is an affine point on the BabyJubJub curve represented as x and y. This method reverts if scalar doesn't fit into BabyJubJub's scalarfield or if the point is not on the curve or in the correct sub-group. We expect that check to be enforced on callsite.
-    /// This method will not check whether the point in on the curve nor if it is in the correct subgroup.
+    /// @notice Computes xP, where x is an element of the scalarfield of BabyJubJub and P is an affine point on the BabyJubJub curve represented as x and y. This method reverts if scalar doesn't fit into BabyJubJub's scalarfield.
+    ///
+    /// This method expects that the point is on the curve and in the correct subgroup. Additionally, the method expects that the coordinates are reduced mod Q. The outputs are also reduced mod Q.
     ///
     /// @param scalar The scalar for the multiplication.
-    /// @param x The x-coordinate of the affine point.
-    /// @param y The y-coordinate of the affine point.
+    /// @param x The x-coordinate of the affine point reduced mod Q.
+    /// @param y The y-coordinate of the affine point reduced mod Q.
     /// @return The (x,y)-coordinates of xP
     function scalarMul(uint256 scalar, uint256 x, uint256 y) public pure returns (uint256, uint256) {
         require(scalar < R);
-        require(isOnCurve(x, y));
         if (scalar == 0) {
             return (0, 1);
         }
         (uint8[251] memory bits, uint256 highBit) = getBits(scalar);
-        (uint256 x1, uint256 y1, uint256 t1, uint256 z1) = _scalarMulInner(bits, highBit, x, y);
-        return toAffine(x1, y1, t1, z1);
+        (uint256 x1, uint256 y1, uint256 z1) = _scalarMulInner(bits, highBit, x, y);
+        return toAffine(x1, y1, z1);
     }
 
+    /// @notice Internal helper function for scalar point multiplication. Performs the actual double-and-add scalar-multiplication. The highBit parameter allows to skip the leading zeroes.
+    ///
+    /// @param bits The scalar in big-endian order. *Attention* does NO alias checking as this is used internally.
+    /// @param highBit The index of the "first" 1. Used to skip the leading zeroes.
+    /// @param x The x-coordinate of the affine point reduced mod Q
+    /// @param y The y-coordinate of the affine point reduced mod Q
+    ///
+    /// This method expects that the point is on the curve and in the correct subgroup. Additionally, the method expects that the coordinates are reduced mod Q. The outputs are also reduced mod Q.
     function _scalarMulInner(uint8[251] memory bits, uint256 highBit, uint256 x, uint256 y)
         private
         pure
-        returns (uint256 x_res, uint256 y_res, uint256 t_res, uint256 z_res)
+        returns (uint256 x_res, uint256 y_res, uint256 z_res)
     {
         x_res = 0;
         y_res = 1;
-        t_res = 0;
+        uint256 t_res = 0;
         z_res = 1;
         // skip leading zeros
         for (uint256 i = highBit; i < 251; ++i) {
@@ -403,23 +413,23 @@ contract BabyJubJub {
                 (x_res, y_res, t_res, z_res) = addProjective(x_res, y_res, t_res, z_res, x, y);
             }
         }
-        return (x_res, y_res, t_res, z_res);
+        return (x_res, y_res, z_res);
     }
 
     /// @notice A+B, where A and B are points on the BabyJubJub curve with the difference that A represented with projective coordinates and B with affine coordinates. Returns A+B in projective form.
-    /// This method will not check whether the points are on the curve nor if they are in the correct subgroup.
+    /// This method expects that the point is on the curve and in the correct subgroup. Additionally, the method expects that the coordinates are reduced mod Q. The outputs are also reduced mod Q.
     ///
-    /// @param x1 The x-coordinate of the projective point.
-    /// @param y1 The y-coordinate of the projective point.
-    /// @param t1 The t-coordinate of the projective point.
-    /// @param z1 The z-coordinate of the projective point.
-    /// @param x2 The x-coordinate of the affine point.
-    /// @param y2 The y-coordinate of the affine point.
+    /// @param x1 The x-coordinate of the projective point reduced mod Q.
+    /// @param y1 The y-coordinate of the projective point reduced mod Q.
+    /// @param t1 The t-coordinate of the projective point reduced mod Q.
+    /// @param z1 The z-coordinate of the projective point reduced mod Q.
+    /// @param x2 The x-coordinate of the affine point reduced mod Q.
+    /// @param y2 The y-coordinate of the affine point reduced mod Q.
     ///
-    /// @return x_res The x-coordinate of A+B.
-    /// @return y_res The y-coordinate of A+B.
-    /// @return t_res The t-coordinate of A+B.
-    /// @return z_res The z-coordinate of A+B.
+    /// @return x_res The x-coordinate of A+B reduced mod Q.
+    /// @return y_res The y-coordinate of A+B reduced mod Q.
+    /// @return t_res The t-coordinate of A+B reduced mod Q.
+    /// @return z_res The z-coordinate of A+B reduced mod Q.
     function addProjective(uint256 x1, uint256 y1, uint256 t1, uint256 z1, uint256 x2, uint256 y2)
         public
         pure
@@ -466,18 +476,13 @@ contract BabyJubJub {
     ///
     /// @param x1 The x-coordinate of the projective point.
     /// @param y1 The y-coordinate of the projective point.
-    /// @param t1 The t-coordinate of the projective point.
     /// @param z1 The z-coordinate of the projective point.
     ///
     /// @return x_res The x-coordinate of the affine point.
     /// @return y_res The y-coordinate of the affine point.
-    function toAffine(uint256 x1, uint256 y1, uint256 t1, uint256 z1)
-        public
-        pure
-        returns (uint256 x_res, uint256 y_res)
-    {
-        // The projective point X, Y, T, Z is represented in the affine coordinates as X/Z, Y/Z.
-        if (x1 == 0 && y1 == 1 && t1 == 0 && z1 == 1) {
+    function toAffine(uint256 x1, uint256 y1, uint256 z1) public pure returns (uint256 x_res, uint256 y_res) {
+        // The projective point X, Y, Z is represented in the affine coordinates as X/Z, Y/Z.
+        if (x1 == 0 && y1 == z1 && y1 != 1) {
             x_res = 0;
             y_res = 1;
         } else if (z1 == 1) {
@@ -506,16 +511,17 @@ contract BabyJubJub {
         }
     }
 
-    /// @notice Performs point-doubling of a BabyJubJub projective point in twisted-edwards form. This method expect that the point is on the curve and in the correct subgroup.
+    /// @notice Performs point-doubling of a BabyJubJub projective point in twisted-edwards form.
+    /// This method expects that the point is on the curve and in the correct subgroup. Additionally, the method expects that the coordinates are reduced mod Q. The outputs are also reduced mod Q.
     ///
-    /// @param x The x-coordinate of the projective point.
-    /// @param y The y-coordinate of the projective point.
-    /// @param z The z-coordinate of the projective point.
+    /// @param x The x-coordinate of the projective point reduced mod Q.
+    /// @param y The y-coordinate of the projective point reduced mod Q.
+    /// @param z The z-coordinate of the projective point reduced mod Q.
     ///
-    /// @param x3 The x-coordinate of the doubled point.
-    /// @param y3 The y-coordinate of the doubled point.
-    /// @param t3 The t-coordinate of the doubled point.
-    /// @param z3 The z-coordinate of the doubled point.
+    /// @param x3 The x-coordinate of the doubled point reduced mod Q.
+    /// @param y3 The y-coordinate of the doubled point reduced mod Q.
+    /// @param t3 The t-coordinate of the doubled point reduced mod Q.
+    /// @param z3 The z-coordinate of the doubled point reduced mod Q.
     function doubleTwistedEdwards(uint256 x, uint256 y, uint256 z)
         public
         pure

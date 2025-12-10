@@ -50,7 +50,7 @@ mod tests;
 pub(crate) enum Contributions {
     /// Need contributions from everyone (key-gen).
     Full,
-    /// Shamir sharing - wraps the lagrange shares.
+    /// Shamir sharing - wraps the lagrange coefficients.
     Shamir(Vec<ark_babyjubjub::Fr>),
 }
 
