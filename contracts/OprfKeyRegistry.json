@@ -765,6 +765,19 @@
   },
   {
     "type": "event",
+    "name": "NotEnoughProducers",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "indexed": true,
+        "internalType": "uint160"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
