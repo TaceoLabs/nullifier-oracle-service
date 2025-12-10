@@ -58,6 +58,8 @@ pub struct VerifiableOprfOutput {
     pub output: ark_babyjubjub::Fq,
     /// The DLog equality proof.
     pub dlog_proof: DLogEqualityProof,
+    /// The blinded OPRF request.
+    pub blinded_request: ark_babyjubjub::EdwardsAffine,
     /// The blinded OPRF response.
     pub blinded_response: ark_babyjubjub::EdwardsAffine,
     /// The unblinded OPRF response.
@@ -147,6 +149,7 @@ where
 
     Ok(VerifiableOprfOutput {
         output,
+        blinded_request: blinded_request.blinded_query(),
         blinded_response,
         dlog_proof,
         unblinded_response,

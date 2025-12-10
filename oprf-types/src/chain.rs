@@ -5,7 +5,8 @@
 //!
 //! Use these types to encode the payloads that nodes send and receive on-chain.
 
-use alloy::sol;
+use alloy::{primitives::U256, sol};
+use ark_ff::PrimeField as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -136,4 +137,14 @@ impl From<SecretGenCiphertexts> for Types::Round2Contribution {
             ciphers: value.ciphers.into_iter().map(Into::into).collect(),
         }
     }
+}
+
+/// Tries to convert an u256 into a value on the scalar field of babyjubjub.
+/// We need this function because of orphan rule.
+pub fn try_u256_into_bjj_fr(value: U256) -> eyre::Result<ark_babyjubjub::Fr> {
+    let big_int = ark_ff::BigInt(value.into_limbs());
+    if ark_babyjubjub::Fr::MODULUS <= big_int {
+        eyre::bail!("{value} doesn't fit into requested prime field");
+    }
+    Ok(ark_babyjubjub::Fr::new(big_int))
 }

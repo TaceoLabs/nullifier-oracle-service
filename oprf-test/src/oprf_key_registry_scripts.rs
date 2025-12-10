@@ -77,6 +77,37 @@ pub fn init_key_gen(
     OprfKeyId::new(U160::from(oprf_key_id))
 }
 
+pub fn init_reshare(
+    oprf_key_id: OprfKeyId,
+    rpc_url: &str,
+    rp_registry_contract: Address,
+    taceo_admin_private_key: &str,
+) {
+    let mut cmd = Command::new("forge");
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    tracing::debug!("init reshare for oprf_key_id: {oprf_key_id}");
+    tracing::debug!("with rpc url: {rpc_url}");
+    tracing::debug!("on contract: {rp_registry_contract}");
+    let cmd = cmd
+        .current_dir(dir.join("../contracts/script/deploy/"))
+        .env("OPRF_KEY_REGISTRY_PROXY", rp_registry_contract.to_string())
+        .env("OPRF_KEY_ID", oprf_key_id.to_string())
+        .arg("script")
+        .arg("InitReshare.s.sol")
+        .arg("--rpc-url")
+        .arg(rpc_url)
+        .arg("--broadcast")
+        .arg("--private-key")
+        .arg(taceo_admin_private_key);
+    tracing::debug!("executing cmd: {:?}", cmd);
+    let output = cmd.output().expect("failed to run forge script");
+    assert!(
+        output.status.success(),
+        "forge script failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 pub fn delete_oprf_key_material(
     rpc_url: &str,
     oprf_key_registry_contract: Address,

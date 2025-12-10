@@ -305,7 +305,7 @@ contract OprfKeyRegistryTest is Test {
         // do round 1 contributions
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
@@ -313,7 +313,7 @@ contract OprfKeyRegistryTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(oprfKeyId);
+        oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -333,7 +333,7 @@ contract OprfKeyRegistryTest is Test {
         // check that we can add round1 but nothing happens
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
@@ -348,7 +348,7 @@ contract OprfKeyRegistryTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -358,7 +358,7 @@ contract OprfKeyRegistryTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(oprfKeyId);
+        oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -377,14 +377,14 @@ contract OprfKeyRegistryTest is Test {
 
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -393,7 +393,7 @@ contract OprfKeyRegistryTest is Test {
         vm.stopPrank();
 
         vm.prank(carol);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
@@ -420,7 +420,7 @@ contract OprfKeyRegistryTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(oprfKeyId);
+        oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -439,14 +439,14 @@ contract OprfKeyRegistryTest is Test {
 
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -455,7 +455,7 @@ contract OprfKeyRegistryTest is Test {
         vm.stopPrank();
 
         vm.prank(carol);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
@@ -500,7 +500,7 @@ contract OprfKeyRegistryTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OprfKeyRegistry.DeletedId.selector, oprfKeyId));
-        oprfKeyRegistry.checkIsParticipantAndReturnEphemeralPublicKeys(oprfKeyId);
+        oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -519,14 +519,14 @@ contract OprfKeyRegistryTest is Test {
 
         // do round 1 contributions
         vm.prank(bob);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
         );
         vm.stopPrank();
 
         vm.prank(alice);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
@@ -537,7 +537,7 @@ contract OprfKeyRegistryTest is Test {
         vm.prank(carol);
         vm.expectEmit(true, true, true, true);
         emit Types.SecretGenRound2(oprfKeyId);
-        oprfKeyRegistry.addRound1Contribution(
+        oprfKeyRegistry.addRound1KeyGenContribution(
             oprfKeyId,
             Types.Round1Contribution({
                 commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
@@ -546,7 +546,6 @@ contract OprfKeyRegistryTest is Test {
         vm.stopPrank();
 
         // do round 2 contributions
-
         vm.prank(bob);
         oprfKeyRegistry.addRound2Contribution(oprfKeyId, bobRound2Contribution());
         vm.stopPrank();
@@ -571,7 +570,7 @@ contract OprfKeyRegistryTest is Test {
         vm.stopPrank();
 
         vm.expectEmit(true, true, true, true);
-        emit Types.SecretGenFinalize(oprfKeyId);
+        emit Types.SecretGenFinalize(oprfKeyId, 0);
         vm.prank(carol);
         oprfKeyRegistry.addRound3Contribution(oprfKeyId);
         vm.stopPrank();
@@ -581,6 +580,65 @@ contract OprfKeyRegistryTest is Test {
         assertEq(oprfKey.x, 2197751895809799734146001567623507872025142095924791991243994059456432106738);
         assertEq(oprfKey.y, 17752307105958841504133705104840128793511849993452913074787269028121192628329);
     }
+
+    // function testE2EReshare() public {
+    //     testE2E();
+    //     uint160 oprfKeyId = 42;
+    //     vm.prank(taceoAdmin);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit Types.ReshareRound1(oprfKeyId, THRESHOLD);
+    //     oprfKeyRegistry.initReshare(oprfKeyId);
+    //     vm.stopPrank();
+
+    //     // do round 1 contributions
+    //     vm.prank(bob);
+    //     oprfKeyRegistry.addRound1ReshareContribution(
+    //         oprfKeyId,
+    //         Types.Round1Contribution({commShare: commShareBob, commCoeffs: commCoeffsBob, ephPubKey: publicKeyBob})
+    //     );
+    //     vm.stopPrank();
+
+    //     vm.prank(alice);
+    //     oprfKeyRegistry.addRound1ReshareContribution(
+    //         oprfKeyId,
+    //         Types.Round1Contribution({
+    //             commShare: commShareAlice, commCoeffs: commCoeffsAlice, ephPubKey: publicKeyAlice
+    //         })
+    //     );
+    //     vm.stopPrank();
+
+    //     vm.prank(carol);
+    //     vm.expectEmit(true, true, true, true);
+    //     emit Types.SecretGenRound2(oprfKeyId);
+    //     oprfKeyRegistry.addRound1ReshareContribution(
+    //         oprfKeyId,
+    //         Types.Round1Contribution({
+    //             commShare: commShareCarol, commCoeffs: commCoeffsCarol, ephPubKey: publicKeyCarol
+    //         })
+    //     );
+    //     vm.stopPrank();
+    //     // do round 2 contributions
+    //     // check that carol is not a producer
+    //     vm.prank(carol);
+    //     Types.BabyJubJubElement[] memory ephKeys = oprfKeyRegistry.loadPeerPublicKeysForProducers(oprfKeyId);
+    //     assert(ephKeys.length == 0);
+    //     vm.stopPrank();
+
+    //     // only alice and bob need to contribute now
+    //     vm.prank(bob);
+    //     oprfKeyRegistry.addRound2Contribution(oprfKeyId, bobRound2Contribution());
+    //     vm.stopPrank();
+
+    //     vm.expectEmit(true, true, true, true);
+    //     uint256[] memory shouldLagrange = new uint256[](3);
+    //     shouldLagrange[0] = 2;
+    //     shouldLagrange[1] = 2736030358979909402780800718157159386076813972158567259200215660948447373040;
+    //     shouldLagrange[2] = 0;
+    //     emit Types.ReshareRound3(oprfKeyId, shouldLagrange);
+    //     vm.prank(alice);
+    //     oprfKeyRegistry.addRound2Contribution(oprfKeyId, aliceRound2Contribution());
+    //     vm.stopPrank();
+    // }
 }
 
 function aliceProof() pure returns (uint256[4] memory) {

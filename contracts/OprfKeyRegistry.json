@@ -52,7 +52,66 @@
   },
   {
     "type": "function",
-    "name": "addRound1Contribution",
+    "name": "addRound1KeyGenContribution",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
+      },
+      {
+        "name": "data",
+        "type": "tuple",
+        "internalType": "struct Types.Round1Contribution",
+        "components": [
+          {
+            "name": "commShare",
+            "type": "tuple",
+            "internalType": "struct Types.BabyJubJubElement",
+            "components": [
+              {
+                "name": "x",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "commCoeffs",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "ephPubKey",
+            "type": "tuple",
+            "internalType": "struct Types.BabyJubJubElement",
+            "components": [
+              {
+                "name": "x",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "addRound1ReshareContribution",
     "inputs": [
       {
         "name": "oprfKeyId",
@@ -196,37 +255,6 @@
   },
   {
     "type": "function",
-    "name": "checkIsParticipantAndReturnEphemeralPublicKeys",
-    "inputs": [
-      {
-        "name": "oprfKeyId",
-        "type": "uint160",
-        "internalType": "uint160"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct Types.BabyJubJubElement[]",
-        "components": [
-          {
-            "name": "x",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "y",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "checkIsParticipantAndReturnRound2Ciphers",
     "inputs": [
       {
@@ -319,6 +347,49 @@
   },
   {
     "type": "function",
+    "name": "getOprfPublicKeyAndEpoch",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct Types.RegisteredOprfPublicKey",
+        "components": [
+          {
+            "name": "key",
+            "type": "tuple",
+            "internalType": "struct Types.BabyJubJubElement",
+            "components": [
+              {
+                "name": "x",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "epoch",
+            "type": "uint128",
+            "internalType": "uint128"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getPartyIdForParticipant",
     "inputs": [
       {
@@ -339,6 +410,19 @@
   {
     "type": "function",
     "name": "initKeyGen",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initReshare",
     "inputs": [
       {
         "name": "oprfKeyId",
@@ -413,6 +497,68 @@
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "loadPeerPublicKeysForConsumers",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct Types.BabyJubJubElement[]",
+        "components": [
+          {
+            "name": "x",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "y",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "loadPeerPublicKeysForProducers",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "internalType": "uint160"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct Types.BabyJubJubElement[]",
+        "components": [
+          {
+            "name": "x",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "y",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -619,6 +765,19 @@
   },
   {
     "type": "event",
+    "name": "NotEnoughProducers",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "indexed": true,
+        "internalType": "uint160"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
@@ -657,6 +816,44 @@
   },
   {
     "type": "event",
+    "name": "ReshareRound1",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "indexed": true,
+        "internalType": "uint160"
+      },
+      {
+        "name": "threshold",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReshareRound3",
+    "inputs": [
+      {
+        "name": "oprfKeyId",
+        "type": "uint160",
+        "indexed": true,
+        "internalType": "uint160"
+      },
+      {
+        "name": "lagrange",
+        "type": "uint256[]",
+        "indexed": false,
+        "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SecretGenFinalize",
     "inputs": [
       {
@@ -664,6 +861,12 @@
         "type": "uint160",
         "indexed": true,
         "internalType": "uint160"
+      },
+      {
+        "name": "epoch",
+        "type": "uint128",
+        "indexed": true,
+        "internalType": "uint128"
       }
     ],
     "anonymous": false
@@ -797,6 +1000,11 @@
   {
     "type": "error",
     "name": "NotAParticipant",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotAProducer",
     "inputs": []
   },
   {

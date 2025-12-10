@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use oprf_types::{OprfKeyId, crypto::OprfPublicKey};
+use oprf_types::{OprfKeyId, ShareEpoch, api::OprfPublicKeyWithEpoch, crypto::OprfPublicKey};
 use reqwest::StatusCode;
 use tokio::task::JoinSet;
 
@@ -29,14 +29,15 @@ pub async fn services_health_check(
     Ok(())
 }
 
-async fn load_oprf_public_key(oprf_key_url: String) -> OprfPublicKey {
+async fn load_oprf_public_key(oprf_key_url: String, epoch: ShareEpoch) -> OprfPublicKey {
     loop {
         if let Ok(response) = reqwest::get(&oprf_key_url)
             .await
             .and_then(|response| response.error_for_status())
-            && let Ok(material) = response.json::<OprfPublicKey>().await
+            && let Ok(material) = response.json::<OprfPublicKeyWithEpoch>().await
+            && material.epoch == epoch
         {
-            return material;
+            return material.key;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
@@ -44,12 +45,13 @@ async fn load_oprf_public_key(oprf_key_url: String) -> OprfPublicKey {
 
 pub async fn oprf_public_key_from_services(
     oprf_key_id: OprfKeyId,
+    epoch: ShareEpoch,
     services: &[String],
     max_wait_time: Duration,
 ) -> eyre::Result<OprfPublicKey> {
     let oprf_public_key_checks = services
         .iter()
-        .map(|service| load_oprf_public_key(format!("{service}/oprf_pub/{oprf_key_id}")))
+        .map(|service| load_oprf_public_key(format!("{service}/oprf_pub/{oprf_key_id}"), epoch))
         .collect::<JoinSet<_>>();
     match tokio::time::timeout(max_wait_time, oprf_public_key_checks.join_all())
         .await
@@ -80,7 +82,7 @@ async fn oprf_public_key_not_known_check(health_url: String) {
     }
 }
 
-pub async fn assert_rp_unknown(
+pub async fn assert_key_id_unknown(
     oprf_key_id: OprfKeyId,
     services: &[String],
     max_wait_time: Duration,

@@ -2,6 +2,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::signers::local::PrivateKeySigner;
 use async_trait::async_trait;
+use eyre::ContextCompat;
 use itertools::Itertools;
 use oprf_core::ddlog_equality::shamir::DLogShareShamir;
 use oprf_service::oprf_key_material_store::OprfKeyMaterialStore;
@@ -23,7 +24,7 @@ impl TestSecretManager {
         }
     }
 
-    pub fn load_rps(&self) -> Vec<OprfKeyId> {
+    pub fn load_key_ids(&self) -> Vec<OprfKeyId> {
         self.store.lock().keys().copied().collect_vec()
     }
 }
@@ -43,6 +44,15 @@ impl oprf_key_gen::secret_manager::SecretManager for TestSecretManager {
         Ok(())
     }
 
+    async fn get_latest_share(&self, oprf_key_id: OprfKeyId) -> eyre::Result<DLogShareShamir> {
+        self.store
+            .lock()
+            .get(&oprf_key_id)
+            .expect("is there")
+            .get_latest_share()
+            .context("key-material is empty")
+    }
+
     async fn remove_oprf_key_material(&self, rp_id: OprfKeyId) -> eyre::Result<()> {
         if self.store.lock().remove(&rp_id).is_none() {
             panic!("trying to remove oprf_key_id that does not exist");
@@ -52,11 +62,16 @@ impl oprf_key_gen::secret_manager::SecretManager for TestSecretManager {
 
     async fn update_dlog_share(
         &self,
-        _: OprfKeyId,
-        _: ShareEpoch,
-        _: DLogShareShamir,
+        key_id: OprfKeyId,
+        epoch: ShareEpoch,
+        share: DLogShareShamir,
     ) -> eyre::Result<()> {
-        unreachable!()
+        self.store
+            .lock()
+            .get_mut(&key_id)
+            .expect("is there")
+            .insert_share(epoch, share);
+        Ok(())
     }
 }
 

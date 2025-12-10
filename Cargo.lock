@@ -4413,7 +4413,9 @@ dependencies = [
 name = "oprf-client-example"
 version = "0.1.0"
 dependencies = [
+ "ark-ec",
  "ark-ff 0.5.0",
+ "eyre",
  "oprf-client",
  "rand 0.8.5",
  "taceo-ark-babyjubjub",
@@ -6312,6 +6314,7 @@ dependencies = [
  "taceo-circom-types",
  "taceo-groth16-sol",
  "taceo-oprf-core",
+ "tracing",
  "uuid",
 ]
 

@@ -15,7 +15,7 @@ use alloy::{
 };
 use eyre::Context;
 use futures::StreamExt as _;
-use oprf_types::{OprfKeyId, chain::OprfKeyRegistry};
+use oprf_types::{OprfKeyId, ShareEpoch, chain::OprfKeyRegistry};
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
@@ -118,39 +118,44 @@ async fn handle_finalize(
     secret_manager: &SecretManagerService,
     get_oprf_key_material_timeout: Duration,
 ) -> eyre::Result<()> {
-    tracing::info!("Received SecretGenFinalize event");
-    let finalize = log
-        .log_decode()
-        .context("while decoding secret-gen finalize event")?;
-    let OprfKeyRegistry::SecretGenFinalize { oprfKeyId } = finalize.inner.data;
+    tracing::info!("Received Finalize event");
+    let finalize = log.log_decode().context("while decoding finalize event")?;
+    let OprfKeyRegistry::SecretGenFinalize { oprfKeyId, epoch } = finalize.inner.data;
     let handle_span = tracing::Span::current();
     handle_span.record("oprf_key_id", oprfKeyId.to_string());
-    tracing::info!("Event for {oprfKeyId}");
+    tracing::info!("Event for {oprfKeyId} ");
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     tokio::spawn(fetch_oprf_key_material_from_secret_manager(
         oprf_key_id,
         oprf_key_material_store.clone(),
         secret_manager.clone(),
         get_oprf_key_material_timeout,
+        epoch.into(),
     ));
     Ok(())
 }
 
-#[instrument(level="info", skip_all, fields(oprf_key_id=%oprf_key_id))]
+#[instrument(level="info", skip_all, fields(oprf_key_id=%oprf_key_id, epoch=%epoch))]
 async fn fetch_oprf_key_material_from_secret_manager(
     oprf_key_id: OprfKeyId,
     oprf_key_material_store: OprfKeyMaterialStore,
     secret_manager: SecretManagerService,
     get_oprf_key_material_timeout: Duration,
+    epoch: ShareEpoch,
 ) {
+    tracing::info!("trying to fetch {oprf_key_id} for epoch {epoch}");
     let mut interval = tokio::time::interval(Duration::from_secs(5));
     if tokio::time::timeout(get_oprf_key_material_timeout, async {
         loop {
             interval.tick().await;
-            if let Ok(key_material) = secret_manager.get_oprf_key_material(oprf_key_id).await {
-                tracing::info!("got key from secret manager for {oprf_key_id}");
-                oprf_key_material_store.add(oprf_key_id, key_material);
+            if let Ok(key_material) = secret_manager.get_oprf_key_material(oprf_key_id).await
+                && key_material.has_epoch(epoch)
+            {
+                tracing::info!("got key from secret manager for {oprf_key_id} and epoch {epoch}");
+                oprf_key_material_store.insert(oprf_key_id, key_material);
                 break;
+            } else {
+                tracing::debug!("{epoch} for {oprf_key_id} not yet in secret-manager");
             }
         }
     })

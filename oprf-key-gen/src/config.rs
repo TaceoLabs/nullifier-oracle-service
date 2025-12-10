@@ -76,4 +76,8 @@ pub struct OprfKeyGenConfig {
 
     )]
     pub max_wait_time_shutdown: Duration,
+
+    /// Max cache size for epochs. Only the latest `max_epoch_cache_size` will be stored in the secret-manager!
+    #[clap(long, env = "OPRF_NODE_MAX_EPOCH_CACHE_SIZE", default_value = "3")]
+    pub max_epoch_cache_size: usize,
 }

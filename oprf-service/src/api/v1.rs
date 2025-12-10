@@ -133,7 +133,10 @@ async fn partial_oprf<
         ));
     }
 
-    tracing::debug!("initiating session...");
+    tracing::debug!(
+        "initiating session with share epoch {:?}...",
+        init_request.share_identifier
+    );
     let (session, commitments) = oprf_material_store
         .partial_commit(init_request.blinded_query, init_request.share_identifier)?;
 

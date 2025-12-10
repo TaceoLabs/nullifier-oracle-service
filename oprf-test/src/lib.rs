@@ -1,8 +1,6 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
-
-use alloy::primitives::{Address, address};
-
 use crate::test_secret_manager::TestSecretManager;
+use alloy::primitives::{Address, address};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 pub mod health_checks;
 pub mod oprf_key_registry_scripts;
@@ -83,6 +81,7 @@ async fn start_key_gen(
         key_gen_zkey_path: dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey"),
         key_gen_witness_graph_path: dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin"),
         max_wait_time_shutdown: Duration::from_secs(10),
+        max_epoch_cache_size: 3,
     };
     let never = async { futures::future::pending::<()>().await };
     tokio::spawn(async move {
