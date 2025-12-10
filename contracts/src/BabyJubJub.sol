@@ -506,7 +506,7 @@ contract BabyJubJub {
         }
     }
 
-    /// @notice Performs point-doubling of a BabyJubJub projective point in twisted-edwards form.
+    /// @notice Performs point-doubling of a BabyJubJub projective point in twisted-edwards form. This method expect that the point is on the curve and in the correct subgroup.
     ///
     /// @param x The x-coordinate of the projective point.
     /// @param y The y-coordinate of the projective point.
@@ -531,7 +531,8 @@ contract BabyJubJub {
         // B = Y1^2
         uint256 b = mulmod(y, y, Q);
         // C = 2 * Z1^2
-        uint256 c = mulmod(2, mulmod(z, z, Q), Q);
+        // SAFETY: can write the 2 * z without mod because Q is 254 bits and we expect a valid point here.
+        uint256 c = mulmod(2 * z, z, Q);
         // D = a * A
         uint256 d = mulmod(a, A, Q);
         // E = (X1 + Y1)^2 - A - B
