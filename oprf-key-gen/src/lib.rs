@@ -13,7 +13,10 @@ use crate::{
 };
 use alloy::{
     network::EthereumWallet,
-    providers::{Provider as _, ProviderBuilder, WsConnect},
+    providers::{
+        Provider as _, ProviderBuilder, WsConnect,
+        fillers::{BlobGasFiller, ChainIdFiller},
+    },
 };
 use eyre::Context as _;
 use groth16_material::circom::CircomGroth16MaterialBuilder;
@@ -48,6 +51,10 @@ pub async fn start(
     tracing::info!("init rpc provider..");
     let ws = WsConnect::new(config.chain_ws_rpc_url.expose_secret());
     let provider = ProviderBuilder::new()
+        .filler(ChainIdFiller::default())
+        .with_simple_nonce_management()
+        .filler(BlobGasFiller)
+        .with_gas_estimation()
         .wallet(wallet)
         .connect_ws(ws)
         .await
