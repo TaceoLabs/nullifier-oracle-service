@@ -222,7 +222,7 @@ impl DLogSecretGenService {
             .remove(&oprf_key_id)
             .expect("todo how to handle this");
         let (contribution, toxix_waste_r2) =
-            compute_keygen_proof_max_degree1_parties3(&self.key_gen_material, toxic_waste_r1, pks)
+            compute_keygen_proof(&self.key_gen_material, toxic_waste_r1, pks)
                 .context("while computing proof for round2")?;
         self.toxic_waste_round2.insert(oprf_key_id, toxix_waste_r2);
         Ok(SecretGenRound2Contribution {
@@ -378,7 +378,7 @@ fn decrypt_key_gen_ciphertexts(
     }
 }
 
-/// Executes the `KeyGen` circom circuit for degree 1 and 3 parties.
+/// Executes the `KeyGen` circom circuit
 ///
 /// ## Security Considerations
 /// This method expects that the parameter `pks` contains exactly three [`EphemeralEncryptionPublicKey`]s that encapsulate valid BabyJubJub points on the correct subgroup.
@@ -386,7 +386,7 @@ fn decrypt_key_gen_ciphertexts(
 /// If `pks` were constructed without [`EphemeralEncryptionPublicKey::new_unchecked`], the points are on curve and the correct subgroup.
 ///
 /// This method consumes an instance of [`ToxicWasteRound1`] and, on success, produces an instance of [`ToxicWasteRound2`]. This enforces that the toxic waste from round 1 is in fact dropped when continuing with the KeyGen protocol.
-fn compute_keygen_proof_max_degree1_parties3(
+fn compute_keygen_proof(
     key_gen_material: &CircomGroth16Material,
     toxic_waste: ToxicWasteRound1,
     pks: Vec<EphemeralEncryptionPublicKey>,

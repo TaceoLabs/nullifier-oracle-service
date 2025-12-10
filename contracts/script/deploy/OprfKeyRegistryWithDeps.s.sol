@@ -41,8 +41,8 @@ contract DeployOprfKeyRegistryWithDepsScript is Script {
         vm.startBroadcast();
 
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
-        uint256 threshold = vm.envOr("THRESHOLD", uint256(2));
-        uint256 numPeers = vm.envOr("NUM_PEERS", uint256(3));
+        uint256 threshold = vm.envUint("THRESHOLD");
+        uint256 numPeers = vm.envUint("NUM_PEERS");
 
         address accumulatorAddress = deployAccumulator();
         address keyGenVerifierAddress = deployGroth16VerifierKeyGen(threshold, numPeers);

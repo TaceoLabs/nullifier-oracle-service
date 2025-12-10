@@ -19,8 +19,8 @@ contract DeployOprfKeyRegistryScript is Script {
         address taceoAdminAddress = vm.envAddress("TACEO_ADMIN_ADDRESS");
         address accumulatorAddress = vm.envAddress("ACCUMULATOR_ADDRESS");
         address keyGenVerifierAddress = vm.envAddress("KEY_GEN_VERIFIER_ADDRESS");
-        uint256 threshold = vm.envOr("THRESHOLD", uint256(2));
-        uint256 numPeers = vm.envOr("NUM_PEERS", uint256(3));
+        uint256 threshold = vm.envUint("THRESHOLD");
+        uint256 numPeers = vm.envUint("NUM_PEERS");
 
         console.log("using TACEO address:", taceoAdminAddress);
         console.log("using accumulator address:", accumulatorAddress);
