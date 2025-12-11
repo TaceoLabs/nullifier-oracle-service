@@ -234,6 +234,8 @@ fn handle_delete(
         .log_decode()
         .context("while decoding key deletion event")?;
     let OprfKeyRegistry::KeyDeletion { oprfKeyId } = key_delete.inner.data;
+    let handle_span = tracing::Span::current();
+    handle_span.record("oprf_key_id", oprfKeyId.to_string());
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     tracing::info!("got key deletion event for {oprf_key_id}");
     oprf_key_material_store.remove(oprf_key_id);
