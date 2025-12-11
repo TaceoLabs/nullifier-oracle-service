@@ -238,7 +238,7 @@ impl DLogSecretGenService {
     /// * `ciphers` - Ciphertexts received from other parties in round 2.
     /// * `sharing_type` - Defines how the resulting share is secret-shared. `Linear` for key-gen, `Shamir` for reshare.
     /// * `pks` - The ephemeral public-keys of the producers needed for DHE.
-    #[instrument(level = "info", skip(self, ciphers))]
+    #[instrument(level = "info", skip_all, fields(oprf_key_id=%oprf_key_id))]
     pub(crate) fn round3(
         &mut self,
         oprf_key_id: OprfKeyId,

@@ -81,6 +81,12 @@ pub struct OprfKeyGenConfig {
     #[clap(long, env = "OPRF_NODE_MAX_EPOCH_CACHE_SIZE", default_value = "3")]
     pub max_epoch_cache_size: usize,
 
+    /// Max transaction attempts when submitting contribution to the chain.
+    ///
+    /// We need this because RPCs are not very reliable, so we just try the same transaction multiple times in certain scenarios.
+    #[clap(long, env = "OPRF_NODE_TRANSACTION_ATTEMPTS", default_value = "3")]
+    pub transaction_attempts: usize,
+
     /// The block number to start listening for events from the OprfKeyRegistry contract.
     /// If not set, will start from the latest block.
     #[clap(long, env = "OPRF_NODE_START_BLOCK")]
