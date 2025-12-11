@@ -38,12 +38,14 @@ enum HumanReadable {
 /// Adds a `failed_upgrade` handler that logs the error.
 ///
 /// See [`partial_oprf`] for the flow of the web-socket connection. If the session finishes successfully, encounters an error, the user closes the connection, or we run into a timeout, the implementation will try to initiate a graceful shutdown of the web-socket connection (closing handshake). We do this at a best-effort basis but are very restrictive on what we expect. We close any session that sends invalid requests/authentication. If the sending of the `Close` frame fails, we simply ignore the error and destruct everything associated with the session.
+#[expect(clippy::too_many_arguments)]
 async fn ws<
     ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
     ReqAuthError: Send + 'static + std::error::Error,
 >(
     ws: WebSocketUpgrade,
     party_id: PartyId,
+    threshold: usize,
     open_sessions: OpenSessions,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
@@ -60,6 +62,7 @@ async fn ws<
                 partial_oprf::<ReqAuth, ReqAuthError>(
                     &mut ws,
                     party_id,
+                    threshold,
                     open_sessions,
                     oprf_material_store,
                     req_auth_service,
@@ -103,6 +106,7 @@ async fn partial_oprf<
 >(
     socket: &mut WebSocket,
     party_id: PartyId,
+    threshold: usize,
     open_sessions: OpenSessions,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
@@ -150,6 +154,20 @@ async fn partial_oprf<
 
     tracing::debug!("reading challenge...");
     let (challenge, _) = read_request::<DLogCommitmentsShamir>(socket).await?;
+
+    let coeffs = challenge.get_contributing_parties();
+    let num_coeffs = coeffs.len();
+    if num_coeffs != threshold {
+        return Err(Error::BadRequest(format!(
+            "expected {threshold} contributing parties but got {num_coeffs}",
+        )));
+    }
+    if !coeffs.contains(&party_id.into_inner()) {
+        return Err(Error::BadRequest(format!(
+            "contributing parties does not contain this party ({})",
+            party_id.into_inner(),
+        )));
+    }
 
     tracing::debug!("finalizing session...");
     let proof_share = oprf_material_store.challenge(
@@ -218,6 +236,7 @@ pub fn routes<
     ReqAuthError: Send + 'static + std::error::Error,
 >(
     party_id: PartyId,
+    threshold: usize,
     oprf_material_store: OprfKeyMaterialStore,
     open_sessions: OpenSessions,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
@@ -230,6 +249,7 @@ pub fn routes<
             ws::<ReqAuth, ReqAuthError>(
                 websocket_upgrade,
                 party_id,
+                threshold,
                 open_sessions,
                 oprf_material_store,
                 req_auth_service,

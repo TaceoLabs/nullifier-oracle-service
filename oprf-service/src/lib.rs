@@ -144,6 +144,15 @@ pub async fn init<
     );
     tracing::info!("we are party id: {party_id}");
 
+    let threshold = usize::try_from(
+        contract
+            .threshold()
+            .call()
+            .await
+            .context("while loading threshold")?,
+    )
+    .context("while converting threshold to usize")?;
+
     tracing::info!("init OPRF material-store..");
     let oprf_key_material_store = secret_manager
         .load_secrets()
@@ -169,6 +178,7 @@ pub async fn init<
     tracing::info!("init oprf-service...");
     let axum_rest_api = api::routes(
         party_id,
+        threshold,
         oprf_key_material_store,
         oprf_req_auth_service,
         config.wallet_address,
@@ -177,4 +187,226 @@ pub async fn init<
     );
 
     Ok((axum_rest_api, key_event_watcher))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, HashMap};
+
+    use alloy::uint;
+    use ark_ff::UniformRand as _;
+    use axum_test::{TestServer, TestWebSocket};
+    use oprf_client::BlindingFactor;
+    use oprf_core::ddlog_equality::shamir::{
+        DLogCommitmentsShamir, DLogProofShareShamir, DLogShareShamir,
+    };
+    use oprf_types::{
+        OprfKeyId, ShareEpoch,
+        api::v1::{OprfResponse, ShareIdentifier},
+        crypto::{OprfKeyMaterial, OprfPublicKey},
+    };
+    use uuid::Uuid;
+
+    use crate::{
+        oprf_key_material_store::OprfKeyMaterialStore, services::open_sessions::OpenSessions,
+    };
+
+    use super::*;
+
+    struct TestOprfNode {
+        websocket: TestWebSocket,
+        websocket_session_reuse: TestWebSocket,
+    }
+
+    impl TestOprfNode {
+        async fn send_oprf_request(&mut self, req: &OprfRequest<()>) {
+            let oprf_req = serde_json::to_string(req).expect("can serialize");
+            self.websocket.send_text(&oprf_req).await;
+        }
+
+        async fn receive_oprf_response(&mut self) -> OprfResponse {
+            let oprf_res = self.websocket.receive_text().await;
+            serde_json::from_str::<OprfResponse>(&oprf_res).expect("can deserialize")
+        }
+
+        async fn send_challenge_request(&mut self, req: &DLogCommitmentsShamir) {
+            let challenge_req = serde_json::to_string(req).expect("can serialize");
+            self.websocket.send_text(&challenge_req).await;
+        }
+
+        async fn receive_challenge_response(&mut self) -> DLogProofShareShamir {
+            let challenge_res = self.websocket.receive_text().await;
+            serde_json::from_str::<DLogProofShareShamir>(&challenge_res).expect("can deserialize")
+        }
+    }
+
+    async fn test_setup() -> (TestOprfNode, OprfRequest<()>, DLogCommitmentsShamir) {
+        let mut rng = rand::thread_rng();
+        let oprf_key_id = OprfKeyId::new(uint!(0_U160));
+        let request_id = Uuid::new_v4();
+        let blinding_factor = BlindingFactor::rand(&mut rng);
+        let query = ark_babyjubjub::Fq::rand(&mut rng);
+
+        let share_identifier = ShareIdentifier {
+            oprf_key_id,
+            share_epoch: ShareEpoch::default(),
+        };
+
+        let blinded_request = oprf_core::oprf::client::blind_query(query, blinding_factor.clone());
+        let oprf_req = OprfRequest {
+            request_id,
+            blinded_query: blinded_request.blinded_query(),
+            share_identifier,
+            auth: (),
+        };
+        let challenge_req = DLogCommitmentsShamir::new(
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            vec![0, 1],
+        );
+        let router = api::v1::routes(
+            PartyId(0),
+            2,
+            OprfKeyMaterialStore::new(HashMap::from([(
+                oprf_key_id,
+                OprfKeyMaterial::new(
+                    BTreeMap::from([(
+                        ShareEpoch::default(),
+                        DLogShareShamir::from(ark_babyjubjub::Fr::rand(&mut rng)),
+                    )]),
+                    OprfPublicKey::new(ark_babyjubjub::EdwardsAffine::default()),
+                    3,
+                ),
+            )])),
+            OpenSessions::default(),
+            Arc::new(WithoutAuthentication),
+            1024 * 1024,
+            std::time::Duration::from_secs(60),
+        );
+        let server = TestServer::builder()
+            .http_transport()
+            .build(router)
+            .expect("failed to build test server");
+        let websocket = server.get_websocket("/oprf").await.into_websocket().await;
+        let websocket_session_reuse = server.get_websocket("/oprf").await.into_websocket().await;
+        (
+            TestOprfNode {
+                websocket,
+                websocket_session_reuse,
+            },
+            oprf_req,
+            challenge_req,
+        )
+    }
+
+    #[tokio::test]
+    async fn init_and_challenge() -> eyre::Result<()> {
+        let (mut node, oprf_req, challenge_req) = test_setup().await;
+        node.send_oprf_request(&oprf_req).await;
+        node.receive_oprf_response().await;
+        node.send_challenge_request(&challenge_req).await;
+        node.receive_challenge_response().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn init_unknown_oprf_key_id() -> eyre::Result<()> {
+        let (mut node, mut oprf_req, _) = test_setup().await;
+        oprf_req.share_identifier.oprf_key_id = OprfKeyId::new(uint!(1_U160));
+        node.send_oprf_request(&oprf_req).await;
+        node.websocket
+            .assert_receive_text("unknown OPRF key id: 1")
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn init_unknown_share_epoch() -> eyre::Result<()> {
+        let (mut node, mut oprf_req, _) = test_setup().await;
+        oprf_req.share_identifier.share_epoch = ShareEpoch::new(1);
+        node.send_oprf_request(&oprf_req).await;
+        node.websocket
+            .assert_receive_text("unknown share epoch: 1")
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn init_session_reuse() -> eyre::Result<()> {
+        let (mut node, oprf_req, _) = test_setup().await;
+        node.send_oprf_request(&oprf_req).await;
+        node.websocket_session_reuse
+            .send_text(serde_json::to_string(&oprf_req)?)
+            .await;
+        node.websocket_session_reuse
+            .assert_receive_text(format!("session {} already exists", oprf_req.request_id))
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn init_bad_blinded_query() -> eyre::Result<()> {
+        let (mut node, mut oprf_req, _) = test_setup().await;
+        oprf_req.blinded_query = ark_babyjubjub::EdwardsAffine::zero();
+        node.send_oprf_request(&oprf_req).await;
+        node.websocket
+            .assert_receive_text("blinded query must not be identity")
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn challenge_without_init() -> eyre::Result<()> {
+        let (mut node, _, challenge_req) = test_setup().await;
+        node.send_challenge_request(&challenge_req).await;
+        node.websocket
+            .assert_receive_text("unexpected message")
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn challenge_bad_contributing_parties() -> eyre::Result<()> {
+        let mut rng = rand::thread_rng();
+        let (mut node, oprf_req, _) = test_setup().await;
+        node.send_oprf_request(&oprf_req).await;
+        node.receive_oprf_response().await;
+        let challenge_req = DLogCommitmentsShamir::new(
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            vec![42],
+        );
+        node.send_challenge_request(&challenge_req).await;
+        node.websocket
+            .assert_receive_text("expected 2 contributing parties but got 1")
+            .await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn challenge_bad_not_a_contributing_party() -> eyre::Result<()> {
+        let mut rng = rand::thread_rng();
+        let (mut node, oprf_req, _) = test_setup().await;
+        node.send_oprf_request(&oprf_req).await;
+        node.receive_oprf_response().await;
+        let challenge_req = DLogCommitmentsShamir::new(
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            ark_babyjubjub::EdwardsAffine::rand(&mut rng),
+            vec![1, 2],
+        );
+        node.send_challenge_request(&challenge_req).await;
+        node.websocket
+            .assert_receive_text("contributing parties does not contain this party (0)")
+            .await;
+        Ok(())
+    }
 }

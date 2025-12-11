@@ -38,6 +38,7 @@ pub fn routes<
     RequestAuthError: Send + 'static + std::error::Error,
 >(
     party_id: PartyId,
+    threshold: usize,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<RequestAuth, RequestAuthError>,
     wallet_address: Address,
@@ -51,6 +52,7 @@ pub fn routes<
             "/api/v1",
             v1::routes(
                 party_id,
+                threshold,
                 oprf_material_store.clone(),
                 open_sessions,
                 req_auth_service.clone(),

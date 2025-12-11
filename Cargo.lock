@@ -1808,10 +1808,12 @@ checksum = "3290e73c56c5cc4701cdd7d46b9ced1b4bd61c7e9f9c769a9e9e87ff617d75d2"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "bytesize",
  "cookie",
  "expect-json",
+ "futures-util",
  "http 1.4.0",
  "http-body-util",
  "hyper 1.8.1",
@@ -1825,8 +1827,10 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "tokio",
+ "tokio-tungstenite 0.28.0",
  "tower",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -4489,10 +4493,12 @@ name = "oprf-service"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "ark-ff 0.5.0",
  "async-trait",
  "aws-config",
  "aws-sdk-secretsmanager",
  "axum",
+ "axum-test",
  "ciborium",
  "clap",
  "eyre",
@@ -4500,6 +4506,7 @@ dependencies = [
  "http 1.4.0",
  "humantime",
  "metrics",
+ "oprf-client",
  "parking_lot",
  "rand 0.8.5",
  "secrecy",
