@@ -283,6 +283,8 @@ async fn handle_round2(
         .log_decode()
         .context("while decoding secret-gen round2 event")?;
     let OprfKeyRegistry::SecretGenRound2 { oprfKeyId } = round2.inner.data;
+    let handle_span = tracing::Span::current();
+    handle_span.record("oprf_key_id", oprfKeyId.to_string());
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     tracing::info!("fetching ephemeral public keys from chain..");
     let nodes = contract
@@ -342,6 +344,8 @@ async fn handle_keygen_round3(
         .log_decode()
         .context("while decoding secret-gen round3 event")?;
     let OprfKeyRegistry::SecretGenRound3 { oprfKeyId } = round3.inner.data;
+    let handle_span = tracing::Span::current();
+    handle_span.record("oprf_key_id", oprfKeyId.to_string());
     handle_round3_inner(
         OprfKeyId::from(oprfKeyId),
         contract,
@@ -472,6 +476,8 @@ async fn handle_reshare_round3(
         oprfKeyId,
         lagrange,
     } = log.inner.data;
+    let handle_span = tracing::Span::current();
+    handle_span.record("oprf_key_id", oprfKeyId.to_string());
     let lagrange = lagrange
         .into_iter()
         .filter_map(|x| {
@@ -502,6 +508,8 @@ async fn handle_delete(
         .log_decode()
         .context("while decoding key deletion event")?;
     let OprfKeyRegistry::KeyDeletion { oprfKeyId } = key_delete.inner.data;
+    let handle_span = tracing::Span::current();
+    handle_span.record("oprf_key_id", oprfKeyId.to_string());
     let oprf_key_id = OprfKeyId::from(oprfKeyId);
     tracing::info!("got key deletion event for {oprf_key_id}");
     // we need to delete all the toxic waste associated with the rp id
