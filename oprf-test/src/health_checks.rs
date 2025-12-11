@@ -6,7 +6,11 @@ use tokio::task::JoinSet;
 
 async fn health_check(health_url: String) {
     loop {
-        if reqwest::get(&health_url).await.is_ok() {
+        if let Ok(resp) = reqwest::get(&health_url).await
+            && let Ok(resp) = resp.error_for_status()
+            && let Ok(msg) = resp.text().await
+            && msg == "healthy"
+        {
             break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
