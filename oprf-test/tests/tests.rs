@@ -31,7 +31,7 @@ async fn oprf_example_with_reshare_e2e_test_13() -> eyre::Result<()> {
 
     let secret_managers = oprf_test::create_3_secret_managers();
     println!("Starting OPRF key-gens...");
-    oprf_test::start_3_key_gens(
+    let oprf_key_gens = oprf_test::start_3_key_gens(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
@@ -45,7 +45,7 @@ async fn oprf_example_with_reshare_e2e_test_13() -> eyre::Result<()> {
     )
     .await;
 
-    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
+    health_checks::services_health_check(&oprf_key_gens, Duration::from_secs(60)).await?;
 
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
@@ -148,7 +148,7 @@ async fn oprf_example_e2e_test_25() -> eyre::Result<()> {
 
     let secret_managers = oprf_test::create_5_secret_managers();
     println!("Starting OPRF key-gens...");
-    oprf_test::start_5_key_gens(
+    let oprf_key_gens = oprf_test::start_5_key_gens(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
@@ -162,7 +162,7 @@ async fn oprf_example_e2e_test_25() -> eyre::Result<()> {
     )
     .await;
 
-    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
+    health_checks::services_health_check(&oprf_key_gens, Duration::from_secs(60)).await?;
 
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
@@ -216,7 +216,7 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
 
     let secret_managers = oprf_test::create_3_secret_managers();
     println!("Starting OPRF key-gens...");
-    oprf_test::start_3_key_gens(
+    let oprf_key_gens = oprf_test::start_3_key_gens(
         &anvil.ws_endpoint(),
         secret_managers.clone(),
         oprf_key_registry_contract,
@@ -230,7 +230,7 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
     )
     .await;
 
-    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
+    health_checks::services_health_check(&oprf_key_gens, Duration::from_secs(60)).await?;
 
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
