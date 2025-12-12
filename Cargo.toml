@@ -39,7 +39,7 @@ blake3 = "1"
 ciborium = "0.2"
 circom-types = { package = "taceo-circom-types", version = "0.1", default-features = false }
 clap = "4"
-criterion = "0.7"
+criterion = "0.8"
 eddsa-babyjubjub = { package = "taceo-eddsa-babyjubjub", version = "0.5" }
 eyre = { version = "0.6" }
 futures = "0.3"
