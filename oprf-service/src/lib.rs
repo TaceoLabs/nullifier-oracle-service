@@ -401,11 +401,11 @@ mod tests {
             ark_babyjubjub::EdwardsAffine::rand(&mut rng),
             ark_babyjubjub::EdwardsAffine::rand(&mut rng),
             ark_babyjubjub::EdwardsAffine::rand(&mut rng),
-            vec![1, 2],
+            vec![2, 3], // parties 0 and 1 with coeffs 1 and 2
         );
         node.send_challenge_request(&challenge_req).await;
         node.websocket
-            .assert_receive_text("contributing parties does not contain this party (0)")
+            .assert_receive_text("contributing parties does not contain my coefficient (1)")
             .await;
         Ok(())
     }

@@ -162,10 +162,10 @@ async fn partial_oprf<
             "expected {threshold} contributing parties but got {num_coeffs}",
         )));
     }
-    if !coeffs.contains(&party_id.into_inner()) {
+    let my_coeff = party_id.into_inner() + 1;
+    if !coeffs.contains(&my_coeff) {
         return Err(Error::BadRequest(format!(
-            "contributing parties does not contain this party ({})",
-            party_id.into_inner(),
+            "contributing parties does not contain my coefficient ({my_coeff})",
         )));
     }
 
