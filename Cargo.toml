@@ -51,8 +51,8 @@ humantime = "2"
 itertools = "0.14"
 k256 = "0.13"
 metrics = "0.24"
-nodes-common = { package = "taceo-nodes-common", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "33fcbcc" }
-nodes-observability = { package = "taceo-nodes-observability", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "33fcbcc" }
+nodes-common = { package = "taceo-nodes-common", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "25bc2dc" }
+nodes-observability = { package = "taceo-nodes-observability", git = "https://github.com/TaceoLabs/nodes-helpers.git", rev = "25bc2dc" }
 num-bigint = "0.4"
 oprf-client = { path = "oprf-client" }
 oprf-client-example = { path = "oprf-client-example" }

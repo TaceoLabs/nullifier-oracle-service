@@ -40,7 +40,7 @@ pub(crate) fn routes(oprf_material_store: OprfKeyMaterialStore, wallet_address: 
 ///
 /// Returns `200 OK` with a string response.
 async fn version() -> impl IntoResponse {
-    (StatusCode::OK, nodes_common::version_info())
+    (StatusCode::OK, nodes_common::version_info!())
 }
 
 /// Responds with the wallet address of the oprf node

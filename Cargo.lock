@@ -6279,7 +6279,7 @@ dependencies = [
 [[package]]
 name = "taceo-nodes-common"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nodes-helpers.git?rev=33fcbcc#33fcbcca1882cd7582b416dd8ec203d104e6fdbb"
+source = "git+https://github.com/TaceoLabs/nodes-helpers.git?rev=25bc2dc#25bc2dca7627342777aa5dc46000ee5d8d9dfd65"
 dependencies = [
  "aws-config",
  "aws-sdk-secretsmanager",
@@ -6292,7 +6292,7 @@ dependencies = [
 [[package]]
 name = "taceo-nodes-observability"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/nodes-helpers.git?rev=33fcbcc#33fcbcca1882cd7582b416dd8ec203d104e6fdbb"
+source = "git+https://github.com/TaceoLabs/nodes-helpers.git?rev=25bc2dc#25bc2dca7627342777aa5dc46000ee5d8d9dfd65"
 dependencies = [
  "eyre",
  "humantime",

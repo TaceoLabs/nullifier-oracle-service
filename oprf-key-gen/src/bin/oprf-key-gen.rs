@@ -21,7 +21,7 @@ async fn main() -> eyre::Result<ExitCode> {
     let _tracing_handle = nodes_observability::initialize_tracing(&tracing_config)?;
     oprf_key_gen::metrics::describe_metrics();
 
-    tracing::info!("{}", nodes_common::version_info());
+    tracing::info!("{}", nodes_common::version_info!());
 
     let config = OprfKeyGenConfig::parse();
 
