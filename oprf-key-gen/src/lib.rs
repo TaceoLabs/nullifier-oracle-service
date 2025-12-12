@@ -9,7 +9,10 @@
 //! For details on the OPRF protocol, see the [design document](https://github.com/TaceoLabs/nullifier-oracle-service/blob/491416de204dcad8d46ee1296d59b58b5be54ed9/docs/oprf.pdf).
 use crate::{
     config::OprfKeyGenConfig,
-    services::{secret_gen::DLogSecretGenService, secret_manager::SecretManagerService},
+    services::{
+        key_event_watcher::KeyEventWatcherTaskConfig, secret_gen::DLogSecretGenService,
+        secret_manager::SecretManagerService,
+    },
 };
 use alloy::{
     network::EthereumWallet,
@@ -85,15 +88,16 @@ pub async fn start(
         let provider = provider.clone();
         let contract_address = config.oprf_key_registry_contract;
         let cancellation_token = cancellation_token.clone();
-        services::key_event_watcher::key_event_watcher_task(
+        services::key_event_watcher::key_event_watcher_task(KeyEventWatcherTaskConfig {
             provider,
             contract_address,
-            secret_manager,
             dlog_secret_gen_service,
-            config.start_block,
+            start_block: config.start_block,
+            max_epoch_cache_size: config.max_epoch_cache_size,
+            secret_manager,
+            transaction_attempts: config.transaction_attempts,
             cancellation_token,
-            config.max_epoch_cache_size,
-        )
+        })
     });
 
     tracing::info!("everything started successfully - now waiting for shutdown...");

@@ -5,12 +5,15 @@
 //!
 //! Use these types to encode the payloads that nodes send and receive on-chain.
 
+use std::fmt;
+
 use alloy::{primitives::U256, sol};
 use ark_ff::PrimeField as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     OprfKeyId,
+    chain::OprfKeyRegistry::OprfKeyRegistryErrors,
     crypto::{
         EphemeralEncryptionPublicKey, SecretGenCiphertext, SecretGenCiphertexts,
         SecretGenCommitment,
@@ -24,6 +27,49 @@ sol!(
     OprfKeyRegistry,
     "../contracts/OprfKeyRegistry.json"
 );
+
+impl fmt::Debug for OprfKeyRegistryErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AddressEmptyCode(_) => f.debug_tuple("AddressEmptyCode").finish(),
+            Self::AlreadySubmitted(_) => f.debug_tuple("AlreadySubmitted").finish(),
+            Self::BadContribution(_) => f.debug_tuple("BadContribution").finish(),
+            Self::DeletedId(_) => f.debug_tuple("DeletedId").finish(),
+            Self::ERC1967InvalidImplementation(_) => {
+                f.debug_tuple("ERC1967InvalidImplementation").finish()
+            }
+            Self::ERC1967NonPayable(_) => f.debug_tuple("ERC1967NonPayable").finish(),
+            Self::FailedCall(_) => f.debug_tuple("FailedCall").finish(),
+            Self::ImplementationNotInitialized(_) => {
+                f.debug_tuple("ImplementationNotInitialized").finish()
+            }
+            Self::InvalidInitialization(_) => f.debug_tuple("InvalidInitialization").finish(),
+            Self::LastAdmin(_) => f.debug_tuple("LastAdmin").finish(),
+            Self::NotAParticipant(_) => f.debug_tuple("NotAParticipant").finish(),
+            Self::NotAProducer(_) => f.debug_tuple("NotAProducer").finish(),
+            Self::NotInitializing(_) => f.debug_tuple("NotInitializing").finish(),
+            Self::NotReady(_) => f.debug_tuple("NotReady").finish(),
+            Self::OnlyAdmin(_) => f.debug_tuple("OnlyAdmin").finish(),
+            Self::OutdatedNullifier(_) => f.debug_tuple("OutdatedNullifier").finish(),
+            Self::OwnableInvalidOwner(_) => f.debug_tuple("OwnableInvalidOwner").finish(),
+            Self::OwnableUnauthorizedAccount(_) => {
+                f.debug_tuple("OwnableUnauthorizedAccount").finish()
+            }
+            Self::UUPSUnauthorizedCallContext(_) => {
+                f.debug_tuple("UUPSUnauthorizedCallContext").finish()
+            }
+            Self::UUPSUnsupportedProxiableUUID(_) => {
+                f.debug_tuple("UUPSUnsupportedProxiableUUID").finish()
+            }
+            Self::UnexpectedAmountPeers(_) => f.debug_tuple("UnexpectedAmountPeers").finish(),
+            Self::UnknownId(_) => f.debug_tuple("UnknownId").finish(),
+            Self::UnsupportedNumPeersThreshold(_) => {
+                f.debug_tuple("UnsupportedNumPeersThreshold").finish()
+            }
+            Self::WrongRound(_) => f.debug_tuple("WrongRound").finish(),
+        }
+    }
+}
 
 /// A first-round key-generation contribution submitted on-chain.
 ///

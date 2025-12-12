@@ -50,7 +50,7 @@ integration-tests:
 
 [group('test')]
 all-rust-tests:
-    cargo test --release --all-features
+    cargo test --release --workspace --all-features
 
 [group('test')]
 circom-tests:
