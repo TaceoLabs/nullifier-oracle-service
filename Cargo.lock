@@ -4475,6 +4475,7 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-secretsmanager",
+ "axum",
  "clap",
  "eyre",
  "futures",
@@ -4495,6 +4496,7 @@ dependencies = [
  "testcontainers-modules",
  "tokio",
  "tokio-util",
+ "tower-http",
  "tracing",
  "zeroize",
 ]

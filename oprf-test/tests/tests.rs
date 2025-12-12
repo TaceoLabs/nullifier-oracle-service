@@ -45,6 +45,8 @@ async fn oprf_example_with_reshare_e2e_test_13() -> eyre::Result<()> {
     )
     .await;
 
+    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
+
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
         oprf_key_registry_contract,
@@ -160,6 +162,8 @@ async fn oprf_example_e2e_test_25() -> eyre::Result<()> {
     )
     .await;
 
+    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
+
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),
         oprf_key_registry_contract,
@@ -225,6 +229,8 @@ async fn test_delete_oprf_key() -> eyre::Result<()> {
         oprf_key_registry_contract,
     )
     .await;
+
+    health_checks::services_health_check(&oprf_services, Duration::from_secs(60)).await?;
 
     let oprf_key_id = oprf_key_registry_scripts::init_key_gen(
         &anvil.endpoint(),

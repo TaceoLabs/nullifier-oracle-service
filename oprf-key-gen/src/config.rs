@@ -2,7 +2,7 @@
 //!
 //! Additionally this module defines the [`Environment`] to assert dev-only code.
 
-use std::{path::PathBuf, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use alloy::primitives::Address;
 use clap::{Parser, ValueEnum};
@@ -37,6 +37,10 @@ pub struct OprfKeyGenConfig {
     /// The environment of OPRF-service (either `prod` or `dev`).
     #[clap(long, env = "OPRF_NODE_ENVIRONMENT", default_value = "prod")]
     pub environment: Environment,
+
+    /// The bind addr of the AXUM server
+    #[clap(long, env = "OPRF_NODE_BIND_ADDR", default_value = "0.0.0.0:5432")]
+    pub bind_addr: SocketAddr,
 
     /// The Address of the OprfKeyRegistry contract.
     #[clap(long, env = "OPRF_NODE_OPRF_KEY_REGISTRY_CONTRACT")]

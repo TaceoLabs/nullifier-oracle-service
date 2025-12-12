@@ -81,9 +81,11 @@ async fn start_key_gen(
     rp_registry_contract: Address,
     key_gen_zkey_path: PathBuf,
     key_gen_witness_graph_path: PathBuf,
-) {
+) -> String {
+    let url = format!("http://localhost:2{id:04}"); // set port based on id, e.g. 20001 for id 1
     let config = oprf_key_gen::config::OprfKeyGenConfig {
         environment: oprf_key_gen::config::Environment::Dev,
+        bind_addr: format!("0.0.0.0:2{id:04}").parse().unwrap(),
         oprf_key_registry_contract: rp_registry_contract,
         chain_ws_rpc_url: chain_ws_rpc_url.into(),
         rp_secret_id_prefix: format!("oprf/rp/n{id}"),
@@ -100,6 +102,7 @@ async fn start_key_gen(
         let res = oprf_key_gen::start(config, Arc::new(secret_manager), never).await;
         eprintln!("key-gen failed to start: {res:?}");
     });
+    url
 }
 
 pub fn create_3_secret_managers() -> [TestSecretManager; 3] {
@@ -208,7 +211,7 @@ pub async fn start_3_key_gens(
     chain_ws_rpc_url: &str,
     secret_manager: [TestSecretManager; 3],
     key_gen_contract: Address,
-) {
+) -> [String; 3] {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let key_get_zkey_path = dir.join("../circom/main/key-gen/OPRFKeyGen.13.arks.zkey");
     let key_gen_witness_graph_path = dir.join("../circom/main/key-gen/OPRFKeyGenGraph.13.bin");
@@ -238,14 +241,15 @@ pub async fn start_3_key_gens(
             key_get_zkey_path.clone(),
             key_gen_witness_graph_path.clone()
         ),
-    );
+    )
+    .into()
 }
 
 pub async fn start_5_key_gens(
     chain_ws_rpc_url: &str,
     secret_manager: [TestSecretManager; 5],
     key_gen_contract: Address,
-) {
+) -> [String; 5] {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let key_get_zkey_path = dir.join("../circom/main/key-gen/OPRFKeyGen.25.arks.zkey");
     let key_gen_witness_graph_path = dir.join("../circom/main/key-gen/OPRFKeyGenGraph.25.bin");
@@ -297,5 +301,6 @@ pub async fn start_5_key_gens(
             key_get_zkey_path.clone(),
             key_gen_witness_graph_path.clone()
         ),
-    );
+    )
+    .into()
 }

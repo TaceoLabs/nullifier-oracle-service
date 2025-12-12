@@ -26,6 +26,7 @@ use groth16_material::circom::CircomGroth16MaterialBuilder;
 use oprf_types::{chain::OprfKeyRegistry, crypto::PartyId};
 use secrecy::ExposeSecret as _;
 
+pub(crate) mod api;
 pub mod config;
 pub mod metrics;
 pub(crate) mod services;
@@ -100,6 +101,30 @@ pub async fn start(
         })
     });
 
+    let key_gen_router = api::routes(address);
+
+    let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
+    let axum_cancel_token = cancellation_token.clone();
+    let server = tokio::spawn(async move {
+        tracing::info!(
+            "starting axum server on {}",
+            listener
+                .local_addr()
+                .map(|x| x.to_string())
+                .unwrap_or(String::from("invalid addr"))
+        );
+        let axum_shutdown_signal = axum_cancel_token.clone();
+        let axum_result = axum::serve(listener, key_gen_router)
+            .with_graceful_shutdown(async move { axum_shutdown_signal.cancelled().await })
+            .await;
+        tracing::info!("axum server shutdown");
+        if let Err(err) = axum_result {
+            tracing::error!("got error from axum: {err:?}");
+        }
+        // we cancel the token in case axum encountered an error to shutdown the service
+        axum_cancel_token.cancel();
+    });
+
     tracing::info!("everything started successfully - now waiting for shutdown...");
     cancellation_token.cancelled().await;
 
@@ -107,7 +132,11 @@ pub async fn start(
         "waiting for shutdown of services (max wait time {:?})..",
         config.max_wait_time_shutdown
     );
-    match tokio::time::timeout(config.max_wait_time_shutdown, key_event_watcher).await {
+    match tokio::time::timeout(config.max_wait_time_shutdown, async move {
+        tokio::join!(server, key_event_watcher)
+    })
+    .await
+    {
         Ok(_) => tracing::info!("successfully finished shutdown in time"),
         Err(_) => tracing::warn!("could not finish shutdown in time"),
     }
