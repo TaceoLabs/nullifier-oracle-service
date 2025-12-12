@@ -75,7 +75,7 @@ pub(crate) async fn key_event_watcher_task(args: KeyEventWatcherTaskConfig) -> e
 /// We need this because Alchemy sometimes responds with null responses and a retry might fix this issue. Additionally, if the transaction fails with any other reason, the implementation tries to do an ordinary call to get the revert reason, if there is any.
 ///
 /// Takes an `Fn` that produces a `CallBuilder`. This can be done e.g., with
-/// ```no_run
+/// ```rust,ignore
 /// attempt_transaction(
 ///     || contract.addRound3Contribution(res.oprf_key_id.into_inner()),
 ///     transaction_attempts,
@@ -133,7 +133,7 @@ where
                     );
                 } else {
                     eyre::bail!(
-                        "cannot finish transaction an call afterwards failed as well: {err:?}"
+                        "cannot finish transaction and call afterwards failed as well: {err:?}"
                     );
                 }
             }
