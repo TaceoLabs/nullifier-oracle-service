@@ -31,9 +31,9 @@ impl Error {
                 // nothing to do here
                 None
             }
-            err @ Error::SessionReuse(_) => Some(CloseFrame {
+            Error::SessionReuse(session_id) => Some(CloseFrame {
                 code: close_code::POLICY,
-                reason: err.to_string().into(),
+                reason: format!("session {session_id} already exists").into(),
             }),
             Error::Axum(_) => Some(CloseFrame {
                 code: close_code::ERROR,
@@ -41,15 +41,15 @@ impl Error {
             }),
             Error::UnexpectedMessage => Some(CloseFrame {
                 code: close_code::UNSUPPORTED,
-                reason: "only text or binary".into(),
+                reason: "unexpected message".into(),
             }),
-            err @ Error::Auth(_) => Some(CloseFrame {
+            Error::Auth(err) => Some(CloseFrame {
                 code: close_code::POLICY,
-                reason: err.to_string().into(),
+                reason: err.into(),
             }),
-            err @ Error::BadRequest(_) => Some(CloseFrame {
+            Error::BadRequest(err) => Some(CloseFrame {
                 code: oprf_error_codes::BAD_REQUEST,
-                reason: err.to_string().into(),
+                reason: err.into(),
             }),
         }
     }
@@ -59,9 +59,11 @@ impl From<OprfKeyMaterialStoreError> for Error {
     fn from(value: OprfKeyMaterialStoreError) -> Self {
         // we bind it like this in case we add an error later, the compiler will scream at us.
         match value {
-            err @ OprfKeyMaterialStoreError::UnknownOprfKeyId(_)
-            | err @ OprfKeyMaterialStoreError::UnknownShareEpoch(_) => {
-                Self::BadRequest(err.to_string())
+            OprfKeyMaterialStoreError::UnknownOprfKeyId(oprf_key_id) => {
+                Self::BadRequest(format!("unknown OPRF key id: {oprf_key_id}"))
+            }
+            OprfKeyMaterialStoreError::UnknownShareEpoch(epoch) => {
+                Self::BadRequest(format!("unknown share epoch: {epoch}"))
             }
         }
     }

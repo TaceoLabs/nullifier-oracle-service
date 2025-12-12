@@ -25,6 +25,17 @@ enum HumanReadable {
     No,
 }
 
+struct WebSocketArgs<ReqAuth, ReqAuthError> {
+    ws: WebSocketUpgrade,
+    party_id: PartyId,
+    threshold: usize,
+    open_sessions: OpenSessions,
+    oprf_material_store: OprfKeyMaterialStore,
+    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
+    max_message_size: usize,
+    max_connection_lifetime: Duration,
+}
+
 /// Web-socket handler.
 ///
 /// Sets the `max_message_size` for the web-socket to the provided value. Implementations are encouraged to use a very conservative value here. We only expect exactly two kinds of messages, and those are very small (of course depending on your authentication request), therefore we can reject larger requests pretty handily.
@@ -42,27 +53,23 @@ async fn ws<
     ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
     ReqAuthError: Send + 'static + std::error::Error,
 >(
-    ws: WebSocketUpgrade,
-    party_id: PartyId,
-    open_sessions: OpenSessions,
-    oprf_material_store: OprfKeyMaterialStore,
-    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
-    max_message_size: usize,
-    max_connection_lifetime: Duration,
+    args: WebSocketArgs<ReqAuth, ReqAuthError>,
 ) -> axum::response::Response {
-    ws.max_message_size(max_message_size)
+    args.ws
+        .max_message_size(args.max_message_size)
         .on_failed_upgrade(|err| {
             tracing::warn!("could not establish websocket connection: {err:?}");
         })
         .on_upgrade(move |mut ws| async move {
             let close_frame = match tokio::time::timeout(
-                max_connection_lifetime,
+                args.max_connection_lifetime,
                 partial_oprf::<ReqAuth, ReqAuthError>(
                     &mut ws,
-                    party_id,
-                    open_sessions,
-                    oprf_material_store,
-                    req_auth_service,
+                    args.party_id,
+                    args.threshold,
+                    args.open_sessions,
+                    args.oprf_material_store,
+                    args.req_auth_service,
                 ),
             )
             .await
@@ -103,6 +110,7 @@ async fn partial_oprf<
 >(
     socket: &mut WebSocket,
     party_id: PartyId,
+    threshold: usize,
     open_sessions: OpenSessions,
     oprf_material_store: OprfKeyMaterialStore,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
@@ -150,6 +158,20 @@ async fn partial_oprf<
 
     tracing::debug!("reading challenge...");
     let (challenge, _) = read_request::<DLogCommitmentsShamir>(socket).await?;
+
+    let coeffs = challenge.get_contributing_parties();
+    let num_coeffs = coeffs.len();
+    if num_coeffs != threshold {
+        return Err(Error::BadRequest(format!(
+            "expected {threshold} contributing parties but got {num_coeffs}",
+        )));
+    }
+    let my_coeff = party_id.into_inner() + 1;
+    if !coeffs.contains(&my_coeff) {
+        return Err(Error::BadRequest(format!(
+            "contributing parties does not contain my coefficient ({my_coeff})",
+        )));
+    }
 
     tracing::debug!("finalizing session...");
     let proof_share = oprf_material_store.challenge(
@@ -218,6 +240,7 @@ pub fn routes<
     ReqAuthError: Send + 'static + std::error::Error,
 >(
     party_id: PartyId,
+    threshold: usize,
     oprf_material_store: OprfKeyMaterialStore,
     open_sessions: OpenSessions,
     req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
@@ -227,15 +250,16 @@ pub fn routes<
     Router::new().route(
         "/oprf",
         any(move |websocket_upgrade| {
-            ws::<ReqAuth, ReqAuthError>(
-                websocket_upgrade,
+            ws::<ReqAuth, ReqAuthError>(WebSocketArgs {
+                ws: websocket_upgrade,
                 party_id,
+                threshold,
                 open_sessions,
                 oprf_material_store,
                 req_auth_service,
                 max_message_size,
                 max_connection_lifetime,
-            )
+            })
         }),
     )
 }
