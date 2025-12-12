@@ -25,6 +25,17 @@ enum HumanReadable {
     No,
 }
 
+struct WebSocketArgs<ReqAuth, ReqAuthError> {
+    ws: WebSocketUpgrade,
+    party_id: PartyId,
+    threshold: usize,
+    open_sessions: OpenSessions,
+    oprf_material_store: OprfKeyMaterialStore,
+    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
+    max_message_size: usize,
+    max_connection_lifetime: Duration,
+}
+
 /// Web-socket handler.
 ///
 /// Sets the `max_message_size` for the web-socket to the provided value. Implementations are encouraged to use a very conservative value here. We only expect exactly two kinds of messages, and those are very small (of course depending on your authentication request), therefore we can reject larger requests pretty handily.
@@ -38,34 +49,27 @@ enum HumanReadable {
 /// Adds a `failed_upgrade` handler that logs the error.
 ///
 /// See [`partial_oprf`] for the flow of the web-socket connection. If the session finishes successfully, encounters an error, the user closes the connection, or we run into a timeout, the implementation will try to initiate a graceful shutdown of the web-socket connection (closing handshake). We do this at a best-effort basis but are very restrictive on what we expect. We close any session that sends invalid requests/authentication. If the sending of the `Close` frame fails, we simply ignore the error and destruct everything associated with the session.
-#[expect(clippy::too_many_arguments)]
 async fn ws<
     ReqAuth: for<'de> Deserialize<'de> + Send + 'static,
     ReqAuthError: Send + 'static + std::error::Error,
 >(
-    ws: WebSocketUpgrade,
-    party_id: PartyId,
-    threshold: usize,
-    open_sessions: OpenSessions,
-    oprf_material_store: OprfKeyMaterialStore,
-    req_auth_service: OprfRequestAuthService<ReqAuth, ReqAuthError>,
-    max_message_size: usize,
-    max_connection_lifetime: Duration,
+    args: WebSocketArgs<ReqAuth, ReqAuthError>,
 ) -> axum::response::Response {
-    ws.max_message_size(max_message_size)
+    args.ws
+        .max_message_size(args.max_message_size)
         .on_failed_upgrade(|err| {
             tracing::warn!("could not establish websocket connection: {err:?}");
         })
         .on_upgrade(move |mut ws| async move {
             let close_frame = match tokio::time::timeout(
-                max_connection_lifetime,
+                args.max_connection_lifetime,
                 partial_oprf::<ReqAuth, ReqAuthError>(
                     &mut ws,
-                    party_id,
-                    threshold,
-                    open_sessions,
-                    oprf_material_store,
-                    req_auth_service,
+                    args.party_id,
+                    args.threshold,
+                    args.open_sessions,
+                    args.oprf_material_store,
+                    args.req_auth_service,
                 ),
             )
             .await
@@ -246,8 +250,8 @@ pub fn routes<
     Router::new().route(
         "/oprf",
         any(move |websocket_upgrade| {
-            ws::<ReqAuth, ReqAuthError>(
-                websocket_upgrade,
+            ws::<ReqAuth, ReqAuthError>(WebSocketArgs {
+                ws: websocket_upgrade,
                 party_id,
                 threshold,
                 open_sessions,
@@ -255,7 +259,7 @@ pub fn routes<
                 req_auth_service,
                 max_message_size,
                 max_connection_lifetime,
-            )
+            })
         }),
     )
 }
